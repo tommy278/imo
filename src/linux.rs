@@ -20,6 +20,13 @@ pub fn debug(exec: &str) {
             raise(Signal::SIGSTOP);
 
             let path = std::ffi::CString::new(exec).unwrap();
+            let dir = std::env::current_dir().unwrap();
+
+            let mut dir = dir.display().to_string();
+            dir.push_str(exec);
+
+            println!("{}", dir);
+
             nix::unistd::execv(&path, &[&path]).expect("Failed to run command");
         }
         ForkResult::Parent { child } => loop {
@@ -33,7 +40,15 @@ pub fn debug(exec: &str) {
                     if let Ok(regs) = ptrace::getregs(pid) {
                         println!("{:?}", regs);
                     }
-                    ptrace::cont(pid, sig).unwrap()
+
+                    // If stop was due to SIGTRAP, do not forward it to the child.
+                    // Pass None to let the child continue its execution.
+                    if sig == Signal::SIGTRAP || sig == Signal::SIGSTOP {
+                        ptrace::cont(pid, None).unwrap()
+                    } else {
+                        // Forward other unexpected signals (like SIGINT, SIGSEGV) to the child
+                        ptrace::cont(pid, sig).unwrap();
+                    }
                 }
                 WaitStatus::Signaled(_, sig, _) => {
                     println!("Child process was killed by {:?} signal", sig);
