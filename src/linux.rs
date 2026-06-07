@@ -1,4 +1,6 @@
+use std::collections::HashMap;
 use std::ffi::CString;
+use std::io::{self, Write};
 use std::path::Path;
 
 use nix::sys::personality::{self, Persona};
@@ -64,9 +66,9 @@ impl BreakPoint {
     }
 }
 
-pub fn debug(exec: &str) {
+pub fn debug(binary_path: &str, user_breakpoints: &[(&str, u64)]) {
     let pid = unsafe { fork() }.unwrap();
-    let offset = lookup_address_by_line(exec, "running_task.c", 6).unwrap();
+
     match pid {
         ForkResult::Child => {
             // Disable memory randomization
@@ -79,7 +81,7 @@ pub fn debug(exec: &str) {
             // Stop child to avoid race condition with parent
             raise(Signal::SIGSTOP);
 
-            let path = std::ffi::CString::new(exec).unwrap();
+            let path = std::ffi::CString::new(binary_path).unwrap();
             nix::unistd::execv(&path, &[&path]).expect("Failed to run command");
         }
         ForkResult::Parent { child } => {
@@ -92,12 +94,18 @@ pub fn debug(exec: &str) {
             // Catch the automatic SIGTRAP generated after execv finishes loading
             let _status_2 = waitpid(child, None).unwrap();
 
-            // Read the base address and inject 0xCC (INT3)
+            let mut active_breakpoints = HashMap::new();
             let base = get_process_base_address(child);
-            let final_target_address = base + offset;
 
-            let mut breakpoint = BreakPoint::new(final_target_address);
-            breakpoint.enable(child);
+            for (file, line) in user_breakpoints {
+                if let Some(offset) = lookup_address_by_line(binary_path, file, *line) {
+                    let absolute_address = base + offset;
+
+                    let mut break_point = BreakPoint::new(absolute_address);
+                    break_point.enable(child);
+                    active_breakpoints.insert(absolute_address, break_point);
+                }
+            }
 
             // Let the program run
             ptrace::cont(child, None).unwrap();
@@ -130,22 +138,18 @@ pub fn debug(exec: &str) {
                                         // Extract the lowest byte of the word
                                         let first_byte = (word & 0xFF) as u8;
 
-                                        assert_eq!(
-                                            breakpoint.addr, breakpoint_addr,
-                                            "These must be equal"
-                                        );
-
-                                        if first_byte == 0xCC {
+                                        if let Some(bp) =
+                                            active_breakpoints.get_mut(&breakpoint_addr)
+                                        {
                                             // Rollback the instruction pointer by 1 byte
-
-                                            // TODO: Update the instruction back to a valid
-                                            // instruction instead of going back to the INT3
                                             regs.rip = breakpoint_addr;
 
                                             // Update pid register for future instruction continuation
                                             ptrace::setregs(pid, regs).unwrap();
 
-                                            breakpoint.disable(pid);
+                                            // Replace the 0xCC (INT3) back with the previous instruction
+                                            bp.disable(pid);
+
                                             // Open interactive menu
                                             handle_user_debugger_menu(pid);
                                         } else {
@@ -180,7 +184,8 @@ pub fn debug(exec: &str) {
 /// Display an interactive menu at breakpoints
 fn handle_user_debugger_menu(pid: Pid) {
     let mut buffer = String::new();
-    println!("Would you like to continue at this breakpoint (y/n)");
+    print!("Would you like to continue at this breakpoint (y/n): ");
+    io::stdout().flush().unwrap();
     loop {
         buffer.clear();
         std::io::stdin()

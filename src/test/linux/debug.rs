@@ -6,5 +6,8 @@ fn debug() {
 
     let mut dir = current_dir.display().to_string();
     dir.push_str("/src/test/linux/running_task/running_task");
-    linux::debug(&dir);
+
+    let tf = "running_task.c";
+    let breakpoints = vec![(tf, 6), (tf, 7), (tf, 8)];
+    linux::debug(&dir, &breakpoints);
 }
