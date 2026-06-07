@@ -177,6 +177,7 @@ pub fn debug(exec: &str) {
     }
 }
 
+/// Display an interactive menu at breakpoints
 fn handle_user_debugger_menu(pid: Pid) {
     let mut buffer = String::new();
     println!("Would you like to continue at this breakpoint (y/n)");
@@ -189,6 +190,11 @@ fn handle_user_debugger_menu(pid: Pid) {
         match buffer.trim().to_lowercase().as_str() {
             "y" | "yes" => {
                 ptrace::cont(pid, None).unwrap();
+                break;
+            }
+            "n" | "no" => {
+                // TODO: Find the idiomatic way to continue from here
+                ptrace::kill(pid).unwrap();
                 break;
             }
             _ => {
