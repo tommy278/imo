@@ -13,63 +13,16 @@ use nix::unistd::{
     fork,
 };
 
-use crate::helpers::linux::{get_process_base_address, lookup_address_by_line};
-
-// TODO: Add to a dedicated file
-struct BreakPoint {
-    addr: u64,
-    original_byte: u8,
-    is_enabled: bool,
-}
-
-impl BreakPoint {
-    /// Creates a new instance of breakpoint from address
-    fn new(addr: u64) -> Self {
-        Self {
-            addr,
-            original_byte: 0,
-            is_enabled: false,
-        }
-    }
-
-    /// Overwrite the lowest byte with 0xCC (INT3) while saving the original byte
-    fn enable(&mut self, pid: Pid) {
-        // Read the current memory word
-        let word = ptrace::read(pid, self.addr as ptrace::AddressType).unwrap();
-
-        // Save the original lowest byte
-        self.original_byte = (word & 0xFF) as u8;
-
-        // Overwrite the lowest byte with 0xCC (INT3)
-        let breakpoint_word = (word & !0xFF) | 0xCC;
-
-        // Write word back to child memory
-        unsafe {
-            ptrace::write(pid, self.addr as ptrace::AddressType, breakpoint_word).unwrap();
-        }
-        self.is_enabled = true;
-    }
-
-    /// Swaps 0xCC out, puts original byte back
-    fn disable(&mut self, pid: Pid) {
-        if !self.is_enabled {
-            return;
-        }
-
-        let word = ptrace::read(pid, self.addr as ptrace::AddressType).unwrap();
-        let restored_word = (word & !0xFF) | (self.original_byte as i64);
-
-        unsafe {
-            ptrace::write(pid, self.addr as ptrace::AddressType, restored_word);
-        }
-        self.is_enabled = false;
-    }
-}
+use crate::helpers::{
+    handle_user_debugger_menu,
+    linux::{get_process_base_address, lookup_address_by_line},
+};
+use crate::interface::linux::BreakPoint;
 
 pub fn debug(binary_path: &str, user_breakpoints: &[(&str, u64)]) {
-    let pid = unsafe { fork() }.unwrap();
+    let fork_result = unsafe { fork() }.unwrap();
 
-    match pid {
+    match fork_result {
         ForkResult::Child => {
             // Disable memory randomization
             let mut current_persona = personality::get().unwrap();
@@ -101,6 +54,7 @@ pub fn debug(binary_path: &str, user_breakpoints: &[(&str, u64)]) {
                 if let Some(offset) = lookup_address_by_line(binary_path, file, *line) {
                     let absolute_address = base + offset;
 
+                    // Create new brekpoint for each line given, enable and also insert them for later use
                     let mut break_point = BreakPoint::new(absolute_address);
                     break_point.enable(child);
                     active_breakpoints.insert(absolute_address, break_point);
@@ -176,34 +130,6 @@ pub fn debug(binary_path: &str, user_breakpoints: &[(&str, u64)]) {
                     }
                     _ => ptrace::cont(child, None).unwrap(),
                 }
-            }
-        }
-    }
-}
-
-/// Display an interactive menu at breakpoints
-fn handle_user_debugger_menu(pid: Pid) {
-    let mut buffer = String::new();
-    print!("Would you like to continue at this breakpoint (y/n): ");
-    io::stdout().flush().unwrap();
-    loop {
-        buffer.clear();
-        std::io::stdin()
-            .read_line(&mut buffer)
-            .expect("Could not read line");
-
-        match buffer.trim().to_lowercase().as_str() {
-            "y" | "yes" => {
-                ptrace::cont(pid, None).unwrap();
-                break;
-            }
-            "n" | "no" => {
-                // TODO: Find the idiomatic way to continue from here
-                ptrace::kill(pid).unwrap();
-                break;
-            }
-            _ => {
-                println!("Not handled yet");
             }
         }
     }
