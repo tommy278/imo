@@ -30,9 +30,7 @@ impl BreakPoint {
         let breakpoint_word = (word & !0xFF) | 0xCC;
 
         // Write word back to child memory
-        unsafe {
-            ptrace::write(pid, self.addr as ptrace::AddressType, breakpoint_word).unwrap();
-        }
+        ptrace::write(pid, self.addr as ptrace::AddressType, breakpoint_word).unwrap();
         self.is_enabled = true;
     }
 
@@ -45,9 +43,7 @@ impl BreakPoint {
         let word = ptrace::read(pid, self.addr as ptrace::AddressType).unwrap();
         let restored_word = (word & !0xFF) | (self.original_byte as i64);
 
-        unsafe {
-            ptrace::write(pid, self.addr as ptrace::AddressType, restored_word);
-        }
+        ptrace::write(pid, self.addr as ptrace::AddressType, restored_word).unwrap();
         self.is_enabled = false;
     }
 }

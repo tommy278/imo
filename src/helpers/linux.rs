@@ -17,12 +17,20 @@ pub fn get_process_base_address(pid: nix::unistd::Pid) -> u64 {
     0
 }
 
+/*
+ * Based on the 'simple_line' example from the gimli project.
+ * Source: https://github.com/gimli-rs/gimli/blob/main/crates/examples/src/bin/simple_line.rs
+ * * The implementation below was adapted to support specific address lookup
+ * and integrated into the project's native debugger architecture.
+ */
+
 pub fn lookup_address_by_line(
     binary_path: &str,
     target_file: &str,
     target_line: u64,
 ) -> Option<u64> {
     let file = fs::File::open(&binary_path).unwrap();
+    // TODO: Find a safer way to map file as suggested by gimli
     let mmap = unsafe { memmap2::Mmap::map(&file).unwrap() };
     let object = object::File::parse(&*mmap).unwrap();
     let endian = if object.is_little_endian() {
@@ -38,7 +46,7 @@ fn dump_file(
     endian: gimli::RunTimeEndian,
     target_file: &str,
     target_line: u64,
-) -> Result<(Option<u64>), Box<dyn error::Error>> {
+) -> Result<Option<u64>, Box<dyn error::Error>> {
     // Load a section and return as `Cow<[u8]>`.
     let load_section = |id: gimli::SectionId| -> Result<borrow::Cow<[u8]>, Box<dyn error::Error>> {
         Ok(match object.section_by_name(id.name()) {
@@ -59,10 +67,6 @@ fn dump_file(
     // Iterate over the compilation units.
     let mut iter = dwarf.units();
     while let Some(header) = iter.next()? {
-        println!(
-            "Line number info for unit at <.debug_info+0x{:x}>",
-            header.offset().0
-        );
         let unit = dwarf.unit(header)?;
         let unit = unit.unit_ref(&dwarf);
 
@@ -77,10 +81,7 @@ fn dump_file(
             // Iterate over the line program rows.
             let mut rows = program.rows();
             while let Some((header, row)) = rows.next_row()? {
-                if row.end_sequence() {
-                    // End of sequence indicates a possible gap in addresses.
-                    println!("{:x} end-sequence", row.address());
-                } else {
+                if !row.end_sequence() {
                     // Determine the path. Real applications should cache this for performance.
                     let mut path = path::PathBuf::new();
                     if let Some(file) = row.file(header) {
@@ -115,12 +116,11 @@ fn dump_file(
 
                     if path.ends_with(target_file) && line == target_line {
                         let target_address = row.address();
-                        println!("Found breakpoint at 0x{:X}", target_address);
                         return Ok(Some(target_address));
                     }
                 }
             }
         }
     }
-    Ok((None))
+    Ok(None)
 }

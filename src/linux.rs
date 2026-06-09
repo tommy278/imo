@@ -1,17 +1,10 @@
 use std::collections::HashMap;
-use std::ffi::CString;
-use std::io::{self, Write};
-use std::path::Path;
 
 use nix::sys::personality::{self, Persona};
 use nix::sys::ptrace;
 use nix::sys::signal::{Signal, raise};
 use nix::sys::wait::{WaitStatus, waitpid};
-use nix::unistd::Pid;
-use nix::unistd::{
-    ForkResult::{self, Child},
-    fork,
-};
+use nix::unistd::{ForkResult, fork};
 
 use crate::helpers::{
     handle_user_debugger_menu,
@@ -32,7 +25,7 @@ pub fn debug(binary_path: &str, user_breakpoints: &[(&str, u64)]) {
             ptrace::traceme().unwrap();
 
             // Stop child to avoid race condition with parent
-            raise(Signal::SIGSTOP);
+            raise(Signal::SIGSTOP).unwrap();
 
             let path = std::ffi::CString::new(binary_path).unwrap();
             nix::unistd::execv(&path, &[&path]).expect("Failed to run command");
@@ -74,8 +67,6 @@ pub fn debug(binary_path: &str, user_breakpoints: &[(&str, u64)]) {
                     }
                     WaitStatus::Stopped(pid, sig) => {
                         if let Ok(mut regs) = ptrace::getregs(pid) {
-                            println!("{:?}", regs);
-
                             // If stop was due to SIGTRAP, do not forward it to the child.
                             // Pass None to let the child continue its execution.
                             if sig == Signal::SIGTRAP {
@@ -88,10 +79,7 @@ pub fn debug(binary_path: &str, user_breakpoints: &[(&str, u64)]) {
 
                                 // Read a word from the child's memory
                                 match ptrace::read(pid, breakpoint_addr as ptrace::AddressType) {
-                                    Ok(word) => {
-                                        // Extract the lowest byte of the word
-                                        let first_byte = (word & 0xFF) as u8;
-
+                                    Ok(_word) => {
                                         if let Some(bp) =
                                             active_breakpoints.get_mut(&breakpoint_addr)
                                         {
