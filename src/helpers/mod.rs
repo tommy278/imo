@@ -2,20 +2,21 @@ pub mod linux;
 
 use std::io::{self, Write};
 
-use crate::helpers::linux::DebugSession;
+use crate::{helpers::linux::DebugSession, interface::linux::BreakPoint};
 
 /// Display an interactive menu at breakpoints
-pub fn handle_user_debugger_menu(session: &DebugSession) {
+pub fn handle_user_debugger_menu(session: &mut DebugSession) {
     // Flush so the print statement is immediately displayed on screen
     let flush_output = || {
         io::stdout().flush().unwrap();
     };
 
     let mut buffer = String::new();
-    print!("(imo) ");
-    flush_output();
 
     loop {
+        print!("(imo) ");
+        flush_output();
+
         // Clear previous data that could corrupt input
         buffer.clear();
 
@@ -23,10 +24,29 @@ pub fn handle_user_debugger_menu(session: &DebugSession) {
             .read_line(&mut buffer)
             .expect("Could not read line");
 
-        match buffer.trim().to_lowercase().as_str() {
-            "y" | "yes" => {
+        let input = buffer.trim().to_lowercase();
+        let mut parts = input.split_whitespace();
+
+        match parts.next().unwrap() {
+            "run" | "c" | "continue" => {
                 nix::sys::ptrace::cont(session.pid, None).unwrap();
                 break;
+            }
+            "break" => {
+                // TODO: Include compatibility with specic file name eg break file.c:24
+                if let Some(num_str) = parts.next() {
+                    if let Ok(line_number) = num_str.parse::<u64>() {
+                        let address = session.get_breakpoint_target(line_number).unwrap();
+                        let absolute_address =
+                            session.get_absolute_address(address.relative_address);
+
+                        let mut breakpoint = BreakPoint::new(absolute_address);
+                        breakpoint.enable(session.pid);
+                        session
+                            .active_breakpoints
+                            .insert(absolute_address, breakpoint);
+                    }
+                }
             }
             "n" | "no" => {
                 // TODO: Find the idiomatic way to continue from here
@@ -35,8 +55,6 @@ pub fn handle_user_debugger_menu(session: &DebugSession) {
             }
             _ => {
                 println!("Not handled yet");
-                print!("(imo) ");
-                flush_output();
             }
         }
     }

@@ -2,6 +2,7 @@ use nix::sys::ptrace;
 use nix::unistd::Pid;
 
 /// Stores and manages the insertion and removal of the 0xCC (INT3) keyword for the instruction
+#[derive(Debug)]
 pub struct BreakPoint {
     addr: u64,
     original_byte: u8,

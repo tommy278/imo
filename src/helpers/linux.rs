@@ -8,16 +8,19 @@ use std::{
     rc::Rc,
 };
 
+#[derive(Debug)]
 pub struct SourceLocation {
     pub file: Rc<Path>,
     pub line: u64,
 }
 
+#[derive(Debug)]
 pub struct BreakpointTarget {
     pub file: Rc<Path>,
     pub relative_address: u64,
 }
 
+#[derive(Debug)]
 pub struct DebugSession {
     pub line_index: FxHashMap<u64, Vec<BreakpointTarget>>,
     pub address_to_location: FxHashMap<u64, SourceLocation>,
@@ -49,9 +52,14 @@ impl DebugSession {
         session
     }
 
+    pub fn get_absolute_address(&self, relative_address: u64) -> u64 {
+        self.base_address + relative_address
+    }
+
     pub fn get_breakpoint_target(&self, line_number: u64) -> Option<&BreakpointTarget> {
         // TODO: Delegate choice to the user instead of defaulting to first
-        self.line_index.get(&line_number).unwrap().first()
+        let line_index = self.line_index.get(&line_number);
+        line_index.unwrap().first()
     }
 
     pub fn update_process_base_address(&mut self) {
