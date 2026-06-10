@@ -1,20 +1,52 @@
 use object::{Object, ObjectSection};
+use rustc_hash::FxHashMap;
 use std::{
     borrow, error,
     fs::{self, read_to_string},
-    path,
+    path::{self, Path},
+    rc::Rc,
 };
 
-pub fn get_process_base_address(pid: nix::unistd::Pid) -> u64 {
-    let maps_path = format!("/proc/{}/maps", pid);
-    if let Ok(content) = read_to_string(maps_path) {
-        if let Some(first_line) = content.lines().next() {
-            if let Some(base_str) = first_line.split('-').next() {
-                return u64::from_str_radix(base_str, 16).unwrap_or(0);
+#[derive(Default)]
+pub struct SourceLocation {
+    pub file: Rc<Path>,
+    pub line: u64,
+}
+
+#[derive(Default)]
+pub struct BreakpointTarget {
+    pub file: Rc<Path>,
+    pub relative_address: u64,
+}
+
+#[derive(Default)]
+pub struct DebugSession {
+    pub base_address: u64,
+    pub line_index: FxHashMap<u64, Vec<BreakpointTarget>>,
+    pub address_to_location: FxHashMap<u64, SourceLocation>,
+}
+
+impl DebugSession {
+    fn init(pid: nix::unistd::Pid) -> Self {
+        let mut session = Self::default();
+
+        session.update_process_base_address(pid);
+
+        session
+    }
+
+    pub fn update_process_base_address(&mut self, pid: nix::unistd::Pid) {
+        let mut base_address = 0;
+        let maps_path = format!("/proc/{}/maps", pid);
+        if let Ok(content) = read_to_string(maps_path) {
+            if let Some(first_line) = content.lines().next() {
+                if let Some(base_str) = first_line.split('-').next() {
+                    base_address = u64::from_str_radix(base_str, 16).unwrap_or(0);
+                }
             }
         }
+        self.base_address = base_address;
     }
-    0
 }
 
 /*
@@ -24,11 +56,7 @@ pub fn get_process_base_address(pid: nix::unistd::Pid) -> u64 {
  * and integrated into the project's native debugger architecture.
  */
 
-pub fn lookup_address_by_line(
-    binary_path: &str,
-    target_file: &str,
-    target_line: u64,
-) -> Option<u64> {
+pub fn lookup_address_by_line(binary_path: &str, session: &mut DebugSession) -> Option<u64> {
     let file = fs::File::open(&binary_path).unwrap();
     // TODO: Find a safer way to map file as suggested by gimli
     let mmap = unsafe { memmap2::Mmap::map(&file).unwrap() };
@@ -38,14 +66,13 @@ pub fn lookup_address_by_line(
     } else {
         gimli::RunTimeEndian::Big
     };
-    dump_file(&object, endian, target_file, target_line).unwrap()
+    dump_file(&object, endian, session).unwrap()
 }
 
 fn dump_file(
     object: &object::File,
     endian: gimli::RunTimeEndian,
-    target_file: &str,
-    target_line: u64,
+    session: &mut DebugSession,
 ) -> Result<Option<u64>, Box<dyn error::Error>> {
     // Load a section and return as `Cow<[u8]>`.
     let load_section = |id: gimli::SectionId| -> Result<borrow::Cow<[u8]>, Box<dyn error::Error>> {
