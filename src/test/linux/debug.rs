@@ -9,5 +9,5 @@ fn debug() {
 
     let tf = "running_task.c";
     let breakpoints = vec![(tf, 6), (tf, 7), (tf, 8)];
-    linux::debug(&dir, &breakpoints);
+    linux::debug(&dir);
 }

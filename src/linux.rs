@@ -5,14 +5,12 @@ use nix::sys::ptrace;
 use nix::sys::signal::{Signal, raise};
 use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::{ForkResult, fork};
+use rustc_hash::FxHashMap;
 
-use crate::helpers::{
-    handle_user_debugger_menu,
-    linux::{get_process_base_address, lookup_address_by_line},
-};
+use crate::helpers::{handle_user_debugger_menu, linux::DebugSession};
 use crate::interface::linux::BreakPoint;
 
-pub fn debug(binary_path: &str, user_breakpoints: &[(&str, u64)]) {
+pub fn debug(binary_path: &str) {
     let fork_result = unsafe { fork() }.unwrap();
 
     match fork_result {
@@ -40,19 +38,9 @@ pub fn debug(binary_path: &str, user_breakpoints: &[(&str, u64)]) {
             // Catch the automatic SIGTRAP generated after execv finishes loading
             let _status_2 = waitpid(child, None).unwrap();
 
-            let mut active_breakpoints = HashMap::new();
-            let base = get_process_base_address(child);
+            let mut session = DebugSession::new(child, binary_path);
 
-            for (file, line) in user_breakpoints {
-                if let Some(offset) = lookup_address_by_line(binary_path, file, *line) {
-                    let absolute_address = base + offset;
-
-                    // Create new brekpoint for each line given, enable and also insert them for later use
-                    let mut break_point = BreakPoint::new(absolute_address);
-                    break_point.enable(child);
-                    active_breakpoints.insert(absolute_address, break_point);
-                }
-            }
+            let mut active_breakpoints: FxHashMap<u64, BreakPoint> = FxHashMap::default();
 
             // Let the program run
             ptrace::cont(child, None).unwrap();

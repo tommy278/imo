@@ -7,13 +7,11 @@ use std::{
     rc::Rc,
 };
 
-#[derive(Default)]
 pub struct SourceLocation {
     pub file: Rc<Path>,
     pub line: u64,
 }
 
-#[derive(Default)]
 pub struct BreakpointTarget {
     pub file: Rc<Path>,
     pub relative_address: u64,
@@ -27,12 +25,20 @@ pub struct DebugSession {
 }
 
 impl DebugSession {
-    fn init(pid: nix::unistd::Pid) -> Self {
+    pub fn new(pid: nix::unistd::Pid, binary_path: &str) -> Self {
         let mut session = Self::default();
 
         session.update_process_base_address(pid);
 
+        // Update line index and address to location
+        setup_session_cache(binary_path, &mut session);
+
         session
+    }
+
+    pub fn get_breakpoint_target(&self, line_number: u64) -> Option<&BreakpointTarget> {
+        // TODO: Delegate choice to the user instead of defaulting to first
+        self.line_index.get(&line_number).unwrap().first()
     }
 
     pub fn update_process_base_address(&mut self, pid: nix::unistd::Pid) {
@@ -56,7 +62,7 @@ impl DebugSession {
  * and integrated into the project's native debugger architecture.
  */
 
-pub fn lookup_address_by_line(binary_path: &str, session: &mut DebugSession) -> Option<u64> {
+pub fn setup_session_cache(binary_path: &str, session: &mut DebugSession) {
     let file = fs::File::open(&binary_path).unwrap();
     // TODO: Find a safer way to map file as suggested by gimli
     let mmap = unsafe { memmap2::Mmap::map(&file).unwrap() };
@@ -66,14 +72,14 @@ pub fn lookup_address_by_line(binary_path: &str, session: &mut DebugSession) -> 
     } else {
         gimli::RunTimeEndian::Big
     };
-    dump_file(&object, endian, session).unwrap()
+    update_session_cache(&object, endian, session).unwrap();
 }
 
-fn dump_file(
+fn update_session_cache(
     object: &object::File,
     endian: gimli::RunTimeEndian,
     session: &mut DebugSession,
-) -> Result<Option<u64>, Box<dyn error::Error>> {
+) -> Result<(), Box<dyn error::Error>> {
     // Load a section and return as `Cow<[u8]>`.
     let load_section = |id: gimli::SectionId| -> Result<borrow::Cow<[u8]>, Box<dyn error::Error>> {
         Ok(match object.section_by_name(id.name()) {
@@ -105,6 +111,10 @@ fn dump_file(
                 path::PathBuf::new()
             };
 
+            // Track the active path and its Rc allocations across iterations
+            let mut current_raw_path = path::PathBuf::new();
+            let mut current_file_rc: Option<Rc<Path>> = None;
+
             // Iterate over the line program rows.
             let mut rows = program.rows();
             while let Some((header, row)) = rows.next_row()? {
@@ -128,6 +138,12 @@ fn dump_file(
                         );
                     }
 
+                    // Only perform a heap allocation when the file path changes
+                    if current_file_rc.is_none() || path != current_raw_path {
+                        current_raw_path = path.clone();
+                        current_file_rc = Some(Rc::from(path.as_path()));
+                    }
+
                     // Determine line/column. DWARF line/column is never 0, so we use that
                     // but other applications may want to display this differently.
                     let line = match row.line() {
@@ -135,19 +151,30 @@ fn dump_file(
                         None => 0,
                     };
 
-                    // TODO: Decide what to do with column
-                    /* let column = match row.column() {
-                        gimli::ColumnType::LeftEdge => 0,
-                        gimli::ColumnType::Column(column) => column.get(),
-                    }; */
+                    // This unwrap is safe because we guranteed it has a value above
+                    let file_rc = current_file_rc.as_ref().unwrap();
 
-                    if path.ends_with(target_file) && line == target_line {
-                        let target_address = row.address();
-                        return Ok(Some(target_address));
-                    }
+                    session
+                        .line_index
+                        .entry(line)
+                        .or_insert_with(Vec::new)
+                        .push(BreakpointTarget {
+                            file: Rc::clone(file_rc),
+                            relative_address: row.address(),
+                        });
+
+                    let absolute_address = session.base_address + row.address();
+
+                    session.address_to_location.insert(
+                        absolute_address,
+                        SourceLocation {
+                            file: Rc::clone(file_rc),
+                            line,
+                        },
+                    );
                 }
             }
         }
     }
-    Ok(None)
+    Ok(())
 }
