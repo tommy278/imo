@@ -38,9 +38,8 @@ pub fn debug(binary_path: &str) {
             // Catch the automatic SIGTRAP generated after execv finishes loading
             let _status_2 = waitpid(child, None).unwrap();
 
-            // Setup session caches
+            // Setup session cache
             let mut session = DebugSession::new(child, binary_path);
-            let mut active_breakpoints: FxHashMap<u64, BreakPoint> = FxHashMap::default();
 
             // Handle initial user input
             handle_user_debugger_menu(&mut session);
@@ -69,7 +68,7 @@ pub fn debug(binary_path: &str) {
                                 match ptrace::read(pid, breakpoint_addr as ptrace::AddressType) {
                                     Ok(_word) => {
                                         if let Some(bp) =
-                                            active_breakpoints.get_mut(&breakpoint_addr)
+                                            session.active_breakpoints.get_mut(&breakpoint_addr)
                                         {
                                             // Rollback the instruction pointer by 1 byte
                                             regs.rip = breakpoint_addr;

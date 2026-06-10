@@ -1,3 +1,4 @@
+use crate::interface::linux::BreakPoint;
 use object::{Object, ObjectSection};
 use rustc_hash::FxHashMap;
 use std::{
@@ -18,9 +19,10 @@ pub struct BreakpointTarget {
 }
 
 pub struct DebugSession {
-    pub base_address: u64,
     pub line_index: FxHashMap<u64, Vec<BreakpointTarget>>,
     pub address_to_location: FxHashMap<u64, SourceLocation>,
+    pub active_breakpoints: FxHashMap<u64, BreakPoint>,
+    pub base_address: u64,
     pub pid: nix::unistd::Pid,
 }
 
@@ -31,6 +33,7 @@ impl DebugSession {
             base_address: 0,
             line_index: FxHashMap::default(),
             address_to_location: FxHashMap::default(),
+            active_breakpoints: FxHashMap::default(),
             pid,
         }
     }
