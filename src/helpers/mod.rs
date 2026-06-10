@@ -2,13 +2,18 @@ pub mod linux;
 
 use std::io::{self, Write};
 
-/// Display an interactive menu at breakpoints
-pub fn handle_user_debugger_menu(pid: nix::unistd::Pid) {
-    let mut buffer = String::new();
-    print!("Would you like to continue at this breakpoint (y/n): ");
+use crate::helpers::linux::DebugSession;
 
+/// Display an interactive menu at breakpoints
+pub fn handle_user_debugger_menu(session: &DebugSession) {
     // Flush so the print statement is immediately displayed on screen
-    io::stdout().flush().unwrap();
+    let flush_output = || {
+        io::stdout().flush().unwrap();
+    };
+
+    let mut buffer = String::new();
+    print!("(imo) ");
+    flush_output();
 
     loop {
         // Clear previous data that could corrupt input
@@ -20,16 +25,18 @@ pub fn handle_user_debugger_menu(pid: nix::unistd::Pid) {
 
         match buffer.trim().to_lowercase().as_str() {
             "y" | "yes" => {
-                nix::sys::ptrace::cont(pid, None).unwrap();
+                nix::sys::ptrace::cont(session.pid, None).unwrap();
                 break;
             }
             "n" | "no" => {
                 // TODO: Find the idiomatic way to continue from here
-                nix::sys::ptrace::kill(pid).unwrap();
+                nix::sys::ptrace::kill(session.pid).unwrap();
                 break;
             }
             _ => {
                 println!("Not handled yet");
+                print!("(imo) ");
+                flush_output();
             }
         }
     }

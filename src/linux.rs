@@ -38,12 +38,12 @@ pub fn debug(binary_path: &str) {
             // Catch the automatic SIGTRAP generated after execv finishes loading
             let _status_2 = waitpid(child, None).unwrap();
 
+            // Setup session caches
             let mut session = DebugSession::new(child, binary_path);
-
             let mut active_breakpoints: FxHashMap<u64, BreakPoint> = FxHashMap::default();
 
-            // Let the program run
-            ptrace::cont(child, None).unwrap();
+            // Handle initial user input
+            handle_user_debugger_menu(&mut session);
 
             // Enter the event execution loop
             loop {
@@ -81,7 +81,7 @@ pub fn debug(binary_path: &str) {
                                             bp.disable(pid);
 
                                             // Open interactive menu
-                                            handle_user_debugger_menu(pid);
+                                            handle_user_debugger_menu(&mut session);
                                         } else {
                                             // It was a system SIGTRAP, not the breakpoint
                                             ptrace::cont(pid, None).unwrap();

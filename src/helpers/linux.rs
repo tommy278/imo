@@ -17,18 +17,28 @@ pub struct BreakpointTarget {
     pub relative_address: u64,
 }
 
-#[derive(Default)]
 pub struct DebugSession {
     pub base_address: u64,
     pub line_index: FxHashMap<u64, Vec<BreakpointTarget>>,
     pub address_to_location: FxHashMap<u64, SourceLocation>,
+    pub pid: nix::unistd::Pid,
 }
 
 impl DebugSession {
-    pub fn new(pid: nix::unistd::Pid, binary_path: &str) -> Self {
-        let mut session = Self::default();
+    /// Instantiate the struct with default values
+    fn from_pid(pid: nix::unistd::Pid) -> Self {
+        Self {
+            base_address: 0,
+            line_index: FxHashMap::default(),
+            address_to_location: FxHashMap::default(),
+            pid,
+        }
+    }
 
-        session.update_process_base_address(pid);
+    pub fn new(pid: nix::unistd::Pid, binary_path: &str) -> Self {
+        let mut session = Self::from_pid(pid);
+
+        session.update_process_base_address();
 
         // Update line index and address to location
         setup_session_cache(binary_path, &mut session);
@@ -41,9 +51,9 @@ impl DebugSession {
         self.line_index.get(&line_number).unwrap().first()
     }
 
-    pub fn update_process_base_address(&mut self, pid: nix::unistd::Pid) {
+    pub fn update_process_base_address(&mut self) {
         let mut base_address = 0;
-        let maps_path = format!("/proc/{}/maps", pid);
+        let maps_path = format!("/proc/{}/maps", self.pid);
         if let Ok(content) = read_to_string(maps_path) {
             if let Some(first_line) = content.lines().next() {
                 if let Some(base_str) = first_line.split('-').next() {
