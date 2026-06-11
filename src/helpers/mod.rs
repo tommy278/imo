@@ -1,8 +1,8 @@
-pub mod linux;
+pub mod dwarf;
 
 use std::io::{self, Write};
 
-use crate::{helpers::linux::DebugSession, interface::linux::BreakPoint};
+use crate::{interface::linux::BreakPoint, session::DebugSession};
 
 /// Display an interactive menu at breakpoints
 pub fn handle_user_debugger_menu(session: &mut DebugSession) {
@@ -29,7 +29,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
 
         match parts.next().unwrap() {
             "run" | "c" | "continue" => {
-                nix::sys::ptrace::cont(session.pid, None).unwrap();
+                session.continue_session();
                 break;
             }
             "break" => {
@@ -50,7 +50,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
             }
             "n" | "no" => {
                 // TODO: Find the idiomatic way to continue from here
-                nix::sys::ptrace::kill(session.pid).unwrap();
+                session.kill_session();
                 break;
             }
             _ => {

@@ -1,80 +1,11 @@
-use crate::interface::linux::BreakPoint;
+use crate::session::*;
 use object::{Object, ObjectSection};
-use rustc_hash::FxHashMap;
 use std::{
     borrow, error,
-    fs::{self, read_to_string},
+    fs::{self},
     path::{self, Path},
     rc::Rc,
 };
-
-#[derive(Debug)]
-pub struct SourceLocation {
-    pub file: Rc<Path>,
-    pub line: u64,
-}
-
-#[derive(Debug)]
-pub struct BreakpointTarget {
-    pub file: Rc<Path>,
-    pub relative_address: u64,
-}
-
-#[derive(Debug)]
-pub struct DebugSession {
-    pub line_index: FxHashMap<u64, Vec<BreakpointTarget>>,
-    pub address_to_location: FxHashMap<u64, SourceLocation>,
-    pub active_breakpoints: FxHashMap<u64, BreakPoint>,
-    pub base_address: u64,
-    pub pid: nix::unistd::Pid,
-}
-
-impl DebugSession {
-    /// Instantiate the struct with default values
-    fn from_pid(pid: nix::unistd::Pid) -> Self {
-        Self {
-            base_address: 0,
-            line_index: FxHashMap::default(),
-            address_to_location: FxHashMap::default(),
-            active_breakpoints: FxHashMap::default(),
-            pid,
-        }
-    }
-
-    pub fn new(pid: nix::unistd::Pid, binary_path: &str) -> Self {
-        let mut session = Self::from_pid(pid);
-
-        session.update_process_base_address();
-
-        // Update line index and address to location
-        setup_session_cache(binary_path, &mut session);
-
-        session
-    }
-
-    pub fn get_absolute_address(&self, relative_address: u64) -> u64 {
-        self.base_address + relative_address
-    }
-
-    pub fn get_breakpoint_target(&self, line_number: u64) -> Option<&BreakpointTarget> {
-        // TODO: Delegate choice to the user instead of defaulting to first
-        let line_index = self.line_index.get(&line_number);
-        line_index.unwrap().first()
-    }
-
-    pub fn update_process_base_address(&mut self) {
-        let mut base_address = 0;
-        let maps_path = format!("/proc/{}/maps", self.pid);
-        if let Ok(content) = read_to_string(maps_path) {
-            if let Some(first_line) = content.lines().next() {
-                if let Some(base_str) = first_line.split('-').next() {
-                    base_address = u64::from_str_radix(base_str, 16).unwrap_or(0);
-                }
-            }
-        }
-        self.base_address = base_address;
-    }
-}
 
 /*
  * Based on the 'simple_line' example from the gimli project.
@@ -83,6 +14,7 @@ impl DebugSession {
  * and integrated into the project's native debugger architecture.
  */
 
+/// Get details from dwarf and apply them to the debug session cache
 pub fn setup_session_cache(binary_path: &str, session: &mut DebugSession) {
     let file = fs::File::open(&binary_path).unwrap();
     // TODO: Find a safer way to map file as suggested by gimli
@@ -96,6 +28,7 @@ pub fn setup_session_cache(binary_path: &str, session: &mut DebugSession) {
     update_session_cache(&object, endian, session).unwrap();
 }
 
+/// Update the BreakpointTarget and SourceLocation in the debug session cache
 fn update_session_cache(
     object: &object::File,
     endian: gimli::RunTimeEndian,
@@ -199,3 +132,4 @@ fn update_session_cache(
     }
     Ok(())
 }
+

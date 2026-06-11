@@ -1,15 +1,15 @@
-use std::collections::HashMap;
-
 use nix::sys::personality::{self, Persona};
 use nix::sys::ptrace;
 use nix::sys::signal::{Signal, raise};
 use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::{ForkResult, fork};
-use rustc_hash::FxHashMap;
 
-use crate::helpers::{handle_user_debugger_menu, linux::DebugSession};
-use crate::interface::linux::BreakPoint;
+use crate::helpers::handle_user_debugger_menu;
+use crate::session::DebugSession;
 
+/// Begin the parent and child processes
+/// Child Process executes the binary
+/// Parent Process begins the loop that monitors child process
 pub fn debug(binary_path: &str) {
     let fork_result = unsafe { fork() }.unwrap();
 
