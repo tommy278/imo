@@ -8,11 +8,11 @@ pub type PlatformBreakpoint = crate::interface::linux::BreakPoint;
 
 /// Get process base address
 pub fn get_process_base_address(pid: ProcessId) -> u64 {
-    let maps_path = format!("/proc/{}/maps", session.pid);
+    let maps_path = format!("/proc/{}/maps", pid);
     if let Ok(content) = read_to_string(maps_path) {
         if let Some(first_line) = content.lines().next() {
             if let Some(base_str) = first_line.split('-').next() {
-                u64::from_str_radix(base_str, 16).unwrap_or_default();
+                return u64::from_str_radix(base_str, 16).unwrap_or_default();
             }
         }
     }

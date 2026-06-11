@@ -1,8 +1,15 @@
 pub mod dwarf;
 
-use std::io::{self, Write};
+use std::{
+    collections::HashSet,
+    io::{self, Write},
+    path::Path,
+};
 
-use crate::{interface::linux::BreakPoint, session::DebugSession};
+use crate::{
+    interface::linux::BreakPoint,
+    session::{BreakpointTarget, DebugSession},
+};
 
 /// Display an interactive menu at breakpoints
 pub fn handle_user_debugger_menu(session: &mut DebugSession) {
@@ -33,18 +40,42 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 break;
             }
             "break" => {
-                // TODO: Include compatibility with specic file name eg break file.c:24
-                if let Some(num_str) = parts.next() {
-                    if let Ok(line_number) = num_str.parse::<u64>() {
-                        let address = session.get_breakpoint_target(line_number).unwrap();
-                        let absolute_address =
-                            session.get_absolute_address(address.relative_address);
+                let arg = parts.next().expect("Did not provide a second argument");
 
-                        let mut breakpoint = BreakPoint::new(absolute_address);
-                        breakpoint.enable(session.pid);
-                        session
-                            .active_breakpoints
-                            .insert(absolute_address, breakpoint);
+                let create_breakpoint = |absolute_address: u64, session: &mut DebugSession| {
+                    let mut breakpoint = BreakPoint::new(absolute_address);
+                    breakpoint.enable(session.pid);
+                    session
+                        .active_breakpoints
+                        .insert(absolute_address, breakpoint);
+                };
+
+                // Handle setting breakpoint if filename and line_number are provided
+                // eg: break running_task:6
+                if let Some((file_name, line_number)) = arg.split_once(":") {
+                    let line_number = line_number.parse::<u64>().expect("Could not parse number");
+
+                    let bp = session
+                        .get_specific_breakpoint_target(file_name, line_number)
+                        .expect("Could not find address");
+
+                    let absolute_address = session.get_absolute_address(bp.relative_address);
+                    create_breakpoint(absolute_address, session);
+                }
+
+                if let Ok(line_number) = arg.parse::<u64>() {
+                    let line_index = session.get_breakpoint_target(line_number).unwrap();
+                    let all_files = get_all_files(line_index);
+
+                    if all_files.len() == 1 {
+                        // This is a safe unwrap, the len is one there is guranteeed to be an item
+                        let bp = line_index.first().unwrap();
+
+                        // Proceed with setting the breakpoint as normal
+                        let absolute_address = session.get_absolute_address(bp.relative_address);
+                        create_breakpoint(absolute_address, session);
+                    } else {
+                        println!("{:?}", all_files);
                     }
                 }
             }
@@ -58,4 +89,13 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
             }
         }
     }
+}
+
+fn get_all_files(line_index: &[BreakpointTarget]) -> HashSet<&Path> {
+    // Using a hashset because there can be multiple addresses of the same file on the same line
+    let mut files = HashSet::new();
+    for index in line_index {
+        files.insert(index.file.as_ref());
+    }
+    files
 }

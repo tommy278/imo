@@ -75,10 +75,25 @@ impl DebugSession {
         self.base_address + relative_address
     }
 
-    /// Get breakpoint target (file name and relative_address ) from the line number
-    pub fn get_breakpoint_target(&self, line_number: u64) -> Option<&BreakpointTarget> {
-        // TODO: Delegate choice to the user instead of defaulting to first
+    /// Get breakpoint target (file name and relative address ) from line number and file name
+    pub fn get_specific_breakpoint_target(
+        &self,
+        file_name: &str,
+        line_number: u64,
+    ) -> Option<&BreakpointTarget> {
+        let line_index = self.get_breakpoint_target(line_number);
+
+        if let Some(line_index) = line_index {
+            let target = line_index.iter().find(|x| (*x.file).ends_with(file_name));
+            return Some(target.expect("Specified filename does not exist"));
+        }
+
+        None
+    }
+
+    /// Get breakpoint target (file name and relative_address ) from the just line number
+    pub fn get_breakpoint_target(&self, line_number: u64) -> Option<&Vec<BreakpointTarget>> {
         let line_index = self.line_index.get(&line_number);
-        line_index.unwrap().first()
+        line_index
     }
 }
