@@ -1,4 +1,3 @@
-use crate::session::DebugSession;
 use nix::sys::ptrace;
 use std::fs::read_to_string;
 

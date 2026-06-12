@@ -1,7 +1,7 @@
 pub mod linux;
 
 use rustc_hash::FxHashMap;
-use std::{borrow, error, path::Path, rc::Rc};
+use std::{path::Path, rc::Rc};
 
 use crate::helpers::dwarf;
 
@@ -53,6 +53,19 @@ impl DebugSession {
         dwarf::setup_session_cache(binary_path, &mut session);
 
         session
+    }
+
+    pub fn create_breakpoint(&mut self, relative_address: u64) {
+        let absolute_address = self.get_absolute_address(relative_address);
+
+        // If breakpoint already exists dont write to it simply exit
+        if self.active_breakpoints.contains_key(&absolute_address) {
+            return;
+        }
+
+        let mut breakpoint = os::PlatformBreakpoint::new(absolute_address);
+        breakpoint.enable(self.pid);
+        self.active_breakpoints.insert(absolute_address, breakpoint);
     }
 
     /// Continue session from last interrupt
