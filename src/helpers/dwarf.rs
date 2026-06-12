@@ -1,5 +1,6 @@
 use crate::session::*;
 use object::{Object, ObjectSection};
+use rustc_hash::FxHashSet;
 use std::{
     borrow, error,
     fs::{self},
@@ -69,6 +70,10 @@ fn update_session_cache(
             let mut current_raw_path = path::PathBuf::new();
             let mut current_file_rc: Option<Rc<Path>> = None;
 
+            // Track the last indexed file to avoid instruction duplication per line
+            let mut last_indexed_file: Option<Rc<Path>> = None;
+            let mut registered_lines: FxHashSet<u64> = FxHashSet::default();
+
             // Iterate over the line program rows.
             let mut rows = program.rows();
             while let Some((header, row)) = rows.next_row()? {
@@ -108,14 +113,33 @@ fn update_session_cache(
                     // This unwrap is safe because we guranteed it has a value above
                     let file_rc = current_file_rc.as_ref().unwrap();
 
-                    session
-                        .line_index
-                        .entry(line)
-                        .or_insert_with(Vec::new)
-                        .push(BreakpointTarget {
-                            file: Rc::clone(file_rc),
-                            relative_address: row.address(),
-                        });
+                    // DEDUPLICATION LOGIC
+                    // Only push to line index if this row starts a new line or swicthed to a
+                    // different file
+
+                    if last_indexed_file.as_ref().map_or(true, |f| f != file_rc) {
+                        registered_lines.clear();
+                        last_indexed_file = Some(Rc::clone(file_rc));
+                    }
+
+                    // Ignore line 0 for breakpoint indexing
+                    if line == 0 {
+                        continue;
+                    }
+
+                    let is_already_registered = registered_lines.contains(&line);
+
+                    if !is_already_registered && row.is_stmt() {
+                        session
+                            .line_index
+                            .entry(line)
+                            .or_insert_with(Vec::new)
+                            .push(BreakpointTarget {
+                                file: Rc::clone(file_rc),
+                                relative_address: row.address(),
+                            });
+                        registered_lines.insert(line);
+                    }
 
                     let absolute_address = session.base_address + row.address();
 
@@ -132,4 +156,3 @@ fn update_session_cache(
     }
     Ok(())
 }
-

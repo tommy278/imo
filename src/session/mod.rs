@@ -80,15 +80,15 @@ impl DebugSession {
         &self,
         file_name: &str,
         line_number: u64,
-    ) -> Option<&BreakpointTarget> {
-        let line_index = self.get_breakpoint_target(line_number);
+    ) -> Vec<&BreakpointTarget> {
+        let Some(line_index) = self.get_breakpoint_target(line_number) else {
+            return vec![];
+        };
 
-        if let Some(line_index) = line_index {
-            let target = line_index.iter().find(|x| (*x.file).ends_with(file_name));
-            return Some(target.expect("Specified filename does not exist"));
-        }
-
-        None
+        line_index
+            .iter()
+            .filter(|x| x.file.ends_with(file_name))
+            .collect()
     }
 
     /// Get breakpoint target (file name and relative_address ) from the just line number

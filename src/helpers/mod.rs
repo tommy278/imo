@@ -39,7 +39,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 session.continue_session();
                 break;
             }
-            "break" => {
+            "b" | "break" => {
                 let arg = parts.next().expect("Did not provide a second argument");
 
                 let create_breakpoint = |absolute_address: u64, session: &mut DebugSession| {
@@ -55,16 +55,23 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 if let Some((file_name, line_number)) = arg.split_once(":") {
                     let line_number = line_number.parse::<u64>().expect("Could not parse number");
 
-                    let bp = session
-                        .get_specific_breakpoint_target(file_name, line_number)
-                        .expect("Could not find address");
+                    let targets = session.get_specific_breakpoint_target(file_name, line_number);
 
-                    let absolute_address = session.get_absolute_address(bp.relative_address);
-                    create_breakpoint(absolute_address, session);
+                    println!("{:?}", targets);
+                    let absolute_addresses: Vec<u64> = targets
+                        .iter()
+                        .map(|bp| session.get_absolute_address(bp.relative_address))
+                        .collect();
+
+                    for absolute_address in absolute_addresses {
+                        create_breakpoint(absolute_address, session);
+                    }
                 }
 
                 if let Ok(line_number) = arg.parse::<u64>() {
                     let line_index = session.get_breakpoint_target(line_number).unwrap();
+                    println!("{:?}", line_index);
+
                     let all_files = get_all_files(line_index);
 
                     if all_files.len() == 1 {
@@ -79,8 +86,8 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                     }
                 }
             }
-            "n" | "no" => {
-                // TODO: Find the idiomatic way to continue from here
+            "q" | "quit" => {
+                // End current debug session
                 session.kill_session();
                 break;
             }
