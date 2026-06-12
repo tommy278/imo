@@ -14,7 +14,7 @@ pub struct SourceLocation {
     pub line: u64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BreakpointTarget {
     pub file: Rc<Path>,
     pub relative_address: u64,
@@ -80,20 +80,20 @@ impl DebugSession {
         &self,
         file_name: &str,
         line_number: u64,
-    ) -> Vec<&BreakpointTarget> {
+    ) -> Vec<BreakpointTarget> {
         let Some(line_index) = self.get_breakpoint_target(line_number) else {
             return vec![];
         };
 
         line_index
-            .iter()
+            .into_iter()
             .filter(|x| x.file.ends_with(file_name))
             .collect()
     }
 
     /// Get breakpoint target (file name and relative_address ) from the just line number
-    pub fn get_breakpoint_target(&self, line_number: u64) -> Option<&Vec<BreakpointTarget>> {
+    pub fn get_breakpoint_target(&self, line_number: u64) -> Option<Vec<BreakpointTarget>> {
         let line_index = self.line_index.get(&line_number);
-        line_index
+        line_index.cloned()
     }
 }

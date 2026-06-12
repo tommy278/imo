@@ -55,35 +55,15 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 if let Some((file_name, line_number)) = arg.split_once(":") {
                     let line_number = line_number.parse::<u64>().expect("Could not parse number");
 
-                    let targets = session.get_specific_breakpoint_target(file_name, line_number);
-
-                    println!("{:?}", targets);
-                    let absolute_addresses: Vec<u64> = targets
-                        .iter()
-                        .map(|bp| session.get_absolute_address(bp.relative_address))
-                        .collect();
-
-                    for absolute_address in absolute_addresses {
-                        create_breakpoint(absolute_address, session);
-                    }
+                    let line_index = session.get_specific_breakpoint_target(file_name, line_number);
+                    handle_line_index_result(session, &line_index);
                 }
 
+                // Handle setting breakpoint if only line_number is provided
+                // eg: break 12
                 if let Ok(line_number) = arg.parse::<u64>() {
                     let line_index = session.get_breakpoint_target(line_number).unwrap();
-                    println!("{:?}", line_index);
-
-                    let all_files = get_all_files(line_index);
-
-                    if all_files.len() == 1 {
-                        // This is a safe unwrap, the len is one there is guranteeed to be an item
-                        let bp = line_index.first().unwrap();
-
-                        // Proceed with setting the breakpoint as normal
-                        let absolute_address = session.get_absolute_address(bp.relative_address);
-                        create_breakpoint(absolute_address, session);
-                    } else {
-                        println!("{:?}", all_files);
-                    }
+                    handle_line_index_result(session, &line_index);
                 }
             }
             "q" | "quit" => {
@@ -98,11 +78,49 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
     }
 }
 
-fn get_all_files(line_index: &[BreakpointTarget]) -> HashSet<&Path> {
-    // Using a hashset because there can be multiple addresses of the same file on the same line
-    let mut files = HashSet::new();
-    for index in line_index {
-        files.insert(index.file.as_ref());
+fn create_breakpoint(absolute_address: u64, session: &mut DebugSession) {
+    let mut breakpoint = BreakPoint::new(absolute_address);
+    breakpoint.enable(session.pid);
+    session
+        .active_breakpoints
+        .insert(absolute_address, breakpoint);
+}
+
+// TODO: Change breakpoint target to be more os generic
+fn handle_line_index_result(session: &mut DebugSession, line_index: &[BreakpointTarget]) {
+    if line_index.is_empty() {
+        println!("unimplemented!");
+        return;
     }
-    files
+
+    if line_index.len() == 1 {
+        // Safe unwrap, guarnteed to be an item with len being 1
+        let bp = line_index.first().unwrap();
+        let absolute_address = session.get_absolute_address(bp.relative_address);
+        create_breakpoint(absolute_address, session);
+        return;
+    }
+
+    println!("These are your options: {:?}", line_index);
+
+    // Listen for user's choice for path
+    let mut index: usize = 0;
+    loop {
+        let buffer = io::read_to_string(io::stdin()).expect("Could not read input");
+        if let Ok(idx) = buffer.parse::<usize>() {
+            if idx >= line_index.len() {
+                println!("{} is not a valid option", idx);
+                continue;
+            }
+
+            index = idx;
+            break;
+        }
+    }
+
+    // Finally resolve the conflicting files
+    // Safe unwrap, index is valid from the guarded input
+    let bp = line_index.iter().nth(index).unwrap();
+    let absolute_address = session.get_absolute_address(bp.relative_address);
+    create_breakpoint(absolute_address, session);
 }
