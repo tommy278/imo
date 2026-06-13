@@ -7,10 +7,7 @@ use std::{
 
 use rustc_hash::FxHashSet;
 
-use crate::{
-    interface::linux::BreakPoint,
-    session::{BreakpointTarget, DebugSession},
-};
+use crate::session::{BreakpointTarget, DebugSession};
 
 /// Flush so the print statement is immediately displayed on screen
 /// Used for print statement since its not flushed automcatically unlike println
@@ -21,7 +18,10 @@ fn flush_output() {
 /// Display an interactive menu at breakpoints
 pub fn handle_user_debugger_menu(session: &mut DebugSession) {
     let mut buffer = String::new();
-
+    // For debugging purposes
+    for index in session.line_index.iter() {
+        println!("{:?}", index);
+    }
     loop {
         print!("(imo) ");
         flush_output();
@@ -84,10 +84,7 @@ fn handle_line_index_result(session: &mut DebugSession, line_index: &[Breakpoint
 
     // All addresses belong to the same file
     if unique_files.len() == 1 {
-        // Safe unwrap, guarnteed to be an item with len being 1
-        for bp in line_index {
-            session.create_breakpoint(bp.relative_address);
-        }
+        handle_break_metadata(session, line_index);
         return;
     }
 
@@ -122,9 +119,45 @@ fn handle_line_index_result(session: &mut DebugSession, line_index: &[Breakpoint
     }
 
     let chosen_file = file_choices[index];
+
+    let chosen_line_index: Vec<BreakpointTarget> = (line_index)
+        .to_vec()
+        .into_iter()
+        .filter(|bp| bp.file.as_ref() == chosen_file)
+        .collect::<Vec<_>>();
+
+    handle_break_metadata(session, &chosen_line_index);
+    return;
+}
+
+fn handle_break_metadata(session: &mut DebugSession, line_index: &[BreakpointTarget]) {
+    let mut bp_for_line = 0;
     for bp in line_index {
-        if bp.file.as_ref() == chosen_file {
-            session.create_breakpoint(bp.relative_address);
-        }
+        session.create_breakpoint(bp.relative_address);
+        bp_for_line += 1;
     }
+    let bp_count = session.increase_breakpoint_count();
+
+    let first_bp_relative_address = line_index[0].relative_address;
+
+    let line_number = session
+        .get_info_from_address(first_bp_relative_address)
+        .unwrap()
+        .line;
+
+    let location_detail = if bp_for_line == 1 {
+        format!("line {}", line_number)
+    } else {
+        format!("({} locations)", bp_for_line)
+    };
+
+    println!(
+        "Breakpoint {} at 0x{:X}: file {}, {}",
+        bp_count,
+        first_bp_relative_address,
+        line_index[0].file.display(),
+        location_detail
+    );
+
+    println!("{:?}", line_index);
 }

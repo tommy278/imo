@@ -25,6 +25,7 @@ pub struct DebugSession {
     pub line_index: FxHashMap<u64, Vec<BreakpointTarget>>,
     pub address_to_location: FxHashMap<u64, SourceLocation>,
     pub base_address: u64,
+    pub breakpoint_count: usize,
 
     // Different for each os
     pub active_breakpoints: FxHashMap<u64, os::PlatformBreakpoint>,
@@ -36,6 +37,7 @@ impl DebugSession {
     fn from_pid(pid: nix::unistd::Pid) -> Self {
         Self {
             base_address: 0,
+            breakpoint_count: 0,
             line_index: FxHashMap::default(),
             address_to_location: FxHashMap::default(),
             active_breakpoints: FxHashMap::default(),
@@ -68,6 +70,11 @@ impl DebugSession {
         self.active_breakpoints.insert(absolute_address, breakpoint);
     }
 
+    pub fn increase_breakpoint_count(&mut self) -> usize {
+        self.breakpoint_count += 1;
+        self.breakpoint_count
+    }
+
     /// Continue session from last interrupt
     pub fn continue_session(&self) {
         os::continue_session(self.pid);
@@ -86,6 +93,11 @@ impl DebugSession {
     /// Get absolute address ( the sum of base address and absolute address )
     pub fn get_absolute_address(&self, relative_address: u64) -> u64 {
         self.base_address + relative_address
+    }
+
+    pub fn get_info_from_address(&self, relative_address: u64) -> Option<&SourceLocation> {
+        let address = self.get_absolute_address(relative_address);
+        self.address_to_location.get(&address)
     }
 
     /// Get breakpoint target (file name and relative address ) from line number and file name
