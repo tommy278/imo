@@ -14,12 +14,24 @@ pub struct BreakpointTarget {
     pub relative_address: u64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+pub struct BreakpointData {
+    pub target: Vec<BreakpointTarget>,
+    pub line: u64,
+}
+
+impl BreakpointData {
+    pub fn from_target(target: Vec<BreakpointTarget>, line: u64) -> Self {
+        Self { target, line }
+    }
+}
+
 /// Cache for entire debug session
+#[derive(Debug)]
 pub struct DebugSession {
     pub line_index: FxHashMap<u64, Vec<BreakpointTarget>>,
     pub base_address: u64,
-    pub breakpoint_index_tracker: Vec<Vec<BreakpointTarget>>,
+    pub breakpoint_index_tracker: Vec<BreakpointData>,
 
     // Different for each os
     pub active_breakpoints: FxHashMap<u64, os::PlatformBreakpoint>,
@@ -72,7 +84,9 @@ impl DebugSession {
             bp_for_line += 1;
         });
 
-        self.breakpoint_index_tracker.push(line_index.clone());
+        self.breakpoint_index_tracker
+            .push(BreakpointData::from_target(line_index.clone(), line_number));
+
         (bp_for_line, line_index[0].clone())
     }
 
