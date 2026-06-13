@@ -128,6 +128,7 @@ fn update_session_cache(
                     }
 
                     let is_already_registered = registered_lines.contains(&line);
+                    let relative_address = row.address();
 
                     if !is_already_registered && row.is_stmt() {
                         session
@@ -136,20 +137,16 @@ fn update_session_cache(
                             .or_insert_with(Vec::new)
                             .push(BreakpointTarget {
                                 file: Rc::clone(file_rc),
-                                relative_address: row.address(),
+                                relative_address,
                             });
                         registered_lines.insert(line);
                     }
 
-                    let absolute_address = session.base_address + row.address();
-
-                    session.address_to_location.insert(
-                        absolute_address,
-                        SourceLocation {
-                            file: Rc::clone(file_rc),
-                            line,
-                        },
-                    );
+                    session.address_to_location.push(SourceLocation {
+                        relative_address,
+                        file: Rc::clone(file_rc),
+                        line,
+                    });
                 }
             }
         }

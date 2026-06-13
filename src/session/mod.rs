@@ -10,6 +10,7 @@ use crate::session::linux as os;
 
 #[derive(Debug)]
 pub struct SourceLocation {
+    pub relative_address: u64,
     pub file: Rc<Path>,
     pub line: u64,
 }
@@ -23,7 +24,7 @@ pub struct BreakpointTarget {
 #[derive(Debug)]
 pub struct DebugSession {
     pub line_index: FxHashMap<u64, Vec<BreakpointTarget>>,
-    pub address_to_location: FxHashMap<u64, SourceLocation>,
+    pub address_to_location: Vec<SourceLocation>,
     pub base_address: u64,
     pub breakpoint_count: usize,
 
@@ -39,7 +40,7 @@ impl DebugSession {
             base_address: 0,
             breakpoint_count: 0,
             line_index: FxHashMap::default(),
-            address_to_location: FxHashMap::default(),
+            address_to_location: Vec::new(),
             active_breakpoints: FxHashMap::default(),
             pid,
         }
@@ -53,6 +54,11 @@ impl DebugSession {
 
         // Update line index and address to location
         dwarf::setup_session_cache(binary_path, &mut session);
+
+        // Sort address_to_location by adress for faster search
+        session
+            .address_to_location
+            .sort_by_key(|m| m.relative_address);
 
         session
     }
@@ -95,9 +101,21 @@ impl DebugSession {
         self.base_address + relative_address
     }
 
+    /// Get metadata from the relative address
     pub fn get_info_from_address(&self, relative_address: u64) -> Option<&SourceLocation> {
-        let address = self.get_absolute_address(relative_address);
-        self.address_to_location.get(&address)
+        match self
+            .address_to_location
+            .binary_search_by_key(&relative_address, |m| m.relative_address)
+        {
+            Ok(idx) => Some(&self.address_to_location[idx]),
+            Err(idx) => {
+                if idx > 0 {
+                    Some(&self.address_to_location[idx - 1])
+                } else {
+                    None
+                }
+            }
+        }
     }
 
     /// Get breakpoint target (file name and relative address ) from line number and file name

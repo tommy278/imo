@@ -26,7 +26,9 @@ pub fn debug(binary_path: &str) {
             raise(Signal::SIGSTOP).unwrap();
 
             let path = std::ffi::CString::new(binary_path).unwrap();
-            nix::unistd::execv(&path, &[&path]).expect("Failed to run command");
+
+            let err = nix::unistd::execv(&path, &[&path]).unwrap_err();
+            panic!("Failed to execute process: {}", err);
         }
         ForkResult::Parent { child } => {
             // Catch the initial SIGSTOP from the child
