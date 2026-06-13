@@ -141,12 +141,6 @@ fn update_session_cache(
                             });
                         registered_lines.insert(line);
                     }
-
-                    session.address_to_location.push(SourceLocation {
-                        relative_address,
-                        file: Rc::clone(file_rc),
-                        line,
-                    });
                 }
             }
         }

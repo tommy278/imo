@@ -82,7 +82,8 @@ fn handle_line_index_result(
 
     // All addresses belong to the same file
     if unique_files.len() == 1 {
-        handle_break_metadata(session, line_index, line_number);
+        let (bp_for_line, first_bp) = session.create_breakpoint(line_number, None);
+        handle_break_metadata(session, bp_for_line, first_bp, line_number);
         return;
     }
 
@@ -119,39 +120,21 @@ fn handle_line_index_result(
 
     let chosen_file = file_choices[index];
 
-    // Filter out files that do not match the user chosen_file
-    // Pass this filtered vec into the handle_break_metadata for data display
-    let chosen_line_index: Vec<BreakpointTarget> = (line_index)
-        .to_vec()
-        .into_iter()
-        .filter(|bp| bp.file.as_ref() == chosen_file)
-        .collect::<Vec<_>>();
-
-    handle_break_metadata(session, &chosen_line_index, line_number);
+    let (bp_for_line, first_bp) = session.create_breakpoint(line_number, Some(chosen_file));
+    handle_break_metadata(session, bp_for_line, first_bp, line_number);
     return;
 }
 
 /// Create breakpoints and give user the data regarding them
 fn handle_break_metadata(
     session: &mut DebugSession,
-    line_index: &[BreakpointTarget],
+    bp_for_line: u64,
+    first_bp: BreakpointTarget,
     line_number: u64,
 ) {
-    // Keep track of how many breakpoints were created for this line
-    // A singular line can have multiple breakpoints
-    let mut bp_for_line = 0;
-    for bp in line_index {
-        session.create_breakpoint(bp.relative_address);
-        bp_for_line += 1;
-    }
-
-    // Update the total breakpoint count for the session
-    let bp_count = session.increase_breakpoint_count();
-
-    // Keep track of the first file in the line index (display regardless of how many files)
-    // Safe index, at this point guranteed to exist due to previous checks in handle_line_index_result
-    let first_bp_relative_address = line_index[0].relative_address;
-    let trimmed_path = trim_file_path(line_index[0].file.as_ref());
+    // Handle metadata correctly
+    let first_bp_relative_address = first_bp.relative_address;
+    let trimmed_path = trim_file_path(first_bp.file.as_ref());
 
     let location_detail = if bp_for_line == 1 {
         format!("line {}", line_number)
@@ -161,7 +144,10 @@ fn handle_break_metadata(
 
     println!(
         "Breakpoint {} at 0x{:X}: file {}, {}",
-        bp_count, first_bp_relative_address, trimmed_path, location_detail
+        session.current_index(),
+        first_bp_relative_address,
+        trimmed_path,
+        location_detail
     );
 }
 

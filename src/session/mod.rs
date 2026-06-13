@@ -8,13 +8,6 @@ use crate::helpers::dwarf;
 #[cfg(target_os = "linux")]
 use crate::session::linux as os;
 
-#[derive(Debug)]
-pub struct SourceLocation {
-    pub relative_address: u64,
-    pub file: Rc<Path>,
-    pub line: u64,
-}
-
 #[derive(Debug, Clone)]
 pub struct BreakpointTarget {
     pub file: Rc<Path>,
@@ -22,11 +15,11 @@ pub struct BreakpointTarget {
 }
 
 #[derive(Debug)]
+/// Cache for entire debug session
 pub struct DebugSession {
     pub line_index: FxHashMap<u64, Vec<BreakpointTarget>>,
-    pub address_to_location: Vec<SourceLocation>,
     pub base_address: u64,
-    pub breakpoint_count: usize,
+    pub breakpoint_index_tracker: Vec<Vec<BreakpointTarget>>,
 
     // Different for each os
     pub active_breakpoints: FxHashMap<u64, os::PlatformBreakpoint>,
@@ -38,9 +31,8 @@ impl DebugSession {
     fn from_pid(pid: nix::unistd::Pid) -> Self {
         Self {
             base_address: 0,
-            breakpoint_count: 0,
+            breakpoint_index_tracker: Vec::new(),
             line_index: FxHashMap::default(),
-            address_to_location: Vec::new(),
             active_breakpoints: FxHashMap::default(),
             pid,
         }
@@ -55,15 +47,40 @@ impl DebugSession {
         // Update line index and address to location
         dwarf::setup_session_cache(binary_path, &mut session);
 
-        // Sort address_to_location by adress for faster search
-        session
-            .address_to_location
-            .sort_by_key(|m| m.relative_address);
-
         session
     }
 
-    pub fn create_breakpoint(&mut self, relative_address: u64) {
+    pub fn create_breakpoint(
+        &mut self,
+        line_number: u64,
+        file: Option<&Path>,
+    ) -> (u64, BreakpointTarget) {
+        let line_index = self.get_breakpoint_target(line_number).unwrap();
+
+        let line_index = if let Some(file) = file {
+            line_index
+                .into_iter()
+                .filter(|bp| *bp.file == *file)
+                .collect()
+        } else {
+            line_index
+        };
+
+        let mut bp_for_line = 0;
+        line_index.iter().for_each(|bp| {
+            self.create_specific_breakpoint(bp.relative_address);
+            bp_for_line += 1;
+        });
+
+        self.breakpoint_index_tracker.push(line_index.clone());
+        (bp_for_line, line_index[0].clone())
+    }
+
+    pub fn current_index(&self) -> usize {
+        self.breakpoint_index_tracker.len()
+    }
+
+    pub fn create_specific_breakpoint(&mut self, relative_address: u64) {
         let absolute_address = self.get_absolute_address(relative_address);
 
         // If breakpoint already exists dont write to it simply exit
@@ -74,11 +91,6 @@ impl DebugSession {
         let mut breakpoint = os::PlatformBreakpoint::new(absolute_address);
         breakpoint.enable(self.pid);
         self.active_breakpoints.insert(absolute_address, breakpoint);
-    }
-
-    pub fn increase_breakpoint_count(&mut self) -> usize {
-        self.breakpoint_count += 1;
-        self.breakpoint_count
     }
 
     /// Continue session from last interrupt
@@ -99,23 +111,6 @@ impl DebugSession {
     /// Get absolute address ( the sum of base address and absolute address )
     pub fn get_absolute_address(&self, relative_address: u64) -> u64 {
         self.base_address + relative_address
-    }
-
-    /// Get metadata from the relative address
-    pub fn get_info_from_address(&self, relative_address: u64) -> Option<&SourceLocation> {
-        match self
-            .address_to_location
-            .binary_search_by_key(&relative_address, |m| m.relative_address)
-        {
-            Ok(idx) => Some(&self.address_to_location[idx]),
-            Err(idx) => {
-                if idx > 0 {
-                    Some(&self.address_to_location[idx - 1])
-                } else {
-                    None
-                }
-            }
-        }
     }
 
     /// Get breakpoint target (file name and relative address ) from line number and file name
