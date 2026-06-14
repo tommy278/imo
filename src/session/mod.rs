@@ -18,11 +18,13 @@ pub struct BreakpointTarget {
 pub struct BreakpointData {
     pub target: Vec<BreakpointTarget>,
     pub line: u64,
+    pub file: Option<Box<Path>>,
 }
 
 impl BreakpointData {
-    pub fn from_target(target: Vec<BreakpointTarget>, line: u64) -> Self {
-        Self { target, line }
+    pub fn from_target(target: Vec<BreakpointTarget>, line: u64, file: Option<&Path>) -> Self {
+        let file = file.map(|p| Box::from(p));
+        Self { target, line, file }
     }
 }
 
@@ -85,7 +87,11 @@ impl DebugSession {
         });
 
         self.breakpoint_index_tracker
-            .push(BreakpointData::from_target(line_index.clone(), line_number));
+            .push(BreakpointData::from_target(
+                line_index.clone(),
+                line_number,
+                file,
+            ));
 
         (bp_for_line, line_index[0].clone())
     }
