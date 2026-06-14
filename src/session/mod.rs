@@ -18,13 +18,16 @@ pub struct BreakpointTarget {
 pub struct BreakpointData {
     pub target: Vec<BreakpointTarget>,
     pub line: u64,
-    pub file: Option<Box<Path>>,
+    pub file: Box<Path>,
 }
 
 impl BreakpointData {
-    pub fn from_target(target: Vec<BreakpointTarget>, line: u64, file: Option<&Path>) -> Self {
-        let file = file.map(|p| Box::from(p));
-        Self { target, line, file }
+    pub fn from_target(target: Vec<BreakpointTarget>, line: u64, file: &Path) -> Self {
+        Self {
+            target,
+            line,
+            file: Box::from(file),
+        }
     }
 }
 
@@ -84,15 +87,13 @@ impl DebugSession {
                         }
                     }
                 } else {
-                    if let Some(bp_file) = &bp.file {
-                        let bp_file = bp_file.to_str().expect("Could not convert path");
+                    let bp_file = bp.file.to_str().expect("Could not convert path");
 
-                        // Safe unwrap since this is the path where the file is Some
-                        if bp.line == line_number && bp_file.ends_with(file.unwrap()) {
-                            if let Some(removed_bp) = opt_bp.take() {
-                                cleared_breakpoints.push(removed_bp);
-                                bp_idx.push(idx + 1);
-                            }
+                    // Safe unwrap since this is the path where the file is Some
+                    if bp.line == line_number && bp_file.ends_with(file.unwrap()) {
+                        if let Some(removed_bp) = opt_bp.take() {
+                            cleared_breakpoints.push(removed_bp);
+                            bp_idx.push(idx + 1);
                         }
                     }
                 }
@@ -109,21 +110,13 @@ impl DebugSession {
         bp_idx
     }
 
-    pub fn create_breakpoint(
-        &mut self,
-        line_number: u64,
-        file: Option<&Path>,
-    ) -> (u64, BreakpointTarget) {
+    pub fn create_breakpoint(&mut self, line_number: u64, file: &Path) -> (u64, BreakpointTarget) {
         let line_index = self.get_breakpoint_target(line_number).unwrap();
 
-        let line_index = if let Some(file) = file {
-            line_index
-                .into_iter()
-                .filter(|bp| *bp.file == *file)
-                .collect()
-        } else {
-            line_index
-        };
+        let line_index: Vec<BreakpointTarget> = line_index
+            .into_iter()
+            .filter(|bp| *bp.file == *file)
+            .collect();
 
         let mut bp_for_line = 0;
         line_index.iter().for_each(|bp| {

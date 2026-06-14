@@ -113,7 +113,7 @@ fn handle_breakpoint_setting(
     if unique_files.len() == 1 {
         // Input the first file name since they are all the same
         let default = line_index[0].file.as_ref();
-        let (bp_for_line, first_bp) = session.create_breakpoint(line_number, Some(default));
+        let (bp_for_line, first_bp) = session.create_breakpoint(line_number, default);
 
         handle_break_metadata(session, bp_for_line, first_bp, line_number);
         return;
@@ -152,7 +152,7 @@ fn handle_breakpoint_setting(
 
     let chosen_file = file_choices[index];
 
-    let (bp_for_line, first_bp) = session.create_breakpoint(line_number, Some(chosen_file));
+    let (bp_for_line, first_bp) = session.create_breakpoint(line_number, chosen_file);
     handle_break_metadata(session, bp_for_line, first_bp, line_number);
     return;
 }
