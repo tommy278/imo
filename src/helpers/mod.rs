@@ -47,14 +47,14 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                     let line_number = line_number.parse::<u64>().expect("Could not parse number");
 
                     let line_index = session.get_specific_breakpoint_target(file_name, line_number);
-                    handle_line_index_result(session, &line_index, line_number);
+                    handle_breakpoint_setting(session, &line_index, line_number);
                 }
 
                 // Handle setting breakpoint if only line_number is provided
                 // eg: break 12
                 if let Ok(line_number) = arg.parse::<u64>() {
                     let line_index = session.get_breakpoint_target(line_number).unwrap();
-                    handle_line_index_result(session, &line_index, line_number);
+                    handle_breakpoint_setting(session, &line_index, line_number);
                 }
             }
             "clear" => {
@@ -96,7 +96,7 @@ fn handle_breakpoint_clearing(session: &mut DebugSession, line_number: u64, file
     println!("{:?}", bp);
 }
 
-fn handle_line_index_result(
+fn handle_breakpoint_setting(
     session: &mut DebugSession,
     line_index: &[BreakpointTarget],
     line_number: u64,
