@@ -66,12 +66,9 @@ impl DebugSession {
 
     /// Clear all breakpoint for line_number by default
     /// Only clear specified breakpoints if file name is provided
-    pub fn clear_breakpoint(&mut self, line_number: u64, file: Option<&Path>) -> Vec<usize> {
+    pub fn clear_breakpoint(&mut self, line_number: u64, file: Option<&str>) -> Vec<usize> {
         let mut cleared_breakpoints = Vec::new();
         let mut bp_idx = Vec::new();
-
-        // Convert target file into desired form
-        let target_file = file.map(|p| Box::from(p));
 
         let filter_by_file = file.is_some();
 
@@ -79,15 +76,24 @@ impl DebugSession {
         // Store these breakpoints and their indices
         for (idx, opt_bp) in self.breakpoint_index_tracker.iter_mut().enumerate() {
             if let Some(bp) = opt_bp {
-                let line_matches = bp.line == line_number;
-                let file_matches = !filter_by_file || bp.file == target_file;
+                if !filter_by_file {
+                    if bp.line == line_number {
+                        if let Some(removed_bp) = opt_bp.take() {
+                            cleared_breakpoints.push(removed_bp);
+                            bp_idx.push(idx + 1);
+                        }
+                    }
+                } else {
+                    if let Some(bp_file) = &bp.file {
+                        let bp_file = bp_file.to_str().expect("Could not convert path");
 
-                if line_matches && file_matches {
-                    if let Some(removed_bp) = opt_bp.take() {
-                        cleared_breakpoints.push(removed_bp);
-
-                        // 1 based index for the user
-                        bp_idx.push(idx + 1);
+                        // Safe unwrap since this is the path where the file is Some
+                        if bp.line == line_number && bp_file.ends_with(file.unwrap()) {
+                            if let Some(removed_bp) = opt_bp.take() {
+                                cleared_breakpoints.push(removed_bp);
+                                bp_idx.push(idx + 1);
+                            }
+                        }
                     }
                 }
             }

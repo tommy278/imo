@@ -66,7 +66,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                     let line_number = line_number.parse::<u64>().expect("Could not parse number");
 
                     let line_index = session.get_specific_breakpoint_target(file_name, line_number);
-                    handle_breakpoint_clearing(session, line_number, None);
+                    handle_breakpoint_clearing(session, line_number, Some(file_name));
                 }
 
                 // Handle clearing breakpoint if only line_number is provided
@@ -77,7 +77,9 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 }
             }
             "debug" => {
-                println!("{:?}", session.breakpoint_index_tracker);
+                for entry in session.breakpoint_index_tracker.iter() {
+                    println!("{:?}", entry);
+                }
             }
             "q" | "quit" => {
                 // End current debug session
@@ -91,7 +93,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
     }
 }
 
-fn handle_breakpoint_clearing(session: &mut DebugSession, line_number: u64, file: Option<&Path>) {
+fn handle_breakpoint_clearing(session: &mut DebugSession, line_number: u64, file: Option<&str>) {
     let bp = session.clear_breakpoint(line_number, file);
     println!("{:?}", bp);
 }
