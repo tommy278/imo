@@ -109,7 +109,10 @@ fn handle_line_index_result(
 
     // All addresses belong to the same file
     if unique_files.len() == 1 {
-        let (bp_for_line, first_bp) = session.create_breakpoint(line_number, None);
+        // Input the first file name since they are all the same
+        let default = line_index[0].file.as_ref();
+        let (bp_for_line, first_bp) = session.create_breakpoint(line_number, Some(default));
+
         handle_break_metadata(session, bp_for_line, first_bp, line_number);
         return;
     }
