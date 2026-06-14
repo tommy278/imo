@@ -142,13 +142,10 @@ impl DebugSession {
         let absolute_address = self.get_absolute_address(relative_address);
 
         // If breakpoint doesnt exist, simply ignore it
-        if !self.active_breakpoints.contains_key(&absolute_address) {
-            return;
+        if let Some(bp) = self.active_breakpoints.get_mut(&absolute_address) {
+            bp.disable(self.pid);
+            self.active_breakpoints.remove(&absolute_address);
         }
-
-        let mut breakpoint = os::PlatformBreakpoint::new(absolute_address);
-        breakpoint.disable(self.pid);
-        self.active_breakpoints.remove(&absolute_address);
     }
 
     pub fn create_specific_breakpoint(&mut self, relative_address: u64) {
