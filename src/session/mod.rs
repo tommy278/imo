@@ -33,7 +33,7 @@ impl BreakpointData {
 pub struct DebugSession {
     pub line_index: FxHashMap<u64, Vec<BreakpointTarget>>,
     pub base_address: u64,
-    pub breakpoint_index_tracker: Vec<BreakpointData>,
+    pub breakpoint_index_tracker: Vec<Option<BreakpointData>>,
 
     // Different for each os
     pub active_breakpoints: FxHashMap<u64, os::PlatformBreakpoint>,
@@ -64,6 +64,45 @@ impl DebugSession {
         session
     }
 
+    /// Clear all breakpoint for line_number by default
+    /// Only clear specified breakpoints if file name is provided
+    pub fn clear_breakpoint(&mut self, line_number: u64, file: Option<&Path>) -> Vec<usize> {
+        let mut cleared_breakpoints = Vec::new();
+        let mut bp_idx = Vec::new();
+
+        // Convert target file into desired form
+        let target_file = file.map(|p| Box::from(p));
+
+        let filter_by_file = file.is_some();
+
+        // Map every breakpoints that macthes the user's choice into being None
+        // Store these breakpoints and their indices
+        for (idx, opt_bp) in self.breakpoint_index_tracker.iter_mut().enumerate() {
+            if let Some(bp) = opt_bp {
+                let line_matches = bp.line == line_number;
+                let file_matches = !filter_by_file || bp.file == target_file;
+
+                if line_matches && file_matches {
+                    if let Some(removed_bp) = opt_bp.take() {
+                        cleared_breakpoints.push(removed_bp);
+
+                        // 1 based index for the user
+                        bp_idx.push(idx + 1);
+                    }
+                }
+            }
+        }
+
+        // Clear every breakpoint
+        cleared_breakpoints.iter().for_each(|data| {
+            data.target.iter().for_each(|bp| {
+                self.clear_specific_breakpoint(bp.relative_address);
+            });
+        });
+
+        bp_idx
+    }
+
     pub fn create_breakpoint(
         &mut self,
         line_number: u64,
@@ -87,11 +126,11 @@ impl DebugSession {
         });
 
         self.breakpoint_index_tracker
-            .push(BreakpointData::from_target(
+            .push(Some(BreakpointData::from_target(
                 line_index.clone(),
                 line_number,
                 file,
-            ));
+            )));
 
         (bp_for_line, line_index[0].clone())
     }
@@ -109,8 +148,8 @@ impl DebugSession {
         }
 
         let mut breakpoint = os::PlatformBreakpoint::new(absolute_address);
-        breakpoint.enable(self.pid);
-        self.active_breakpoints.insert(absolute_address, breakpoint);
+        breakpoint.disable(self.pid);
+        self.active_breakpoints.remove(&absolute_address);
     }
 
     pub fn create_specific_breakpoint(&mut self, relative_address: u64) {

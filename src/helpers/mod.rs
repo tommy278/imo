@@ -57,6 +57,28 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                     handle_line_index_result(session, &line_index, line_number);
                 }
             }
+            "clear" => {
+                let arg = parts.next().expect("Did not provide a second argument");
+
+                // Handle clearing breakpoint if filename and line_number are provided
+                // eg: clear running_task:6
+                if let Some((file_name, line_number)) = arg.split_once(":") {
+                    let line_number = line_number.parse::<u64>().expect("Could not parse number");
+
+                    let line_index = session.get_specific_breakpoint_target(file_name, line_number);
+                    handle_breakpoint_clearing(session, line_number, None);
+                }
+
+                // Handle clearing breakpoint if only line_number is provided
+                // eg: clear 12
+                if let Ok(line_number) = arg.parse::<u64>() {
+                    let line_index = session.get_breakpoint_target(line_number).unwrap();
+                    handle_breakpoint_clearing(session, line_number, None);
+                }
+            }
+            "debug" => {
+                println!("{:?}", session.breakpoint_index_tracker);
+            }
             "q" | "quit" => {
                 // End current debug session
                 session.kill_session();
@@ -67,6 +89,11 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
             }
         }
     }
+}
+
+fn handle_breakpoint_clearing(session: &mut DebugSession, line_number: u64, file: Option<&Path>) {
+    let bp = session.clear_breakpoint(line_number, file);
+    println!("{:?}", bp);
 }
 
 fn handle_line_index_result(
