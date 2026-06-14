@@ -94,6 +94,19 @@ impl DebugSession {
         self.breakpoint_index_tracker.len()
     }
 
+    pub fn clear_specific_breakpoint(&mut self, relative_address: u64) {
+        let absolute_address = self.get_absolute_address(relative_address);
+
+        // If breakpoint doesnt exist, simply ignore it
+        if !self.active_breakpoints.contains_key(&absolute_address) {
+            return;
+        }
+
+        let mut breakpoint = os::PlatformBreakpoint::new(absolute_address);
+        breakpoint.enable(self.pid);
+        self.active_breakpoints.insert(absolute_address, breakpoint);
+    }
+
     pub fn create_specific_breakpoint(&mut self, relative_address: u64) {
         let absolute_address = self.get_absolute_address(relative_address);
 
