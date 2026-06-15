@@ -126,6 +126,21 @@ impl DebugSession {
         bp_idx
     }
 
+    /// Deletes breakpoint and returns true if successful
+    pub fn delete_breakpoint(&mut self, index: usize) -> bool {
+        // Safe index, bounds are checked by the cli
+        let target = self.breakpoint_index_tracker[index].take();
+
+        if let Some(data) = target {
+            data.target.iter().for_each(|bp| {
+                self.clear_specific_breakpoint(bp.relative_address);
+            });
+            return true;
+        }
+
+        false
+    }
+
     pub fn create_breakpoint(&mut self, line_number: u64, file: &Path) -> (u64, BreakpointTarget) {
         let line_index = self.get_breakpoint_target(line_number).unwrap();
 
@@ -152,6 +167,13 @@ impl DebugSession {
 
     pub fn current_index(&self) -> usize {
         self.breakpoint_index_tracker.len()
+    }
+
+    /// Check if breakpoint exists at a given location
+    pub fn breakpoint_exists(&self, index: usize) -> bool {
+        self.breakpoint_index_tracker
+            .get(index)
+            .map_or(false, |slot| slot.is_some())
     }
 
     pub fn clear_specific_breakpoint(&mut self, relative_address: u64) {

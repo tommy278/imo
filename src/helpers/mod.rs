@@ -64,16 +64,45 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 // eg: clear running_task:6
                 if let Some((file_name, line_number)) = arg.split_once(":") {
                     let line_number = line_number.parse::<u64>().expect("Could not parse number");
-
-                    let line_index = session.get_specific_breakpoint_target(file_name, line_number);
                     handle_breakpoint_clearing(session, line_number, Some(file_name));
                 }
 
                 // Handle clearing breakpoint if only line_number is provided
                 // eg: clear 12
                 if let Ok(line_number) = arg.parse::<u64>() {
-                    let line_index = session.get_breakpoint_target(line_number).unwrap();
                     handle_breakpoint_clearing(session, line_number, None);
+                }
+            }
+            "d" | "delete" => {
+                let arg = parts.next().expect("No args");
+
+                // NOTE: User index is 1 based while the internal vector is 0 based
+                if let Ok(user_index) = arg.parse::<usize>() {
+                    // Index 0 never exists
+                    // Index starts at 1
+                    if user_index == 0 {
+                        println!("No such index");
+                        continue;
+                    }
+
+                    // Get the actual 0 based index once safe
+                    let vec_index = user_index - 1;
+
+                    // Index out of bounds or already deleted
+                    if vec_index >= session.current_index() || !session.breakpoint_exists(vec_index)
+                    {
+                        println!("No such index");
+                        continue;
+                    }
+
+                    match session.delete_breakpoint(vec_index) {
+                        true => {
+                            println!("Successfully deleted breakpoint {}", user_index);
+                        }
+                        false => {
+                            println!("Could not delete breakpoint");
+                        }
+                    }
                 }
             }
             "debug" => {
