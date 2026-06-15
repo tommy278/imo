@@ -109,6 +109,24 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                     );
                 }
             }
+            "i" | "info" => {
+                let arg = parts.next().expect("No args");
+
+                match arg {
+                    "b" | "breakpoints" => {
+                        for (idx, bp) in session.breakpoint_index_tracker.iter().enumerate() {
+                            // NOTE: User index is 1 based
+                            if let Some(bp) = bp {
+                                let user_idx = idx + 1;
+                                println!("{} {}", user_idx, bp);
+                            }
+                        }
+                    }
+                    _ => {
+                        todo!()
+                    }
+                }
+            }
             "debug" => {
                 for entry in session.breakpoint_index_tracker.iter() {
                     println!("{:?}", entry);
@@ -250,8 +268,10 @@ fn handle_break_metadata(
     );
 }
 
+// TODO: Make this safe for any OS
+// For example windows uses backslash instead of forward slash
 /// Trim file path for the main source code
-fn trim_file_path(path: &Path) -> String {
+pub fn trim_file_path(path: &Path) -> String {
     let path = path.display().to_string();
     let res = path.split("/").last().unwrap_or("main").to_owned();
     res

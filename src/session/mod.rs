@@ -4,6 +4,7 @@ use rustc_hash::FxHashMap;
 use std::{path::Path, rc::Rc};
 
 use crate::helpers::dwarf;
+use crate::helpers::trim_file_path;
 
 #[cfg(target_os = "linux")]
 use crate::session::linux as os;
@@ -30,6 +31,45 @@ impl BreakpointData {
             file: Box::from(file),
             enabled: true,
         }
+    }
+}
+
+impl std::fmt::Display for BreakpointData {
+    // NOTE: The first address is the placeholder for entries with more than one address
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let enabled = if self.enabled { "y" } else { "n" };
+
+        if self.target.len() == 1 {
+            let target = &self.target[0];
+            let file_path = trim_file_path(&target.file);
+
+            write!(
+                f,
+                "breakpoint\tkeep {}\t0x{:016x} at {}:{}",
+                enabled, target.relative_address, file_path, self.line
+            )?;
+        } else {
+            writeln!(f, "breakpoint\tkeep {}\t<MULTIPLE>", enabled)?;
+
+            for (idx, target) in self.target.iter().enumerate() {
+                let user_idx = idx + 1;
+                write!(
+                    f,
+                    "  .{}\t\t     {}\t0x{:016x} at {}:{}",
+                    user_idx,
+                    enabled,
+                    target.relative_address,
+                    target.file.display(),
+                    self.line
+                )?;
+
+                // Avoid an extra trailing newline at the very last location
+                if idx < self.target.len() - 1 {
+                    writeln!(f)?;
+                }
+            }
+        }
+        Ok(())
     }
 }
 
