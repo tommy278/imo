@@ -1,1 +1,83 @@
 pub mod linux;
+
+use crate::session::PlatformRegStruct;
+use std::fmt;
+
+pub struct RegisterViewer {
+    pub regs: PlatformRegStruct,
+}
+
+impl RegisterViewer {
+    pub fn new(regs: PlatformRegStruct) -> Self {
+        Self { regs }
+    }
+}
+impl fmt::Display for RegisterViewer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // For registers display a third column that shows decimal value
+        let write_reg = |f: &mut fmt::Formatter<'_>, name: &str, val: u64| -> fmt::Result {
+            writeln!(f, "{:<8}0x{:<18x}{}", name, val, val)
+        };
+
+        // For stack registers simply display the same hex
+        let write_stack_reg = |f: &mut fmt::Formatter<'_>, name: &str, val: u64| -> fmt::Result {
+            writeln!(f, "{:<8}0x{:<18x}0x{:x}", name, val, val)
+        };
+
+        write_reg(f, "rax", self.regs.rax)?;
+        write_reg(f, "rbx", self.regs.rbx)?;
+        write_reg(f, "rcx", self.regs.rcx)?;
+        write_reg(f, "rdx", self.regs.rdx)?;
+        write_reg(f, "rsi", self.regs.rsi)?;
+        write_reg(f, "rdi", self.regs.rdi)?;
+
+        write_stack_reg(f, "rbp", self.regs.rbp)?;
+        write_stack_reg(f, "rsp", self.regs.rsp)?;
+
+        write_reg(f, "r8", self.regs.r8)?;
+        write_reg(f, "r9", self.regs.r9)?;
+        write_reg(f, "r10", self.regs.r10)?;
+        write_reg(f, "r11", self.regs.r11)?;
+        write_reg(f, "r12", self.regs.r12)?;
+        write_reg(f, "r13", self.regs.r13)?;
+        write_reg(f, "r14", self.regs.r14)?;
+        write_reg(f, "r15", self.regs.r15)?;
+
+        write_stack_reg(f, "rip", self.regs.rip)?;
+
+        let eflags_val = self.regs.eflags;
+        let mut flags_vec = Vec::new();
+
+        // Perform bitwise masking to check if individual state switches are active
+        if (eflags_val & 0x0004) != 0 {
+            flags_vec.push("PF");
+        }
+        if (eflags_val & 0x0040) != 0 {
+            flags_vec.push("ZF");
+        }
+        if (eflags_val & 0x0200) != 0 {
+            flags_vec.push("IF");
+        }
+
+        // Join the found flags together separated by clean spaces
+        let flags_str = if flags_vec.is_empty() {
+            String::new()
+        } else {
+            format!(" {} ", flags_vec.join(" "))
+        };
+
+        writeln!(f, "{:<8}0x{:<18x}[{}]", "eflags", eflags_val, flags_str)?;
+
+        write_reg(f, "cs", self.regs.cs as u64)?;
+        write_reg(f, "ss", self.regs.ss as u64)?;
+        write_reg(f, "ds", self.regs.ds as u64)?;
+        write_reg(f, "es", self.regs.es as u64)?;
+        write_reg(f, "fs", self.regs.fs as u64)?;
+        write_reg(f, "gs", self.regs.gs as u64)?;
+
+        write_reg(f, "fs_base", self.regs.fs_base)?;
+        write_reg(f, "gs_base", self.regs.gs_base)?;
+
+        Ok(())
+    }
+}

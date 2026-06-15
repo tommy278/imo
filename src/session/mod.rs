@@ -6,8 +6,11 @@ use std::{path::Path, rc::Rc};
 use crate::helpers::dwarf;
 use crate::helpers::trim_file_path;
 
+use crate::interface::RegisterViewer;
 #[cfg(target_os = "linux")]
 use crate::session::linux as os;
+
+pub type PlatformRegStruct = os::PlatformRegStruct;
 
 #[derive(Debug, Clone)]
 pub struct BreakpointTarget {
@@ -262,15 +265,13 @@ impl DebugSession {
         (bp_for_line, line_index[0].clone())
     }
 
-    pub fn current_index(&self) -> usize {
-        self.breakpoint_index_tracker.len()
+    pub fn get_regs(&self) -> RegisterViewer {
+        let regs = os::get_regs(self.pid);
+        RegisterViewer::new(regs)
     }
 
-    /// Check if breakpoint exists at a given location
-    pub fn breakpoint_exists(&self, index: usize) -> bool {
-        self.breakpoint_index_tracker
-            .get(index)
-            .map_or(false, |slot| slot.is_some())
+    pub fn current_index(&self) -> usize {
+        self.breakpoint_index_tracker.len()
     }
 
     pub fn clear_specific_breakpoint(&mut self, relative_address: u64) {

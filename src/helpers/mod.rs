@@ -122,6 +122,10 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                             }
                         }
                     }
+                    "reg" => {
+                        let regs = session.get_regs();
+                        println!("{}", regs);
+                    }
                     _ => {
                         todo!()
                     }

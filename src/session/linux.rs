@@ -1,9 +1,10 @@
-use nix::sys::ptrace;
+use nix::{libc::user_regs_struct, sys::ptrace};
 use std::fs::read_to_string;
 
 // Define the platform aliases exposed to mod.rs
 pub type ProcessId = nix::unistd::Pid;
 pub type PlatformBreakpoint = crate::interface::linux::BreakPoint;
+pub type PlatformRegStruct = user_regs_struct;
 
 /// Get process base address
 pub fn get_process_base_address(pid: ProcessId) -> u64 {
@@ -26,4 +27,10 @@ pub fn continue_session(pid: ProcessId) {
 /// Kill debug session
 pub fn kill_session(pid: ProcessId) {
     ptrace::kill(pid).unwrap()
+}
+
+/// Get all register data
+pub fn get_regs(pid: ProcessId) -> PlatformRegStruct {
+    // TODO: Hanlde this error gracefully
+    ptrace::getregs(pid).unwrap()
 }
