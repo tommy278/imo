@@ -79,7 +79,7 @@ pub fn debug(binary_path: &str) {
                                             ptrace::setregs(pid, regs).unwrap();
 
                                             // Replace the 0xCC (INT3) back with the previous instruction
-                                            bp.disable(pid);
+                                            bp.breakpoint.disable(pid);
 
                                             // Open interactive menu
                                             handle_user_debugger_menu(&mut session);

@@ -14,6 +14,7 @@ pub struct BreakpointTarget {
     pub relative_address: u64,
 }
 
+// TODO: Add boolean for enabled breakpoints
 #[derive(Debug, Clone)]
 pub struct BreakpointData {
     pub target: Vec<BreakpointTarget>,
@@ -31,6 +32,21 @@ impl BreakpointData {
     }
 }
 
+#[derive(Debug)]
+pub struct ManagedBreakpoint {
+    pub breakpoint: os::PlatformBreakpoint,
+    pub ref_count: usize,
+}
+
+impl ManagedBreakpoint {
+    pub fn new(breakpoint: os::PlatformBreakpoint) -> Self {
+        Self {
+            breakpoint,
+            ref_count: 1,
+        }
+    }
+}
+
 /// Cache for entire debug session
 #[derive(Debug)]
 pub struct DebugSession {
@@ -39,7 +55,7 @@ pub struct DebugSession {
     pub breakpoint_index_tracker: Vec<Option<BreakpointData>>,
 
     // Different for each os
-    pub active_breakpoints: FxHashMap<u64, os::PlatformBreakpoint>,
+    pub active_breakpoints: FxHashMap<u64, ManagedBreakpoint>,
     pub pid: os::ProcessId,
 }
 
@@ -140,10 +156,20 @@ impl DebugSession {
 
     pub fn clear_specific_breakpoint(&mut self, relative_address: u64) {
         let absolute_address = self.get_absolute_address(relative_address);
+        let mut should_remove = false;
 
         // If breakpoint doesnt exist, simply ignore it
-        if let Some(bp) = self.active_breakpoints.get_mut(&absolute_address) {
-            bp.disable(self.pid);
+        if let Some(managed_breakpoint) = self.active_breakpoints.get_mut(&absolute_address) {
+            if managed_breakpoint.ref_count > 1 {
+                // Other breakpoints exist, dont remove it, simply decrement
+                managed_breakpoint.ref_count -= 1;
+            } else {
+                managed_breakpoint.breakpoint.disable(self.pid);
+                should_remove = true;
+            }
+        }
+
+        if should_remove {
             self.active_breakpoints.remove(&absolute_address);
         }
     }
@@ -151,14 +177,19 @@ impl DebugSession {
     pub fn create_specific_breakpoint(&mut self, relative_address: u64) {
         let absolute_address = self.get_absolute_address(relative_address);
 
-        // If breakpoint already exists dont write to it simply exit
-        if self.active_breakpoints.contains_key(&absolute_address) {
+        // If breakpoint already exists dont write simply increment the reference counter
+        if let Some(managed_breakpoint) = self.active_breakpoints.get_mut(&absolute_address) {
+            managed_breakpoint.ref_count += 1;
             return;
         }
 
+        // First time seeing the address
+        // Create the breakpoint
         let mut breakpoint = os::PlatformBreakpoint::new(absolute_address);
         breakpoint.enable(self.pid);
-        self.active_breakpoints.insert(absolute_address, breakpoint);
+
+        self.active_breakpoints
+            .insert(absolute_address, ManagedBreakpoint::new(breakpoint));
     }
 
     /// Continue session from last interrupt
