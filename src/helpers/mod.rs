@@ -7,7 +7,7 @@ use std::{
 
 use rustc_hash::FxHashSet;
 
-use crate::session::{BreakpointTarget, DebugSession};
+use crate::session::{self, BreakpointTarget, DebugSession};
 
 /// Flush so the print statement is immediately displayed on screen
 /// Used for print statement since its not flushed automcatically unlike println
@@ -89,14 +89,24 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 let arg = parts.next().expect("No args");
 
                 if let Ok(user_index) = arg.parse::<usize>() {
-                    handle_event_by_index(session, user_index, todo!(), "enable");
+                    handle_event_by_index(
+                        session,
+                        user_index,
+                        |s, idx| s.enable_breakpoint(idx),
+                        "enable",
+                    );
                 }
             }
             "dis" | "disable" => {
                 let arg = parts.next().expect("No args");
 
                 if let Ok(user_index) = arg.parse::<usize>() {
-                    handle_event_by_index(session, user_index, todo!(), "disable");
+                    handle_event_by_index(
+                        session,
+                        user_index,
+                        |s, idx| s.disable_breakpoint(idx),
+                        "disable",
+                    );
                 }
             }
             "debug" => {
@@ -118,7 +128,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
 
 fn handle_event_by_index<F>(session: &mut DebugSession, user_index: usize, func: F, action: &str)
 where
-    F: FnOnce(&mut DebugSession, usize) -> bool,
+    F: FnOnce(&mut DebugSession, usize) -> session::BreakpointMutationResult,
 {
     // Index 0 never exists
     // Index starts at 1
@@ -131,17 +141,20 @@ where
     let vec_index = user_index - 1;
 
     // Index out of bounds or already deleted
-    if vec_index >= session.current_index() || !session.breakpoint_exists(vec_index) {
+    if vec_index >= session.current_index() {
         println!("No such index");
         return;
     }
 
     match func(session, vec_index) {
-        true => {
+        session::BreakpointMutationResult::Updated => {
             // Format action into being past tense
             println!("Successfully {}d breakpoint {}", action, user_index);
         }
-        false => {
+        session::BreakpointMutationResult::AlreadyInState => {
+            println!("Breakpoint {} is already {}d", user_index, action);
+        }
+        session::BreakpointMutationResult::NotFound => {
             println!("Could not {} breakpoint", action);
         }
     }

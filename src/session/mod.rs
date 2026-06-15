@@ -14,12 +14,12 @@ pub struct BreakpointTarget {
     pub relative_address: u64,
 }
 
-// TODO: Add boolean for enabled breakpoints
 #[derive(Debug, Clone)]
 pub struct BreakpointData {
     pub target: Vec<BreakpointTarget>,
     pub line: u64,
     pub file: Box<Path>,
+    pub enabled: bool,
 }
 
 impl BreakpointData {
@@ -28,6 +28,7 @@ impl BreakpointData {
             target,
             line,
             file: Box::from(file),
+            enabled: true,
         }
     }
 }
@@ -36,6 +37,13 @@ impl BreakpointData {
 pub struct ManagedBreakpoint {
     pub breakpoint: os::PlatformBreakpoint,
     pub ref_count: usize,
+}
+
+#[derive(Debug)]
+pub enum BreakpointMutationResult {
+    Updated,
+    AlreadyInState,
+    NotFound,
 }
 
 impl ManagedBreakpoint {
@@ -126,19 +134,68 @@ impl DebugSession {
         bp_idx
     }
 
+    pub fn enable_breakpoint(&mut self, index: usize) -> BreakpointMutationResult {
+        // NOTE: Safe index, bounds are checked by the cli
+        let target = self.breakpoint_index_tracker[index].clone();
+
+        if let Some(mut data) = target {
+            // If already enabled, DO NOTHING
+            if data.enabled {
+                return BreakpointMutationResult::AlreadyInState;
+            }
+
+            data.target.iter().for_each(|bp| {
+                self.create_specific_breakpoint(bp.relative_address);
+            });
+
+            data.enabled = true;
+
+            // Update the actual session instance
+            self.breakpoint_index_tracker[index] = Some(data);
+            return BreakpointMutationResult::Updated;
+        }
+
+        BreakpointMutationResult::NotFound
+    }
+
+    /// Disable breakpoint and returns true if successful
+    pub fn disable_breakpoint(&mut self, index: usize) -> BreakpointMutationResult {
+        // NOTE: Safe index, bounds are checked by the cli
+        let target = self.breakpoint_index_tracker[index].clone();
+
+        if let Some(mut data) = target {
+            // If already disabled, DO NOTHING
+            if !data.enabled {
+                return BreakpointMutationResult::AlreadyInState;
+            }
+
+            data.target.iter().for_each(|bp| {
+                self.clear_specific_breakpoint(bp.relative_address);
+            });
+
+            data.enabled = false;
+
+            // Update the actual session instance
+            self.breakpoint_index_tracker[index] = Some(data);
+            return BreakpointMutationResult::Updated;
+        }
+
+        BreakpointMutationResult::NotFound
+    }
+
     /// Deletes breakpoint and returns true if successful
-    pub fn delete_breakpoint(&mut self, index: usize) -> bool {
-        // Safe index, bounds are checked by the cli
+    pub fn delete_breakpoint(&mut self, index: usize) -> BreakpointMutationResult {
+        // NOTE: Safe index, bounds are checked by the cli
         let target = self.breakpoint_index_tracker[index].take();
 
         if let Some(data) = target {
             data.target.iter().for_each(|bp| {
                 self.clear_specific_breakpoint(bp.relative_address);
             });
-            return true;
+            return BreakpointMutationResult::Updated;
         }
 
-        false
+        BreakpointMutationResult::NotFound
     }
 
     pub fn create_breakpoint(&mut self, line_number: u64, file: &Path) -> (u64, BreakpointTarget) {
