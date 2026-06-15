@@ -76,33 +76,27 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
             "d" | "delete" => {
                 let arg = parts.next().expect("No args");
 
-                // NOTE: User index is 1 based while the internal vector is 0 based
                 if let Ok(user_index) = arg.parse::<usize>() {
-                    // Index 0 never exists
-                    // Index starts at 1
-                    if user_index == 0 {
-                        println!("No such index");
-                        continue;
-                    }
+                    handle_event_by_index(
+                        session,
+                        user_index,
+                        |s, idx| s.delete_breakpoint(idx),
+                        "delete",
+                    );
+                }
+            }
+            "e" | "enable" => {
+                let arg = parts.next().expect("No args");
 
-                    // Get the actual 0 based index once safe
-                    let vec_index = user_index - 1;
+                if let Ok(user_index) = arg.parse::<usize>() {
+                    handle_event_by_index(session, user_index, todo!(), "enable");
+                }
+            }
+            "dis" | "disable" => {
+                let arg = parts.next().expect("No args");
 
-                    // Index out of bounds or already deleted
-                    if vec_index >= session.current_index() || !session.breakpoint_exists(vec_index)
-                    {
-                        println!("No such index");
-                        continue;
-                    }
-
-                    match session.delete_breakpoint(vec_index) {
-                        true => {
-                            println!("Successfully deleted breakpoint {}", user_index);
-                        }
-                        false => {
-                            println!("Could not delete breakpoint");
-                        }
-                    }
+                if let Ok(user_index) = arg.parse::<usize>() {
+                    handle_event_by_index(session, user_index, todo!(), "disable");
                 }
             }
             "debug" => {
@@ -118,6 +112,37 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
             _ => {
                 println!("Not handled yet");
             }
+        }
+    }
+}
+
+fn handle_event_by_index<F>(session: &mut DebugSession, user_index: usize, func: F, action: &str)
+where
+    F: FnOnce(&mut DebugSession, usize) -> bool,
+{
+    // Index 0 never exists
+    // Index starts at 1
+    if user_index == 0 {
+        println!("No such index");
+        return;
+    }
+
+    // Get the actual 0 based index once safe
+    let vec_index = user_index - 1;
+
+    // Index out of bounds or already deleted
+    if vec_index >= session.current_index() || !session.breakpoint_exists(vec_index) {
+        println!("No such index");
+        return;
+    }
+
+    match func(session, vec_index) {
+        true => {
+            // Format action into being past tense
+            println!("Successfully {}d breakpoint {}", action, user_index);
+        }
+        false => {
+            println!("Could not {} breakpoint", action);
         }
     }
 }
