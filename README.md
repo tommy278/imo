@@ -2,6 +2,8 @@
 
 A Rust-native debugger designed to natively support and smoothly visualize Rust-specific types like `Option`, `Result`, and standard library collections.
 
+> **Imo** (ìmọ̀) is the Yoruba word for *knowledge*. This debugger is built to give you deeper knowledge of your running Rust code.
+
 > ⚠️ **Project Status: Early Development**. Core features are still in progress. APIs and functionality are subject to frequent changes.
 
 ## Getting Started
