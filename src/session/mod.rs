@@ -1,3 +1,4 @@
+#[cfg(target_os = "linux")]
 pub mod linux;
 
 use rustc_hash::FxHashMap;
@@ -10,6 +11,50 @@ use crate::interface::RegisterViewer;
 #[cfg(target_os = "linux")]
 use crate::session::linux as os;
 
+// If not supported yet, add dummy values for compilation
+#[cfg(not(target_os = "linux"))]
+mod os {
+    use std::path::Path;
+    use std::rc::Rc;
+
+    // Dummy types to satisfy the type aliases
+    pub type ProcessId = i32;
+    pub type PlatformRegStruct = ();
+
+    #[derive(Debug, Clone)]
+    pub struct PlatformBreakpoint;
+
+    impl PlatformBreakpoint {
+        pub fn new(_absolute_address: u64) -> Self {
+            unimplemented!("imo debugger only runs on linux")
+        }
+        pub fn enable(&self, _pid: ProcessId) {
+            unimplemented!("imo debugger only runs on linux")
+        }
+        pub fn disable(&self, _pid: ProcessId) {
+            unimplemented!("imo debugger only runs on linux")
+        }
+    }
+
+    pub fn get_process_base_address(_pid: ProcessId) -> u64 {
+        unimplemented!("imo debugger only runs on Linux")
+    }
+
+    pub fn continue_session(_pid: ProcessId) {
+        unimplemented!("imo debugger only runs on Linux")
+    }
+
+    pub fn kill_session(_pid: ProcessId) {
+        unimplemented!("imo debugger only runs on Linux")
+    }
+
+    pub fn get_regs(_pid: ProcessId) -> PlatformRegStruct {
+        unimplemented!("imo debugger only runs on Linux")
+    }
+}
+
+
+pub type ProcessId = os::ProcessId;
 pub type PlatformRegStruct = os::PlatformRegStruct;
 
 #[derive(Debug, Clone)]
@@ -112,7 +157,7 @@ pub struct DebugSession {
 
 impl DebugSession {
     /// Instantiate the struct with default values
-    fn from_pid(pid: nix::unistd::Pid) -> Self {
+    fn from_pid(pid: os::ProcessId) -> Self {
         Self {
             base_address: 0,
             breakpoint_index_tracker: Vec::new(),
@@ -123,7 +168,7 @@ impl DebugSession {
     }
 
     /// Create a complete instance of the session cache
-    pub fn new(pid: nix::unistd::Pid, binary_path: &str) -> Self {
+    pub fn new(pid: os::ProcessId, binary_path: &str) -> Self {
         let mut session = Self::from_pid(pid);
 
         session.update_process_base_address();

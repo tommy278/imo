@@ -1,3 +1,4 @@
+#[cfg(target_os = "linux")]
 pub mod linux;
 
 use crate::session::PlatformRegStruct;
@@ -12,6 +13,8 @@ impl RegisterViewer {
         Self { regs }
     }
 }
+
+#[cfg(target_os = "linux")]
 impl fmt::Display for RegisterViewer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // For registers display a third column that shows decimal value
@@ -79,5 +82,17 @@ impl fmt::Display for RegisterViewer {
         write_reg(f, "gs_base", self.regs.gs_base)?;
 
         Ok(())
+    }
+}
+
+// Dummy for mac and windows interface
+#[cfg(not(target_os = "linux"))]
+impl fmt::Display for RegisterViewer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // This block doesn't access self.regs fields, so the compiler doesn't care that it's empty!
+        write!(
+            f,
+            "Register visualization is only supported on Linux targets."
+        )
     }
 }
