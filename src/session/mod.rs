@@ -53,7 +53,6 @@ mod os {
     }
 }
 
-
 pub type ProcessId = os::ProcessId;
 pub type PlatformRegStruct = os::PlatformRegStruct;
 
