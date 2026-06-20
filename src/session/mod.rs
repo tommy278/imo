@@ -14,9 +14,6 @@ use crate::session::linux as os;
 // If not supported yet, add dummy values for compilation
 #[cfg(not(target_os = "linux"))]
 mod os {
-    use std::path::Path;
-    use std::rc::Rc;
-
     // Dummy types to satisfy the type aliases
     pub type ProcessId = i32;
     pub type PlatformRegStruct = ();
@@ -38,6 +35,14 @@ mod os {
 
     pub fn get_process_base_address(_pid: ProcessId) -> u64 {
         unimplemented!("imo debugger only runs on Linux")
+    }
+
+    pub fn begin_step_process(_pid: ProcessId) {
+        unimplemented!("imo debugger only runs on linux")
+    }
+
+    pub fn step(_pid: ProcessId) {
+        unimplemented!("imo deb")
     }
 
     pub fn continue_session(_pid: ProcessId) {

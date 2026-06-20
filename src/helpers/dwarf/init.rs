@@ -17,7 +17,7 @@ use std::{
 
 /// Get details from dwarf and apply them to the debug session cache
 pub fn setup_session_cache(binary_path: &str, session: &mut DebugSession) {
-    let file = fs::File::open(&binary_path).unwrap();
+    let file = fs::File::open(binary_path).unwrap();
     // TODO: Find a safer way to map file as suggested by gimli
     let mmap = unsafe { memmap2::Mmap::map(&file).unwrap() };
     let object = object::File::parse(&*mmap).unwrap();
