@@ -82,7 +82,6 @@ impl BreakpointData {
 }
 
 impl std::fmt::Display for BreakpointData {
-    // NOTE: The first address is the placeholder for entries with more than one address
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let enabled = if self.enabled { "y" } else { "n" };
 
@@ -166,6 +165,10 @@ impl DebugSession {
         }
     }
 
+    // =================================================================
+    // OS Specific functions
+    // =================================================================
+
     /// Create a complete instance of the session cache
     pub fn new(pid: os::ProcessId, binary_path: &str) -> Self {
         let mut session = Self::from_pid(pid);
@@ -177,6 +180,48 @@ impl DebugSession {
 
         session
     }
+
+    pub fn get_regs(&self) -> RegisterViewer {
+        let regs = os::get_regs(self.pid);
+        RegisterViewer::new(regs)
+    }
+
+    pub fn create_specific_breakpoint(&mut self, relative_address: u64) {
+        let absolute_address = self.get_absolute_address(relative_address);
+
+        // If breakpoint already exists dont write simply increment the reference counter
+        if let Some(managed_breakpoint) = self.active_breakpoints.get_mut(&absolute_address) {
+            managed_breakpoint.ref_count += 1;
+            return;
+        }
+
+        // First time seeing the address
+        // Create the breakpoint
+        let mut breakpoint = os::PlatformBreakpoint::new(absolute_address);
+        breakpoint.enable(self.pid);
+
+        self.active_breakpoints
+            .insert(absolute_address, ManagedBreakpoint::new(breakpoint));
+    }
+
+    /// Continue session from last interrupt
+    pub fn continue_session(&self) {
+        os::continue_session(self.pid);
+    }
+
+    /// Kill the current session
+    pub fn kill_session(&self) {
+        os::kill_session(self.pid);
+    }
+
+    /// Get and update the process base address
+    pub fn update_process_base_address(&mut self) {
+        self.base_address = os::get_process_base_address(self.pid);
+    }
+
+    // =================================================================
+    // Other Methods
+    // =================================================================
 
     /// Clear all breakpoint for line_number by default
     /// Only clear specified breakpoints if file name is provided
@@ -309,11 +354,6 @@ impl DebugSession {
         (bp_for_line, line_index[0].clone())
     }
 
-    pub fn get_regs(&self) -> RegisterViewer {
-        let regs = os::get_regs(self.pid);
-        RegisterViewer::new(regs)
-    }
-
     pub fn current_index(&self) -> usize {
         self.breakpoint_index_tracker.len()
     }
@@ -336,39 +376,6 @@ impl DebugSession {
         if should_remove {
             self.active_breakpoints.remove(&absolute_address);
         }
-    }
-
-    pub fn create_specific_breakpoint(&mut self, relative_address: u64) {
-        let absolute_address = self.get_absolute_address(relative_address);
-
-        // If breakpoint already exists dont write simply increment the reference counter
-        if let Some(managed_breakpoint) = self.active_breakpoints.get_mut(&absolute_address) {
-            managed_breakpoint.ref_count += 1;
-            return;
-        }
-
-        // First time seeing the address
-        // Create the breakpoint
-        let mut breakpoint = os::PlatformBreakpoint::new(absolute_address);
-        breakpoint.enable(self.pid);
-
-        self.active_breakpoints
-            .insert(absolute_address, ManagedBreakpoint::new(breakpoint));
-    }
-
-    /// Continue session from last interrupt
-    pub fn continue_session(&self) {
-        os::continue_session(self.pid);
-    }
-
-    /// Kill the current session
-    pub fn kill_session(&self) {
-        os::kill_session(self.pid);
-    }
-
-    /// Get and update the process base address
-    pub fn update_process_base_address(&mut self) {
-        self.base_address = os::get_process_base_address(self.pid);
     }
 
     /// Get absolute address ( the sum of base address and absolute address )
