@@ -54,7 +54,7 @@ pub fn debug(binary_path: &str) {
                         println!("Child process exited with the code {}", code);
                         break;
                     }
-                    WaitStatus::Stopped(pid, Signal::SIGSTOP) => {
+                    WaitStatus::Stopped(_pid, Signal::SIGSTOP) => {
                         session.step();
                     }
                     WaitStatus::Stopped(pid, sig) => {

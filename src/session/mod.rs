@@ -176,7 +176,7 @@ impl DebugSession {
         session.update_process_base_address();
 
         // Update line index and address to location
-        dwarf::setup_session_cache(binary_path, &mut session);
+        dwarf::init::setup_session_cache(binary_path, &mut session);
 
         session
     }

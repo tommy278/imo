@@ -1,10 +1,4 @@
-use nix::{
-    libc::user_regs_struct,
-    sys::{
-        ptrace, signal,
-        wait::{WaitStatus, waitpid},
-    },
-};
+use nix::{libc::user_regs_struct, sys::ptrace};
 use std::fs::read_to_string;
 
 // Define the platform aliases exposed to mod.rs

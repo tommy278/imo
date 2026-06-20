@@ -1,11 +1,3 @@
-pub mod helpers;
-pub mod interface;
-#[cfg(target_os = "linux")]
-pub mod linux;
-pub mod session;
-#[cfg(test)]
-pub mod test;
-
 use std::path::PathBuf;
 use std::process::exit;
 
@@ -37,7 +29,7 @@ fn main() {
 
     #[cfg(target_os = "linux")]
     {
-        crate::linux::debug(target_binary);
+        imo::linux::debug(target_binary);
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -46,4 +38,3 @@ fn main() {
         exit(1);
     }
 }
-
