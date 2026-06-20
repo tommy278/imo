@@ -38,6 +38,10 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 session.continue_session();
                 break;
             }
+            "s" | "step" => {
+                session.begin_step_process();
+                break;
+            }
             "b" | "break" => {
                 let arg = parts.next().expect("Did not provide a second argument");
 

@@ -1,4 +1,10 @@
-use nix::{libc::user_regs_struct, sys::ptrace};
+use nix::{
+    libc::user_regs_struct,
+    sys::{
+        ptrace, signal,
+        wait::{WaitStatus, waitpid},
+    },
+};
 use std::fs::read_to_string;
 
 // Define the platform aliases exposed to mod.rs
@@ -29,8 +35,20 @@ pub fn kill_session(pid: ProcessId) {
     ptrace::kill(pid).unwrap()
 }
 
+/// Send a SIGSTOP signal to the main loop
+/// Main loop decides how to step ( Only notifies )
+pub fn begin_step_process(pid: ProcessId) {
+    // Detach and re-attach to the send a SIGSTOP signal
+    ptrace::detach(pid, None).unwrap();
+    ptrace::attach(pid).unwrap();
+}
+
+/// Proceed forward when the process is stopped
+pub fn step(pid: ProcessId) {
+    ptrace::step(pid, None).unwrap();
+}
+
 /// Get all register data
 pub fn get_regs(pid: ProcessId) -> PlatformRegStruct {
-    // TODO: Hanlde this error gracefully
     ptrace::getregs(pid).unwrap()
 }

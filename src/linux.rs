@@ -54,13 +54,15 @@ pub fn debug(binary_path: &str) {
                         println!("Child process exited with the code {}", code);
                         break;
                     }
+                    WaitStatus::Stopped(pid, Signal::SIGSTOP) => {
+                        session.step();
+                    }
                     WaitStatus::Stopped(pid, sig) => {
                         if let Ok(mut regs) = ptrace::getregs(pid) {
                             // If stop was due to SIGTRAP, do not forward it to the child.
                             // Pass None to let the child continue its execution.
                             if sig == Signal::SIGTRAP {
-                                // On x86/x86_64 CPU the CPU has already advanced to the next
-                                // instruction before handing control back
+                                // On x86/x86_64 CPU the CPU has already advanced to the next instruction before handing control back
 
                                 // INT3 is exacly 1 byte long so checking the previous byte
                                 // signifies whether there was a breakpoint instruction
@@ -84,8 +86,8 @@ pub fn debug(binary_path: &str) {
                                             // Open interactive menu
                                             handle_user_debugger_menu(&mut session);
                                         } else {
-                                            // It was a system SIGTRAP, not the breakpoint
-                                            ptrace::cont(pid, None).unwrap();
+                                            // It was probably a SIGTRAP from the step
+                                            handle_user_debugger_menu(&mut session);
                                         }
                                     }
                                     Err(err) => {
@@ -93,8 +95,6 @@ pub fn debug(binary_path: &str) {
                                         ptrace::cont(pid, None).unwrap();
                                     }
                                 }
-                            } else if sig == Signal::SIGSTOP {
-                                ptrace::cont(pid, None).unwrap()
                             } else {
                                 // Forward other unexpected signals (like SIGINT, SIGSEGV) to the child
                                 ptrace::cont(pid, sig).unwrap();

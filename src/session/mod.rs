@@ -209,6 +209,15 @@ impl DebugSession {
         os::continue_session(self.pid);
     }
 
+    pub fn begin_step_process(&self) {
+        os::begin_step_process(self.pid);
+    }
+
+    /// Move forward from the specified stop
+    pub fn step(&self) {
+        os::step(self.pid);
+    }
+
     /// Kill the current session
     pub fn kill_session(&self) {
         os::kill_session(self.pid);
