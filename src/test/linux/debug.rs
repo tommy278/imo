@@ -1,21 +1,33 @@
 use crate::linux;
 
-#[test]
-fn running_task() {
+/// Run the test on the path only given the path from the linux directory
+fn test_path(path: &str) {
     let current_dir = std::env::current_dir().unwrap();
 
     let mut dir = current_dir.display().to_string();
-    dir.push_str("/src/test/linux/running_task/running_task");
+
+    // Remove the first two chars which in this case are '.' and '/'
+    let formatted_path = &path[2..];
+
+    let internal_dir = format!("/src/test/linux/{}", formatted_path);
+    dir.push_str(&internal_dir);
 
     linux::debug(&dir);
 }
 
+// NOTE: Chose this format for lsp support with finding path names
+
+#[test]
+fn running_task() {
+    test_path("./running_task/running_task");
+}
+
 #[test]
 fn multiple() {
-    let current_dir = std::env::current_dir().unwrap();
+    test_path("./multiple/inline_test");
+}
 
-    let mut dir = current_dir.display().to_string();
-    dir.push_str("/src/test/linux/multiple/inline_test");
-
-    linux::debug(&dir);
+#[test]
+fn rust_with_vars() {
+    test_path("./rust_with_vars/rust_with_vars");
 }
