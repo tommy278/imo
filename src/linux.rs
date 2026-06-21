@@ -4,7 +4,7 @@ use nix::sys::signal::{Signal, raise};
 use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::{ForkResult, fork};
 
-use crate::helpers::handle_user_debugger_menu;
+use crate::cli::handle_user_debugger_menu;
 use crate::session::DebugSession;
 
 /// Begin the parent and child processes

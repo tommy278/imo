@@ -1,3 +1,4 @@
+pub mod cli;
 pub mod helpers;
 pub mod interface;
 #[cfg(target_os = "linux")]
