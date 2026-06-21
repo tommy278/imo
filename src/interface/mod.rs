@@ -71,12 +71,12 @@ impl fmt::Display for RegisterViewer {
 
         writeln!(f, "{:<8}0x{:<18x}[{}]", "eflags", eflags_val, flags_str)?;
 
-        write_reg(f, "cs", self.regs.cs as u64)?;
-        write_reg(f, "ss", self.regs.ss as u64)?;
-        write_reg(f, "ds", self.regs.ds as u64)?;
-        write_reg(f, "es", self.regs.es as u64)?;
-        write_reg(f, "fs", self.regs.fs as u64)?;
-        write_reg(f, "gs", self.regs.gs as u64)?;
+        write_reg(f, "cs", self.regs.cs)?;
+        write_reg(f, "ss", self.regs.ss)?;
+        write_reg(f, "ds", self.regs.ds)?;
+        write_reg(f, "es", self.regs.es)?;
+        write_reg(f, "fs", self.regs.fs)?;
+        write_reg(f, "gs", self.regs.gs)?;
 
         write_reg(f, "fs_base", self.regs.fs_base)?;
         write_reg(f, "gs_base", self.regs.gs_base)?;

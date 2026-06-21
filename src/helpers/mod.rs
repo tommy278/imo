@@ -250,7 +250,6 @@ fn handle_breakpoint_setting(
 
     let (bp_for_line, first_bp) = session.create_breakpoint(line_number, chosen_file);
     handle_break_metadata(session, bp_for_line, first_bp, line_number);
-    return;
 }
 
 /// Create breakpoints and give user the data regarding them
@@ -284,6 +283,5 @@ fn handle_break_metadata(
 /// Trim file path for the main source code
 pub fn trim_file_path(path: &Path) -> String {
     let path = path.display().to_string();
-    let res = path.split("/").last().unwrap_or("main").to_owned();
-    res
+    path.split("/").last().unwrap_or("main").to_owned()
 }
