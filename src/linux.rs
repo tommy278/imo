@@ -12,6 +12,7 @@ use crate::session::DebugSession;
 /// Parent Process begins the loop that monitors child process
 pub fn debug(binary_path: &str) {
     let fork_result = unsafe { fork() }.unwrap();
+    println!("{}", binary_path);
 
     match fork_result {
         ForkResult::Child => {

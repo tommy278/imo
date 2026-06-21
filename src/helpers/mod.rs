@@ -18,7 +18,10 @@ fn flush_output() {
 /// Display an interactive menu at breakpoints
 pub fn handle_user_debugger_menu(session: &mut DebugSession) {
     let mut buffer = String::new();
-    // For debugging purposes
+    crate::helpers::dwarf::lookup_variables::lookup_vars(
+        "~/Projects/imo/src/test/linux/rust_with_vars/rust_with_vars",
+    );
+
     loop {
         print!("(imo) ");
         flush_output();
