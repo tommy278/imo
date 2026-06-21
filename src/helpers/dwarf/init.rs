@@ -135,7 +135,7 @@ fn update_session_cache(
                             .line_index
                             .entry(line)
                             .or_insert_with(Vec::new)
-                            .push(BreakpointTarget {
+                            .push(interface::BreakpointTarget {
                                 file: Rc::clone(file_rc),
                                 relative_address,
                             });

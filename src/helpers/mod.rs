@@ -7,7 +7,7 @@ use std::{
 
 use rustc_hash::FxHashSet;
 
-use crate::session::{self, BreakpointTarget, DebugSession};
+use crate::session::{DebugSession, interface};
 
 /// Flush so the print statement is immediately displayed on screen
 /// Used for print statement since its not flushed automcatically unlike println
@@ -157,7 +157,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
 
 fn handle_event_by_index<F>(session: &mut DebugSession, user_index: usize, func: F, action: &str)
 where
-    F: FnOnce(&mut DebugSession, usize) -> session::BreakpointMutationResult,
+    F: FnOnce(&mut DebugSession, usize) -> interface::BreakpointMutationResult,
 {
     // Index 0 never exists
     // Index starts at 1
@@ -176,14 +176,14 @@ where
     }
 
     match func(session, vec_index) {
-        session::BreakpointMutationResult::Updated => {
+        interface::BreakpointMutationResult::Updated => {
             // Format action into being past tense
             println!("Successfully {}d breakpoint {}", action, user_index);
         }
-        session::BreakpointMutationResult::AlreadyInState => {
+        interface::BreakpointMutationResult::AlreadyInState => {
             println!("Breakpoint {} is already {}d", user_index, action);
         }
-        session::BreakpointMutationResult::NotFound => {
+        interface::BreakpointMutationResult::NotFound => {
             println!("Could not {} breakpoint", action);
         }
     }
@@ -196,7 +196,7 @@ fn handle_breakpoint_clearing(session: &mut DebugSession, line_number: u64, file
 
 fn handle_breakpoint_setting(
     session: &mut DebugSession,
-    line_index: &[BreakpointTarget],
+    line_index: &[interface::BreakpointTarget],
     line_number: u64,
 ) {
     if line_index.is_empty() {
@@ -256,7 +256,7 @@ fn handle_breakpoint_setting(
 fn handle_break_metadata(
     session: &mut DebugSession,
     bp_for_line: u64,
-    first_bp: BreakpointTarget,
+    first_bp: interface::BreakpointTarget,
     line_number: u64,
 ) {
     // Handle metadata correctly
