@@ -10,9 +10,27 @@
 // style: allow verbose lifetimes
 #![allow(clippy::needless_lifetimes)]
 
-use gimli::Reader as _;
+use gimli::{Reader as _, constants};
 use object::{Object, ObjectSection};
+use rustc_hash::FxHashMap;
 use std::{borrow, error, fs};
+
+#[derive(Debug)]
+pub enum DwarfType {
+    Base {
+        name: String,
+        encoding: u8,
+        byte_size: u64,
+    },
+}
+
+#[derive(Debug)]
+pub struct TypeCacheNode {
+    pub dwarf_type: DwarfType,
+    pub offset: usize,
+}
+
+pub type TypeIndex = FxHashMap<usize, TypeCacheNode>;
 
 // This is a simple wrapper around `object::read::RelocationMap` that implements
 // `gimli::read::Relocate` for use with `gimli::RelocateReader`.
@@ -44,8 +62,8 @@ type Reader<'data> =
 
 pub fn lookup_vars(_binary_path: &str) {
     // TODO: Change this to be dynamic
-    let file = fs::File::open("/Users/tommy/Projects/imo/src/test/linux/running_task/running_task")
-        .unwrap();
+    let file =
+        fs::File::open("/Users/tommy/Projects/imo/src/test/linux/multiple/inline_test").unwrap();
     // SAFETY: This is not safe. `gimli` does not mitigate against modifications to the
     // file while it is being read. See the `memmap2` documentation and take your own
     // precautions. `fs::read` could be used instead if you don't mind loading the entire
@@ -96,7 +114,7 @@ fn dump_file(
     // Iterate over the compilation units.
     let mut iter = dwarf.units();
     while let Some(header) = iter.next()? {
-        println!("Unit at <.debug_info+0x{:x}>", header.offset().0);
+        // println!("Unit at <.debug_info+0x{:x}>", header.offset().0);
         let unit = dwarf.unit(header)?;
         let unit_ref = unit.unit_ref(&dwarf);
         dump_unit(unit_ref)?;
@@ -108,22 +126,74 @@ fn dump_file(
 fn dump_unit(unit: gimli::UnitRef<Reader>) -> Result<(), gimli::Error> {
     // Iterate over the Debugging Information Entries (DIEs) in the unit.
     let mut entries = unit.entries();
+    let mut tmp_storage = Vec::new();
+
     while let Some(entry) = entries.next_dfs()? {
-        println!(
+        /* println!(
             "<{}><{:x}> {}",
             entry.depth(),
             entry.offset().0,
             entry.tag()
-        );
+        ); */
+
+        match entry.tag() {
+            constants::DW_TAG_base_type => {
+                let mut name: Option<String> = None;
+                let mut encoding = None;
+                let mut byte_size = None;
+
+                for attr in entry.attrs() {
+                    match attr.name() {
+                        gimli::DW_AT_byte_size => {
+                            byte_size = attr.value().udata_value();
+                        }
+                        gimli::DW_AT_encoding => {
+                            if let gimli::AttributeValue::Encoding(enc) = attr.value() {
+                                encoding = Some(enc.0);
+                            }
+                        }
+                        gimli::DW_AT_name => {
+                            if let Ok(str) = unit.attr_string(attr.value()) {
+                                name = Some(str.to_string_lossy().unwrap().to_string())
+                            }
+                        }
+                        _ => {
+                            continue;
+                        }
+                    }
+                }
+
+                if let (Some(name), Some(encoding), Some(byte_size)) = (name, encoding, byte_size) {
+                    let dwarf_type = DwarfType::Base {
+                        name,
+                        encoding,
+                        byte_size,
+                    };
+                    let cache_node = TypeCacheNode {
+                        dwarf_type,
+                        offset: entry.offset().0,
+                    };
+                    tmp_storage.push(cache_node);
+                }
+            }
+            _ => {
+                // TODO: Parse more types
+                continue;
+            }
+        }
+
+        tmp_storage.iter().for_each(|data| {
+            println!("{:?}", data);
+        });
 
         // Iterate over the attributes in the DIE.
-        for attr in entry.attrs() {
+        /* for attr in entry.attrs() {
             print!("   {}: {:?}", attr.name(), attr.value());
             if let Ok(s) = unit.attr_string(attr.value()) {
                 print!(" '{}'", s.to_string_lossy()?);
             }
             println!();
-        }
+        } */
     }
     Ok(())
 }

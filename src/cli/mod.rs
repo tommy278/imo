@@ -10,9 +10,9 @@ use crate::session::DebugSession;
 /// Display an interactive menu at breakpoints
 pub fn handle_user_debugger_menu(session: &mut DebugSession) {
     let mut buffer = String::new();
-    crate::helpers::dwarf::lookup_variables::lookup_vars(
-        "~/Projects/imo/src/test/linux/rust_with_vars/rust_with_vars",
-    );
+
+    // TODO: Dont forget to remove this once done with the lookup
+    crate::helpers::dwarf::lookup_variables::lookup_vars("TODO");
 
     loop {
         print!("(imo) ");
