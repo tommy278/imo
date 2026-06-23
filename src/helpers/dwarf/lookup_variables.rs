@@ -17,10 +17,25 @@ use std::{borrow, error, fs};
 
 #[derive(Debug)]
 pub enum DwarfType {
+    /// Primitive types such as (int, float ...)
     Base {
         name: String,
         encoding: u8,
         byte_size: u64,
+    },
+
+    Pointer {
+        byte_size: u64,
+        target_type_offset: usize,
+    },
+
+    Const {
+        target_type_offset: usize,
+    },
+
+    Array {
+        target_type_offset: usize,
+        sibling_offset: usize,
     },
 }
 
@@ -62,8 +77,7 @@ type Reader<'data> =
 
 pub fn lookup_vars(_binary_path: &str) {
     // TODO: Change this to be dynamic
-    let file =
-        fs::File::open("/Users/tommy/Projects/imo/src/test/linux/multiple/inline_test").unwrap();
+    let file = fs::File::open("/Users/tommy/Projects/imo/src/test/linux/types/types").unwrap();
     // SAFETY: This is not safe. `gimli` does not mitigate against modifications to the
     // file while it is being read. See the `memmap2` documentation and take your own
     // precautions. `fs::read` could be used instead if you don't mind loading the entire
@@ -126,16 +140,16 @@ fn dump_file(
 fn dump_unit(unit: gimli::UnitRef<Reader>) -> Result<(), gimli::Error> {
     // Iterate over the Debugging Information Entries (DIEs) in the unit.
     let mut entries = unit.entries();
-    let mut tmp_storage = Vec::new();
 
     while let Some(entry) = entries.next_dfs()? {
-        /* println!(
+        println!(
             "<{}><{:x}> {}",
             entry.depth(),
             entry.offset().0,
             entry.tag()
-        ); */
+        );
 
+        let offset = entry.offset().0;
         match entry.tag() {
             constants::DW_TAG_base_type => {
                 let mut name: Option<String> = None;
@@ -164,36 +178,85 @@ fn dump_unit(unit: gimli::UnitRef<Reader>) -> Result<(), gimli::Error> {
                 }
 
                 if let (Some(name), Some(encoding), Some(byte_size)) = (name, encoding, byte_size) {
-                    let dwarf_type = DwarfType::Base {
+                    let base_type = DwarfType::Base {
                         name,
                         encoding,
                         byte_size,
                     };
                     let cache_node = TypeCacheNode {
-                        dwarf_type,
-                        offset: entry.offset().0,
+                        dwarf_type: base_type,
+                        offset,
                     };
-                    tmp_storage.push(cache_node);
+                    println!("{:?}", cache_node);
+                }
+            }
+            constants::DW_TAG_pointer_type => {
+                let mut byte_size = None;
+                let mut target_type_offset = None;
+
+                for attr in entry.attrs() {
+                    match attr.name() {
+                        gimli::DW_AT_byte_size => {
+                            byte_size = attr.value().udata_value();
+                        }
+                        gimli::DW_AT_type => {
+                            if let gimli::AttributeValue::UnitRef(offset) = attr.value() {
+                                target_type_offset = Some(offset.0);
+                            }
+                        }
+                        _ => continue,
+                    }
+                }
+
+                if let (Some(byte_size), Some(target_type_offset)) = (byte_size, target_type_offset)
+                {
+                    let pointer_type = DwarfType::Pointer {
+                        byte_size,
+                        target_type_offset,
+                    };
+                    let cache_node = TypeCacheNode {
+                        dwarf_type: pointer_type,
+                        offset,
+                    };
+                    println!("{:?}", cache_node);
+                }
+            }
+            constants::DW_TAG_const_type => {
+                let mut target_type_offset = None;
+
+                for attr in entry.attrs() {
+                    match attr.name() {
+                        gimli::DW_AT_type => {
+                            if let gimli::AttributeValue::UnitRef(offset) = attr.value() {
+                                target_type_offset = Some(offset.0);
+                            }
+                        }
+                        _ => continue,
+                    }
+                }
+
+                if let Some(tto) = target_type_offset {
+                    let const_type = DwarfType::Const {
+                        target_type_offset: tto,
+                    };
+                    let cache_node = TypeCacheNode {
+                        dwarf_type: const_type,
+                        offset,
+                    };
+                    println!("{:?}", cache_node)
                 }
             }
             _ => {
                 // TODO: Parse more types
-                continue;
+                for attr in entry.attrs() {
+                    print!("   {}: {:?}", attr.name(), attr.value());
+                    if let Ok(s) = unit.attr_string(attr.value()) {
+                        print!(" '{}'", s.to_string_lossy()?);
+                    }
+                    println!();
+                }
             }
         }
-
-        tmp_storage.iter().for_each(|data| {
-            println!("{:?}", data);
-        });
-
-        // Iterate over the attributes in the DIE.
-        /* for attr in entry.attrs() {
-            print!("   {}: {:?}", attr.name(), attr.value());
-            if let Ok(s) = unit.attr_string(attr.value()) {
-                print!(" '{}'", s.to_string_lossy()?);
-            }
-            println!();
-        } */
     }
     Ok(())
 }
