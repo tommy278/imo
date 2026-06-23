@@ -40,6 +40,13 @@ pub enum DwarfType {
 }
 
 #[derive(Debug)]
+pub struct DebugVariable {
+    pub name: String,
+    pub target_type_offset: usize,
+    pub location: Vec<u8>,
+}
+
+#[derive(Debug)]
 pub struct TypeCacheNode {
     pub dwarf_type: DwarfType,
     pub offset: usize,
@@ -244,6 +251,79 @@ fn dump_unit(unit: gimli::UnitRef<Reader>) -> Result<(), gimli::Error> {
                         offset,
                     };
                     println!("{:?}", cache_node)
+                }
+            }
+            constants::DW_TAG_array_type => {
+                let mut target_type_offset = None;
+                let mut sibling_offset = None;
+
+                for attr in entry.attrs() {
+                    match attr.name() {
+                        gimli::DW_AT_type => {
+                            if let gimli::AttributeValue::UnitRef(offset) = attr.value() {
+                                target_type_offset = Some(offset.0);
+                            }
+                        }
+                        gimli::DW_AT_sibling => {
+                            if let gimli::AttributeValue::UnitRef(offset) = attr.value() {
+                                sibling_offset = Some(offset.0);
+                            }
+                        }
+                        _ => continue,
+                    }
+                }
+
+                if let (Some(target_type_offset), Some(sibling_offset)) =
+                    (target_type_offset, sibling_offset)
+                {
+                    let array_type = DwarfType::Array {
+                        target_type_offset,
+                        sibling_offset,
+                    };
+                    let cache_node = TypeCacheNode {
+                        dwarf_type: array_type,
+                        offset,
+                    };
+
+                    println!("{:?}", cache_node);
+                }
+            }
+            constants::DW_TAG_variable => {
+                let mut name = None;
+                let mut target_type_offset = None;
+                let mut location = None;
+
+                for attr in entry.attrs() {
+                    match attr.name() {
+                        gimli::DW_AT_name => {
+                            if let Ok(str) = unit.attr_string(attr.value()) {
+                                name = Some(str.to_string_lossy().unwrap().to_string());
+                            }
+                        }
+                        gimli::DW_AT_type => {
+                            if let gimli::AttributeValue::UnitRef(offset) = attr.value() {
+                                target_type_offset = Some(offset.0);
+                            }
+                        }
+                        gimli::DW_AT_location => {
+                            if let gimli::AttributeValue::Exprloc(expression) = attr.value() {
+                                let slice = expression.0.inner();
+                                location = Some(slice.to_vec());
+                            }
+                        }
+                        _ => continue,
+                    }
+                }
+
+                if let (Some(name), Some(target_type_offset), Some(location)) =
+                    (name, target_type_offset, location)
+                {
+                    let debug_var = DebugVariable {
+                        name,
+                        target_type_offset,
+                        location,
+                    };
+                    println!("{:?}", debug_var);
                 }
             }
             _ => {
