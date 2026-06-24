@@ -6,6 +6,7 @@ use rustc_hash::FxHashMap;
 use std::path::Path;
 
 use crate::helpers::dwarf;
+use crate::helpers::dwarf::debug_info::DebuggerMetadataCache;
 use crate::interface::RegisterViewer;
 use crate::session::interface::{BreakpointData, BreakpointMutationResult, BreakpointTarget};
 
@@ -80,9 +81,13 @@ impl ManagedBreakpoint {
 /// Cache for entire debug session
 #[derive(Debug)]
 pub struct DebugSession {
+    // Breakpoint data
     pub line_index: FxHashMap<u64, Vec<BreakpointTarget>>,
     pub base_address: u64,
     pub breakpoint_index_tracker: Vec<Option<BreakpointData>>,
+
+    // Metdata
+    pub metadata: DebuggerMetadataCache,
 
     // Different for each os
     pub active_breakpoints: FxHashMap<u64, ManagedBreakpoint>,
@@ -96,6 +101,7 @@ impl DebugSession {
             base_address: 0,
             breakpoint_index_tracker: Vec::new(),
             line_index: FxHashMap::default(),
+            metadata: DebuggerMetadataCache::default(),
             active_breakpoints: FxHashMap::default(),
             pid,
         }
@@ -111,8 +117,10 @@ impl DebugSession {
 
         session.update_process_base_address();
 
+        session.metadata = DebuggerMetadataCache::new(binary_path);
+
         // Update line index and address to location
-        dwarf::init::setup_session_cache(binary_path, &mut session);
+        dwarf::debug_line::setup_session_cache(binary_path, &mut session);
 
         session
     }
@@ -167,6 +175,18 @@ impl DebugSession {
     // =================================================================
     // Other Methods
     // =================================================================
+
+    pub fn get_info(&self) -> Option<&dwarf::debug_info::ScopeCacheNode> {
+        let regs = self.get_regs().regs;
+
+        let current_pc = regs.rip - self.base_address;
+
+        if let Some(scope_idx) = self.metadata.find_scope_by_pc(current_pc) {
+            let active_node = &self.metadata.execution_scopes[scope_idx];
+            return Some(active_node);
+        }
+        None
+    }
 
     /// Clear all breakpoint for line_number by default
     /// Only clear specified breakpoints if file name is provided

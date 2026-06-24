@@ -11,9 +11,6 @@ use crate::session::DebugSession;
 pub fn handle_user_debugger_menu(session: &mut DebugSession) {
     let mut buffer = String::new();
 
-    // TODO: Dont forget to remove this once done with the lookup
-    crate::helpers::dwarf::lookup_variables::lookup_vars("TODO");
-
     loop {
         print!("(imo) ");
         flush_output();
@@ -131,9 +128,8 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 }
             }
             "debug" => {
-                for entry in session.breakpoint_index_tracker.iter() {
-                    println!("{:?}", entry);
-                }
+                let scope = session.get_info().expect("Could not find target");
+                println!("{:?}", scope);
             }
             "q" | "quit" => {
                 // End current debug session

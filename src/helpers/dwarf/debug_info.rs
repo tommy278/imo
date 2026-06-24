@@ -86,11 +86,64 @@ pub struct DebuggerMetadataCache {
 }
 
 impl DebuggerMetadataCache {
+    pub fn new(binary_path: &str) -> Self {
+        let mut default_cache = Self::default();
+
+        // Populate the cache with data
+        lookup_vars(binary_path, &mut default_cache);
+
+        // Sort the cache for binary seach later
+        default_cache.sort();
+
+        default_cache
+    }
+
     pub fn sort(&mut self) {
         self.execution_scopes.sort_by_key(|node| match &node.scope {
             ExecutionScope::Function { low_pc, .. } => *low_pc,
             ExecutionScope::Inlined { low_pc, .. } => *low_pc,
         });
+    }
+
+    pub fn find_scope_by_pc(&self, pc: u64) -> Option<usize> {
+        // Binary search to find where this PC would fit based on the sorted low_pc values
+        let search_result = self.execution_scopes.binary_search_by(|node| {
+            let node_low_pc = match &node.scope {
+                ExecutionScope::Function { low_pc, .. } => *low_pc,
+                ExecutionScope::Inlined { low_pc, .. } => *low_pc,
+            };
+            node_low_pc.cmp(&pc)
+        });
+
+        // Detarmine starting idx from the binary search result
+        let starting_idx = match search_result {
+            Ok(exact_idx) => exact_idx,
+            Err(insertion_idx) => {
+                if insertion_idx == 0 {
+                    return None;
+                }
+                insertion_idx - 1
+            }
+        };
+
+        // Linear scan backward slightly because multiple inline scopes might share the same low_pc
+        for idx in (0..=starting_idx).rev() {
+            let node = &self.execution_scopes[idx];
+            let (low, high) = match &node.scope {
+                ExecutionScope::Function {
+                    low_pc, high_pc, ..
+                } => (*low_pc, *high_pc),
+                ExecutionScope::Inlined {
+                    low_pc, high_pc, ..
+                } => (*low_pc, *high_pc),
+            };
+
+            if pc >= low && pc < high {
+                return Some(idx);
+            }
+        }
+
+        None
     }
 }
 
@@ -122,11 +175,8 @@ struct Section<'data> {
 type Reader<'data> =
     gimli::RelocateReader<gimli::EndianSlice<'data, gimli::RunTimeEndian>, &'data RelocationMap>;
 
-pub fn lookup_vars(_binary_path: &str) {
-    // TODO: Change this to be dynamic
-    let file =
-        fs::File::open("/Users/tommy/Projects/imo/src/test/linux/rust_with_vars/rust_with_vars")
-            .unwrap();
+pub fn lookup_vars(binary_path: &str, info_cache: &mut DebuggerMetadataCache) {
+    let file = fs::File::open(binary_path).unwrap();
     // SAFETY: This is not safe. `gimli` does not mitigate against modifications to the
     // file while it is being read. See the `memmap2` documentation and take your own
     // precautions. `fs::read` could be used instead if you don't mind loading the entire
@@ -138,12 +188,13 @@ pub fn lookup_vars(_binary_path: &str) {
     } else {
         gimli::RunTimeEndian::Big
     };
-    dump_file(&object, endian).unwrap();
+    dump_file(&object, endian, info_cache).unwrap();
 }
 
 fn dump_file(
     object: &object::File,
     endian: gimli::RunTimeEndian,
+    info_cache: &mut DebuggerMetadataCache,
 ) -> Result<(), Box<dyn error::Error>> {
     // Load a `Section` that may own its data.
     fn load_section<'data>(
@@ -180,17 +231,18 @@ fn dump_file(
         // println!("Unit at <.debug_info+0x{:x}>", header.offset().0);
         let unit = dwarf.unit(header)?;
         let unit_ref = unit.unit_ref(&dwarf);
-        dump_unit(unit_ref)?;
+        dump_unit(unit_ref, info_cache)?;
     }
 
     Ok(())
 }
 
-fn dump_unit(unit: gimli::UnitRef<Reader>) -> Result<(), gimli::Error> {
+fn dump_unit(
+    unit: gimli::UnitRef<Reader>,
+    info_cache: &mut DebuggerMetadataCache,
+) -> Result<(), gimli::Error> {
     // Iterate over the Debugging Information Entries (DIEs) in the unit.
     let mut entries = unit.entries();
-
-    let mut cache = DebuggerMetadataCache::default();
 
     // Keep track of the index of the function being processed inside the vec
     let mut current_scope_idx = None;
@@ -241,7 +293,7 @@ fn dump_unit(unit: gimli::UnitRef<Reader>) -> Result<(), gimli::Error> {
                         dwarf_type: base_type,
                         offset,
                     };
-                    cache.type_index.insert(offset, cache_node);
+                    info_cache.type_index.insert(offset, cache_node);
                 }
             }
             constants::DW_TAG_pointer_type => {
@@ -272,7 +324,7 @@ fn dump_unit(unit: gimli::UnitRef<Reader>) -> Result<(), gimli::Error> {
                         dwarf_type: pointer_type,
                         offset,
                     };
-                    cache.type_index.insert(offset, cache_node);
+                    info_cache.type_index.insert(offset, cache_node);
                 }
             }
             constants::DW_TAG_const_type => {
@@ -297,7 +349,7 @@ fn dump_unit(unit: gimli::UnitRef<Reader>) -> Result<(), gimli::Error> {
                         dwarf_type: const_type,
                         offset,
                     };
-                    cache.type_index.insert(offset, cache_node);
+                    info_cache.type_index.insert(offset, cache_node);
                 }
             }
             constants::DW_TAG_array_type => {
@@ -331,7 +383,7 @@ fn dump_unit(unit: gimli::UnitRef<Reader>) -> Result<(), gimli::Error> {
                         dwarf_type: array_type,
                         offset,
                     };
-                    cache.type_index.insert(offset, cache_node);
+                    info_cache.type_index.insert(offset, cache_node);
                 }
             }
             constants::DW_TAG_variable => {
@@ -372,7 +424,7 @@ fn dump_unit(unit: gimli::UnitRef<Reader>) -> Result<(), gimli::Error> {
 
                     if let Some(idx) = current_scope_idx {
                         let node: &mut ScopeCacheNode =
-                            cache.execution_scopes.get_mut(idx).unwrap();
+                            info_cache.execution_scopes.get_mut(idx).unwrap();
 
                         node.variables.push(debug_var);
                     }
@@ -437,8 +489,8 @@ fn dump_unit(unit: gimli::UnitRef<Reader>) -> Result<(), gimli::Error> {
                         variables: Vec::new(),
                     };
 
-                    cache.execution_scopes.push(node);
-                    current_scope_idx = Some(cache.execution_scopes.len() - 1);
+                    info_cache.execution_scopes.push(node);
+                    current_scope_idx = Some(info_cache.execution_scopes.len() - 1);
                 }
             }
             constants::DW_TAG_inlined_subroutine => {
@@ -494,13 +546,12 @@ fn dump_unit(unit: gimli::UnitRef<Reader>) -> Result<(), gimli::Error> {
                         variables: Vec::new(),
                     };
 
-                    cache.execution_scopes.push(node);
-                    current_scope_idx = Some(cache.execution_scopes.len() - 1);
+                    info_cache.execution_scopes.push(node);
+                    current_scope_idx = Some(info_cache.execution_scopes.len() - 1);
                 }
             }
             _ => continue,
         }
     }
-    println!("{:?}", cache);
     Ok(())
 }
