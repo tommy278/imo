@@ -40,10 +40,32 @@ pub enum DwarfType {
 }
 
 #[derive(Debug)]
+pub enum ExecutionScope {
+    Function {
+        display_name: String,
+        linkage_name: String,
+        low_pc: u64,
+        high_pc: u64,
+    },
+    Inlined {
+        abstract_origin_offset: usize,
+        low_pc: u64,
+        high_pc: u64,
+    },
+}
+
+#[derive(Debug)]
 pub struct DebugVariable {
     pub name: String,
     pub target_type_offset: usize,
     pub location: Vec<u8>,
+}
+
+#[derive(Debug)]
+pub struct ScopeCacheNode {
+    pub scope: ExecutionScope,
+    pub offset: usize,
+    pub variables: Vec<DebugVariable>,
 }
 
 #[derive(Debug)]
@@ -53,6 +75,24 @@ pub struct TypeCacheNode {
 }
 
 pub type TypeIndex = FxHashMap<usize, TypeCacheNode>;
+
+#[derive(Debug, Default)]
+pub struct DebuggerMetadataCache {
+    /// List all execution scopes (Functions and inlines subroutines)
+    pub execution_scopes: Vec<ScopeCacheNode>,
+
+    /// Global offset for all type layouts
+    pub type_index: FxHashMap<usize, TypeCacheNode>,
+}
+
+impl DebuggerMetadataCache {
+    pub fn sort(&mut self) {
+        self.execution_scopes.sort_by_key(|node| match &node.scope {
+            ExecutionScope::Function { low_pc, .. } => *low_pc,
+            ExecutionScope::Inlined { low_pc, .. } => *low_pc,
+        });
+    }
+}
 
 // This is a simple wrapper around `object::read::RelocationMap` that implements
 // `gimli::read::Relocate` for use with `gimli::RelocateReader`.
@@ -84,7 +124,9 @@ type Reader<'data> =
 
 pub fn lookup_vars(_binary_path: &str) {
     // TODO: Change this to be dynamic
-    let file = fs::File::open("/Users/tommy/Projects/imo/src/test/linux/types/types").unwrap();
+    let file =
+        fs::File::open("/Users/tommy/Projects/imo/src/test/linux/rust_with_vars/rust_with_vars")
+            .unwrap();
     // SAFETY: This is not safe. `gimli` does not mitigate against modifications to the
     // file while it is being read. See the `memmap2` documentation and take your own
     // precautions. `fs::read` could be used instead if you don't mind loading the entire
@@ -148,13 +190,18 @@ fn dump_unit(unit: gimli::UnitRef<Reader>) -> Result<(), gimli::Error> {
     // Iterate over the Debugging Information Entries (DIEs) in the unit.
     let mut entries = unit.entries();
 
+    let mut cache = DebuggerMetadataCache::default();
+
+    // Keep track of the index of the function being processed inside the vec
+    let mut current_scope_idx = None;
+
     while let Some(entry) = entries.next_dfs()? {
-        println!(
+        /* println!(
             "<{}><{:x}> {}",
             entry.depth(),
             entry.offset().0,
             entry.tag()
-        );
+        ); */
 
         let offset = entry.offset().0;
         match entry.tag() {
@@ -194,7 +241,7 @@ fn dump_unit(unit: gimli::UnitRef<Reader>) -> Result<(), gimli::Error> {
                         dwarf_type: base_type,
                         offset,
                     };
-                    println!("{:?}", cache_node);
+                    cache.type_index.insert(offset, cache_node);
                 }
             }
             constants::DW_TAG_pointer_type => {
@@ -225,7 +272,7 @@ fn dump_unit(unit: gimli::UnitRef<Reader>) -> Result<(), gimli::Error> {
                         dwarf_type: pointer_type,
                         offset,
                     };
-                    println!("{:?}", cache_node);
+                    cache.type_index.insert(offset, cache_node);
                 }
             }
             constants::DW_TAG_const_type => {
@@ -250,7 +297,7 @@ fn dump_unit(unit: gimli::UnitRef<Reader>) -> Result<(), gimli::Error> {
                         dwarf_type: const_type,
                         offset,
                     };
-                    println!("{:?}", cache_node)
+                    cache.type_index.insert(offset, cache_node);
                 }
             }
             constants::DW_TAG_array_type => {
@@ -284,8 +331,7 @@ fn dump_unit(unit: gimli::UnitRef<Reader>) -> Result<(), gimli::Error> {
                         dwarf_type: array_type,
                         offset,
                     };
-
-                    println!("{:?}", cache_node);
+                    cache.type_index.insert(offset, cache_node);
                 }
             }
             constants::DW_TAG_variable => {
@@ -323,20 +369,138 @@ fn dump_unit(unit: gimli::UnitRef<Reader>) -> Result<(), gimli::Error> {
                         target_type_offset,
                         location,
                     };
-                    println!("{:?}", debug_var);
-                }
-            }
-            _ => {
-                // TODO: Parse more types
-                for attr in entry.attrs() {
-                    print!("   {}: {:?}", attr.name(), attr.value());
-                    if let Ok(s) = unit.attr_string(attr.value()) {
-                        print!(" '{}'", s.to_string_lossy()?);
+
+                    if let Some(idx) = current_scope_idx {
+                        let node: &mut ScopeCacheNode =
+                            cache.execution_scopes.get_mut(idx).unwrap();
+
+                        node.variables.push(debug_var);
                     }
-                    println!();
                 }
             }
+            constants::DW_TAG_subprogram => {
+                let mut low_pc = None;
+                let mut high_pc_attr = None;
+                let mut display_name = None;
+                let mut linkage_name = None;
+
+                for attr in entry.attrs() {
+                    match attr.name() {
+                        gimli::DW_AT_low_pc => {
+                            if let gimli::AttributeValue::Addr(addr) = attr.value() {
+                                low_pc = Some(addr);
+                            }
+                        }
+                        gimli::DW_AT_high_pc => {
+                            high_pc_attr = Some(attr.value());
+                        }
+                        gimli::DW_AT_name => {
+                            if let Ok(str) = unit.attr_string(attr.value()) {
+                                display_name = Some(str.to_string_lossy().unwrap().to_string());
+                            }
+                        }
+                        gimli::DW_AT_linkage_name => {
+                            if let Ok(str) = unit.attr_string(attr.value()) {
+                                linkage_name = Some(str.to_string_lossy().unwrap().to_string());
+                            }
+                        }
+                        _ => continue,
+                    }
+                }
+
+                // Ignore entries where the low_pc is 0
+                if low_pc.is_some_and(|pc| pc == 0) {
+                    continue;
+                }
+
+                let mut high_pc = None;
+                if let (Some(low), Some(high)) = (low_pc, high_pc_attr) {
+                    high_pc = match high {
+                        gimli::AttributeValue::Addr(addr) => Some(addr),
+                        gimli::AttributeValue::Udata(offset) => Some(low + offset),
+                        _ => None,
+                    };
+                }
+
+                if let (Some(low_pc), Some(high_pc), Some(display_name), Some(linkage_name)) =
+                    (low_pc, high_pc, display_name, linkage_name)
+                {
+                    let inlined = ExecutionScope::Function {
+                        display_name,
+                        linkage_name,
+                        low_pc,
+                        high_pc,
+                    };
+                    let node = ScopeCacheNode {
+                        scope: inlined,
+                        offset: entry.offset().0,
+                        variables: Vec::new(),
+                    };
+
+                    cache.execution_scopes.push(node);
+                    current_scope_idx = Some(cache.execution_scopes.len() - 1);
+                }
+            }
+            constants::DW_TAG_inlined_subroutine => {
+                let mut low_pc = None;
+                let mut high_pc_attr = None;
+                let mut abstract_origin_offset = None;
+
+                for attr in entry.attrs() {
+                    match attr.name() {
+                        gimli::DW_AT_low_pc => {
+                            if let gimli::AttributeValue::Addr(addr) = attr.value() {
+                                low_pc = Some(addr);
+                            }
+                        }
+                        gimli::DW_AT_high_pc => {
+                            high_pc_attr = Some(attr.value());
+                        }
+                        gimli::DW_AT_abstract_origin => {
+                            if let gimli::AttributeValue::UnitRef(offset) = attr.value() {
+                                abstract_origin_offset = Some(offset.0);
+                            }
+                        }
+                        _ => continue,
+                    }
+                }
+
+                // Ignore entries where the low_pc is 0
+                if low_pc.is_some_and(|pc| pc == 0) {
+                    continue;
+                }
+
+                let mut high_pc = None;
+                if let (Some(low), Some(high)) = (low_pc, high_pc_attr) {
+                    high_pc = match high {
+                        gimli::AttributeValue::Addr(addr) => Some(addr),
+                        gimli::AttributeValue::Udata(offset) => Some(low + offset),
+                        _ => None,
+                    };
+                }
+
+                if let (Some(low_pc), Some(high_pc), Some(abstract_origin_offset)) =
+                    (low_pc, high_pc, abstract_origin_offset)
+                {
+                    let inlined = ExecutionScope::Inlined {
+                        abstract_origin_offset,
+                        low_pc,
+                        high_pc,
+                    };
+
+                    let node = ScopeCacheNode {
+                        scope: inlined,
+                        offset: entry.offset().0,
+                        variables: Vec::new(),
+                    };
+
+                    cache.execution_scopes.push(node);
+                    current_scope_idx = Some(cache.execution_scopes.len() - 1);
+                }
+            }
+            _ => continue,
         }
     }
+    println!("{:?}", cache);
     Ok(())
 }
