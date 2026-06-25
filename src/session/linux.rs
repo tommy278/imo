@@ -1,5 +1,8 @@
+use nix::sys::ptrace::AddressType;
 use nix::{libc::user_regs_struct, sys::ptrace};
-use std::fs::read_to_string;
+use std::fs::{File, read_to_string};
+use std::io::Read;
+use std::os::unix::fs::FileExt;
 
 // Define the platform aliases exposed to mod.rs
 pub type ProcessId = nix::unistd::Pid;
@@ -46,3 +49,15 @@ pub fn step(pid: ProcessId) {
 pub fn get_regs(pid: ProcessId) -> PlatformRegStruct {
     ptrace::getregs(pid).unwrap()
 }
+
+pub fn peek_data(pid: ProcessId, address: u64) -> i64 {
+    ptrace::read(pid, address as AddressType).unwrap()
+}
+
+/* pub fn peek_data(pid: ProcessId, address: u64) -> u32 {
+    let mut mem_file = File::open(format!("/proc/{}/mem", pid)).unwrap();
+    let mut buffer = [0u8; 4];
+
+    mem_file.read_exact_at(&mut buffer, address).unwrap();
+    u32::from_le_bytes(buffer)
+} */

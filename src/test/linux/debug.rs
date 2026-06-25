@@ -31,3 +31,8 @@ fn multiple() {
 fn rust_with_vars() {
     test_path("./rust_with_vars/rust_with_vars");
 }
+
+#[test]
+fn types() {
+    test_path("./types/types");
+}

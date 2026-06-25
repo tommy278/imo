@@ -10,10 +10,12 @@
 // style: allow verbose lifetimes
 #![allow(clippy::needless_lifetimes)]
 
-use gimli::{Reader as _, constants};
+use gimli::{Encoding, EndianSlice, Expression, Reader as _, RunTimeEndian, constants};
 use object::{Object, ObjectSection};
 use rustc_hash::FxHashMap;
 use std::{borrow, error, fs};
+
+use crate::interface::RegisterViewer;
 
 #[derive(Debug)]
 pub enum DwarfType {
@@ -61,11 +63,73 @@ pub struct DebugVariable {
     pub location: Vec<u8>,
 }
 
+impl DebugVariable {
+    pub fn parse_value(
+        &self,
+        regs: &RegisterViewer,
+        encoding: Encoding,
+        endian: RunTimeEndian,
+    ) -> Option<u64> {
+        let raw_regs = regs.regs;
+
+        let expression = Expression(EndianSlice::new(&self.location, endian));
+
+        let mut evaluation = expression.evaluation(encoding);
+        let mut result = evaluation.evaluate().unwrap();
+
+        loop {
+            match result {
+                gimli::EvaluationResult::RequiresFrameBase => {
+                    let frame_base = raw_regs.rbp;
+                    result = evaluation.resume_with_frame_base(frame_base).unwrap();
+                }
+                gimli::EvaluationResult::Complete => {
+                    let pieces = evaluation.result();
+
+                    if let Some(piece) = pieces.first() {
+                        if let gimli::Location::Address { address } = piece.location {
+                            return Some(address);
+                        }
+                    }
+                    break;
+                }
+                gimli::EvaluationResult::RequiresRegister {
+                    register,
+                    base_type,
+                } => {
+                    todo!()
+                }
+                _ => todo!("Other results"),
+            }
+        }
+        None
+    }
+}
+
 #[derive(Debug)]
 pub struct ScopeCacheNode {
     pub scope: ExecutionScope,
     pub offset: usize,
     pub variables: Vec<DebugVariable>,
+}
+
+impl ScopeCacheNode {
+    pub fn get_addresses(
+        &self,
+        regs: &RegisterViewer,
+        encoding: Encoding,
+        endian: RunTimeEndian,
+    ) -> Vec<u64> {
+        let mut values = Vec::new();
+
+        self.variables.iter().for_each(|var| {
+            if let Some(value) = var.parse_value(regs, encoding, endian) {
+                values.push(value);
+            }
+        });
+
+        values
+    }
 }
 
 #[derive(Debug)]
@@ -74,8 +138,6 @@ pub struct TypeCacheNode {
     pub offset: usize,
 }
 
-pub type TypeIndex = FxHashMap<usize, TypeCacheNode>;
-
 #[derive(Debug, Default)]
 pub struct DebuggerMetadataCache {
     /// List all execution scopes (Functions and inlines subroutines)
@@ -83,6 +145,10 @@ pub struct DebuggerMetadataCache {
 
     /// Global offset for all type layouts
     pub type_index: FxHashMap<usize, TypeCacheNode>,
+
+    // Store additional data
+    pub encoding: Option<Encoding>,
+    pub endian: RunTimeEndian,
 }
 
 impl DebuggerMetadataCache {
@@ -138,6 +204,7 @@ impl DebuggerMetadataCache {
                 } => (*low_pc, *high_pc),
             };
 
+            // Found and index within scope
             if pc >= low && pc < high {
                 return Some(idx);
             }
@@ -183,17 +250,19 @@ pub fn lookup_vars(binary_path: &str, info_cache: &mut DebuggerMetadataCache) {
     // file into memory.
     let mmap = unsafe { memmap2::Mmap::map(&file).unwrap() };
     let object = object::File::parse(&*mmap).unwrap();
-    let endian = if object.is_little_endian() {
+
+    // Update endian in info_cache
+    info_cache.endian = if object.is_little_endian() {
         gimli::RunTimeEndian::Little
     } else {
         gimli::RunTimeEndian::Big
     };
-    dump_file(&object, endian, info_cache).unwrap();
+
+    dump_file(&object, info_cache).unwrap();
 }
 
 fn dump_file(
     object: &object::File,
-    endian: gimli::RunTimeEndian,
     info_cache: &mut DebuggerMetadataCache,
 ) -> Result<(), Box<dyn error::Error>> {
     // Load a `Section` that may own its data.
@@ -224,7 +293,7 @@ fn dump_file(
 
     // Create `Reader`s for all of the sections and do preliminary parsing.
     // Alternatively, we could have used `Dwarf::load` with an owned type such as `EndianRcSlice`.
-    let dwarf = dwarf_sections.borrow(|section| borrow_section(section, endian));
+    let dwarf = dwarf_sections.borrow(|section| borrow_section(section, info_cache.endian));
     // Iterate over the compilation units.
     let mut iter = dwarf.units();
     while let Some(header) = iter.next()? {
@@ -241,9 +310,12 @@ fn dump_unit(
     unit: gimli::UnitRef<Reader>,
     info_cache: &mut DebuggerMetadataCache,
 ) -> Result<(), gimli::Error> {
+    // Update encoding in cache
+    if info_cache.encoding.is_none() {
+        info_cache.encoding = Some(unit.encoding());
+    }
     // Iterate over the Debugging Information Entries (DIEs) in the unit.
     let mut entries = unit.entries();
-
     // Keep track of the index of the function being processed inside the vec
     let mut current_scope_idx = None;
 

@@ -5,8 +5,8 @@ pub mod linux;
 use rustc_hash::FxHashMap;
 use std::path::Path;
 
-use crate::helpers::dwarf;
-use crate::helpers::dwarf::debug_info::DebuggerMetadataCache;
+use crate::helpers::dwarf::debug_info::{DebuggerMetadataCache, ScopeCacheNode};
+use crate::helpers::dwarf::{self, debug_info};
 use crate::interface::RegisterViewer;
 use crate::session::interface::{BreakpointData, BreakpointMutationResult, BreakpointTarget};
 
@@ -176,7 +176,21 @@ impl DebugSession {
     // Other Methods
     // =================================================================
 
-    pub fn get_info(&self) -> Option<&dwarf::debug_info::ScopeCacheNode> {
+    pub fn debug(&self, node: &debug_info::ScopeCacheNode) {
+        let regs = self.get_regs();
+
+        let endian = &self.metadata.endian;
+        let encoding = self.metadata.encoding.unwrap();
+
+        let addresses = node.get_addresses(&regs, encoding, *endian);
+
+        addresses.iter().for_each(|add| {
+            let data = os::peek_data(self.pid, *add);
+            println!("{}", data);
+        });
+    }
+
+    pub fn get_info(&self) -> Option<&debug_info::ScopeCacheNode> {
         let regs = self.get_regs().regs;
 
         let current_pc = regs.rip - self.base_address;
