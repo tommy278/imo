@@ -10,7 +10,9 @@
 // style: allow verbose lifetimes
 #![allow(clippy::needless_lifetimes)]
 
-use gimli::{Encoding, EndianSlice, Expression, Reader as _, RunTimeEndian, constants};
+use gimli::{
+    Encoding, EndianSlice, Expression, Operation, Reader as _, Register, RunTimeEndian, constants,
+};
 use object::{Object, ObjectSection};
 use rustc_hash::FxHashMap;
 use std::{borrow, error, fs};
@@ -48,6 +50,9 @@ pub enum ExecutionScope {
         linkage_name: String,
         low_pc: u64,
         high_pc: u64,
+
+        // Bytes for the instruction on how to get the frame_base
+        bytes: Option<Vec<u8>>,
     },
     Inlined {
         abstract_origin_offset: usize,
@@ -69,6 +74,7 @@ impl DebugVariable {
         regs: &RegisterViewer,
         encoding: Encoding,
         endian: RunTimeEndian,
+        frame_base: &[u8],
     ) -> Option<u64> {
         let raw_regs = regs.regs;
 
@@ -80,8 +86,7 @@ impl DebugVariable {
         loop {
             match result {
                 gimli::EvaluationResult::RequiresFrameBase => {
-                    let frame_base = raw_regs.rbp;
-                    result = evaluation.resume_with_frame_base(frame_base).unwrap();
+                    result = evaluation.resume_with_frame_base(raw_regs.rsp).unwrap();
                 }
                 gimli::EvaluationResult::Complete => {
                     let pieces = evaluation.result();
@@ -122,8 +127,19 @@ impl ScopeCacheNode {
     ) -> Vec<u64> {
         let mut values = Vec::new();
 
+        let bytes = match &self.scope {
+            ExecutionScope::Function { bytes, .. } => bytes.clone(),
+            ExecutionScope::Inlined { .. } => None,
+        };
+
+        if bytes.is_none() {
+            unimplemented!()
+        }
+
+        let bytes = bytes.unwrap();
+
         self.variables.iter().for_each(|var| {
-            if let Some(value) = var.parse_value(regs, encoding, endian) {
+            if let Some(value) = var.parse_value(regs, encoding, endian, &bytes) {
                 values.push(value);
             }
         });
@@ -508,6 +524,8 @@ fn dump_unit(
                 let mut display_name = None;
                 let mut linkage_name = None;
 
+                let mut bytes = None;
+
                 for attr in entry.attrs() {
                     match attr.name() {
                         gimli::DW_AT_low_pc => {
@@ -526,6 +544,11 @@ fn dump_unit(
                         gimli::DW_AT_linkage_name => {
                             if let Ok(str) = unit.attr_string(attr.value()) {
                                 linkage_name = Some(str.to_string_lossy().unwrap().to_string());
+                            }
+                        }
+                        gimli::DW_AT_frame_base => {
+                            if let gimli::AttributeValue::Exprloc(expression) = attr.value() {
+                                bytes = Some(expression.0.inner().to_vec());
                             }
                         }
                         _ => continue,
@@ -554,6 +577,7 @@ fn dump_unit(
                         linkage_name,
                         low_pc,
                         high_pc,
+                        bytes,
                     };
                     let node = ScopeCacheNode {
                         scope: inlined,
