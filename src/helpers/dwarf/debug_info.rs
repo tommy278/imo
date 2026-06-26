@@ -16,6 +16,7 @@ use std::{borrow, error, fs};
 use crate::helpers::dwarf::evaluate_frame_base_bytes;
 use crate::interface::RegisterViewer;
 
+/// Store different binary format to extract register values safely
 #[derive(Debug, Default)]
 pub enum Abi {
     #[default]
@@ -25,6 +26,7 @@ pub enum Abi {
 }
 
 impl Abi {
+    /// Generate Abi from binary format
     fn new(format: BinaryFormat) -> Self {
         match format {
             BinaryFormat::Xcoff => Self::SystemV,
@@ -36,6 +38,7 @@ impl Abi {
     }
 }
 
+/// Store different variations of data that can be generated from the dwarf data
 #[derive(Debug)]
 pub enum DwarfType {
     /// Primitive types such as (int, float ...)
@@ -45,23 +48,26 @@ pub enum DwarfType {
         byte_size: u64,
     },
 
+    /// Pointer type
     Pointer {
         byte_size: u64,
         target_type_offset: usize,
     },
 
-    Const {
-        target_type_offset: usize,
-    },
+    /// Constant type
+    Const { target_type_offset: usize },
 
+    /// Array type
     Array {
         target_type_offset: usize,
         sibling_offset: usize,
     },
 }
 
+/// Store values within the current scope whether within a function or inlined
 #[derive(Debug)]
 pub enum ExecutionScope {
+    /// Store values within a function
     Function {
         display_name: String,
         linkage_name: String,
@@ -71,6 +77,7 @@ pub enum ExecutionScope {
         // Bytes for the instruction on how to get the frame_base
         bytes: Option<Vec<u8>>,
     },
+
     Inlined {
         abstract_origin_offset: usize,
         low_pc: u64,
@@ -128,6 +135,7 @@ impl DebugVariable {
     }
 }
 
+/// Current scope of event being executed
 #[derive(Debug)]
 pub struct ScopeCacheNode {
     pub scope: ExecutionScope,
@@ -165,6 +173,7 @@ impl ScopeCacheNode {
         values
     }
 
+    /// Get value of a specific variable in the current scope
     pub fn get_address_with_name(
         &self,
         regs: &RegisterViewer,
@@ -217,6 +226,7 @@ pub struct DebuggerMetadataCache {
 }
 
 impl DebuggerMetadataCache {
+    /// Populate the cache with the debug_info
     pub fn new(binary_path: &str) -> Self {
         let mut default_cache = Self::default();
 
@@ -229,6 +239,7 @@ impl DebuggerMetadataCache {
         default_cache
     }
 
+    /// Sort the scopes by their low_pc to make binary search possible
     pub fn sort(&mut self) {
         self.execution_scopes.sort_by_key(|node| match &node.scope {
             ExecutionScope::Function { low_pc, .. } => *low_pc,
@@ -236,6 +247,7 @@ impl DebuggerMetadataCache {
         });
     }
 
+    /// Binary search to find a range where the pc can fit within a scope
     pub fn find_scope_by_pc(&self, pc: u64) -> Option<usize> {
         // Binary search to find where this PC would fit based on the sorted low_pc values
         let search_result = self.execution_scopes.binary_search_by(|node| {
@@ -387,14 +399,9 @@ fn dump_unit(
     let mut current_scope_idx = None;
 
     while let Some(entry) = entries.next_dfs()? {
-        /* println!(
-            "<{}><{:x}> {}",
-            entry.depth(),
-            entry.offset().0,
-            entry.tag()
-        ); */
-
         let offset = entry.offset().0;
+
+        // Parse each entries for the needed values while skipping redundant values
         match entry.tag() {
             constants::DW_TAG_base_type => {
                 let mut name: Option<String> = None;

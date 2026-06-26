@@ -5,7 +5,7 @@ pub mod linux;
 use rustc_hash::FxHashMap;
 use std::path::Path;
 
-use crate::helpers::dwarf::debug_info::{DebuggerMetadataCache, ScopeCacheNode};
+use crate::helpers::dwarf::debug_info::DebuggerMetadataCache;
 use crate::helpers::dwarf::{self, debug_info};
 use crate::interface::RegisterViewer;
 use crate::session::interface::{BreakpointData, BreakpointMutationResult, BreakpointTarget};
@@ -191,6 +191,7 @@ impl DebugSession {
         });
     }
 
+    /// Get the value of a variable with the given name
     pub fn get_var_value(&self, node: &debug_info::ScopeCacheNode, name: &str) -> Option<i64> {
         let regs = self.get_regs();
 
