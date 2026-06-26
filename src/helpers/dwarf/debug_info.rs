@@ -164,6 +164,36 @@ impl ScopeCacheNode {
 
         values
     }
+
+    pub fn get_address_with_name(
+        &self,
+        regs: &RegisterViewer,
+        encoding: Encoding,
+        endian: RunTimeEndian,
+        abi: &Abi,
+        name: &str,
+    ) -> Option<u64> {
+        let mut value = None;
+
+        let bytes = match &self.scope {
+            ExecutionScope::Function { bytes, .. } => bytes.clone(),
+            ExecutionScope::Inlined { .. } => None,
+        };
+
+        if bytes.is_none() {
+            unimplemented!()
+        }
+
+        let bytes = bytes.unwrap();
+
+        let var = self.variables.iter().find(|var| var.name == name).unwrap();
+
+        if let Some(val) = var.parse_value(regs, encoding, endian, abi, &bytes) {
+            value = Some(val)
+        }
+
+        value
+    }
 }
 
 #[derive(Debug)]

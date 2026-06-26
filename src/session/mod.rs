@@ -191,7 +191,19 @@ impl DebugSession {
         });
     }
 
-    pub fn get_info(&self) -> Option<&debug_info::ScopeCacheNode> {
+    pub fn get_var_value(&self, node: &debug_info::ScopeCacheNode, name: &str) -> Option<i64> {
+        let regs = self.get_regs();
+
+        let endian = self.metadata.endian;
+        let encoding = self.metadata.encoding.unwrap();
+        let abi = &self.metadata.abi;
+
+        let address = node.get_address_with_name(&regs, encoding, endian, abi, name);
+
+        address.map_or(None, |add| Some(os::peek_data(self.pid, add)))
+    }
+
+    pub fn get_scope_info(&self) -> Option<&debug_info::ScopeCacheNode> {
         let regs = self.get_regs().regs;
 
         let current_pc = regs.rip - self.base_address;
