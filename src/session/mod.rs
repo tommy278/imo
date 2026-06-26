@@ -5,9 +5,9 @@ pub mod linux;
 use rustc_hash::FxHashMap;
 use std::path::Path;
 
-use crate::helpers::dwarf::debug_info::DebuggerMetadataCache;
-use crate::helpers::dwarf::{self, debug_info};
-use crate::interface::RegisterViewer;
+use crate::helpers::dwarf::debug_info::{self, DebuggerMetadataCache, DwarfType};
+use crate::helpers::dwarf::{self, debug_info::ScopeCacheNode};
+use crate::interface::{DebugValue, RegisterViewer};
 use crate::session::interface::{BreakpointData, BreakpointMutationResult, BreakpointTarget};
 
 #[cfg(target_os = "linux")]
@@ -192,19 +192,30 @@ impl DebugSession {
     }
 
     /// Get the value of a variable with the given name
-    pub fn get_var_value(&self, node: &debug_info::ScopeCacheNode, name: &str) -> Option<i64> {
+    pub fn get_var_value(&self, node: &ScopeCacheNode, name: &str) -> Option<DebugValue> {
         let regs = self.get_regs();
 
         let endian = self.metadata.endian;
         let encoding = self.metadata.encoding.unwrap();
         let abi = &self.metadata.abi;
 
-        let address = node.get_address_with_name(&regs, encoding, endian, abi, name);
+        println!("Started...");
 
-        address.map_or(None, |add| Some(os::peek_data(self.pid, add)))
+        if let Some(variable) = node.get_variable_with_name(name) {
+            let bytes = node.scope.get_bytes().unwrap();
+            let address = variable
+                .parse_value(&regs, encoding, endian, abi, bytes)
+                .unwrap();
+            let raw_data = os::peek_data(self.pid, address);
+
+            if let Some(ty) = self.metadata.type_index.get(&variable.target_type_offset) {
+                return ty.dwarf_type.to_debug_value(raw_data);
+            }
+        }
+        None
     }
 
-    pub fn get_scope_info(&self) -> Option<&debug_info::ScopeCacheNode> {
+    pub fn get_scope_info(&self) -> Option<&ScopeCacheNode> {
         let regs = self.get_regs().regs;
 
         let current_pc = regs.rip - self.base_address;

@@ -96,3 +96,14 @@ impl fmt::Display for RegisterViewer {
         )
     }
 }
+
+/// Covers all possible return values for the data found
+#[derive(Debug)]
+pub enum DebugValue {
+    Integer(i64),
+    Unsigned(u64),
+    Float(f64),
+    String(String),
+    Boolean(bool),
+    Pointer(usize),
+}

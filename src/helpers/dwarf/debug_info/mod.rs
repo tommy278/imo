@@ -14,7 +14,7 @@ use object::BinaryFormat;
 
 use crate::helpers::dwarf::debug_info::utils::lookup_vars;
 use crate::helpers::dwarf::evaluate_frame_base_bytes;
-use crate::interface::RegisterViewer;
+use crate::interface::{DebugValue, RegisterViewer};
 
 /// Store different binary format to extract register values safely
 #[derive(Debug, Default)]
@@ -87,6 +87,59 @@ pub enum DwarfType {
     },
 }
 
+impl DwarfType {
+    pub fn to_debug_value(&self, raw_data: i64) -> Option<DebugValue> {
+        match self {
+            DwarfType::Base {
+                name,
+                encoding,
+                byte_size,
+            } => match encoding {
+                // Boolean
+                2 => {
+                    let masked = raw_data & 0xFF;
+                    Some(DebugValue::Boolean(masked != 0))
+                }
+
+                // Float
+                4 => match byte_size {
+                    4 => {
+                        let bits_32 = (raw_data & 0xFFFF_FFFF) as u32;
+                        let float_val = f32::from_bits(bits_32);
+                        Some(DebugValue::Float(float_val as f64))
+                    }
+                    8 => {
+                        let bits_64 = raw_data as u64;
+                        let float_val = f64::from_bits(bits_64);
+                        Some(DebugValue::Float(float_val))
+                    }
+                    _ => None,
+                },
+
+                // Signed integers
+                5 => match byte_size {
+                    1 => Some(DebugValue::Integer((raw_data as i8) as i64)),
+                    2 => Some(DebugValue::Integer((raw_data as i16) as i64)),
+                    4 => Some(DebugValue::Integer((raw_data as i32) as i64)),
+                    8 => Some(DebugValue::Integer(raw_data)),
+                    _ => Some(DebugValue::Integer(raw_data)),
+                },
+
+                // Unsigned integers
+                7 => match byte_size {
+                    1 => Some(DebugValue::Unsigned((raw_data as u8) as u64)),
+                    2 => Some(DebugValue::Unsigned((raw_data as u16) as u64)),
+                    4 => Some(DebugValue::Unsigned((raw_data as u32) as u64)),
+                    8 => Some(DebugValue::Unsigned(raw_data as u64)),
+                    _ => Some(DebugValue::Unsigned(raw_data as u64)),
+                },
+                _ => None,
+            },
+            _ => todo!(),
+        }
+    }
+}
+
 /// Store values within the current scope whether within a function or inlined
 #[derive(Debug)]
 pub enum ExecutionScope {
@@ -106,6 +159,18 @@ pub enum ExecutionScope {
         low_pc: u64,
         high_pc: u64,
     },
+}
+
+impl ExecutionScope {
+    /// Returns the bytes instruction if it is a function and has bytes available
+    pub fn get_bytes(&self) -> Option<&Vec<u8>> {
+        match self {
+            ExecutionScope::Function { bytes, .. } => {
+                bytes.as_ref().map_or(None, |bytes| Some(bytes))
+            }
+            ExecutionScope::Inlined { .. } => None,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -176,10 +241,7 @@ impl ScopeCacheNode {
     ) -> Vec<u64> {
         let mut values = Vec::new();
 
-        let bytes = match &self.scope {
-            ExecutionScope::Function { bytes, .. } => bytes.clone(),
-            ExecutionScope::Inlined { .. } => None,
-        };
+        let bytes = self.scope.get_bytes();
 
         if bytes.is_none() {
             unimplemented!()
@@ -197,34 +259,8 @@ impl ScopeCacheNode {
     }
 
     /// Get value of a specific variable in the current scope
-    pub fn get_address_with_name(
-        &self,
-        regs: &RegisterViewer,
-        encoding: Encoding,
-        endian: RunTimeEndian,
-        abi: &Abi,
-        name: &str,
-    ) -> Option<u64> {
-        let mut value = None;
-
-        let bytes = match &self.scope {
-            ExecutionScope::Function { bytes, .. } => bytes.clone(),
-            ExecutionScope::Inlined { .. } => None,
-        };
-
-        if bytes.is_none() {
-            unimplemented!()
-        }
-
-        let bytes = bytes.unwrap();
-
-        let var = self.variables.iter().find(|var| var.name == name).unwrap();
-
-        if let Some(val) = var.parse_value(regs, encoding, endian, abi, &bytes) {
-            value = Some(val)
-        }
-
-        value
+    pub fn get_variable_with_name(&self, name: &str) -> Option<&DebugVariable> {
+        self.variables.iter().find(|var| var.name == name)
     }
 }
 
