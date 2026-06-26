@@ -17,7 +17,7 @@ pub fn evaluate_frame_base_bytes(bytes: &[u8], registers: &RegisterViewer, abi: 
             // DW_OP_reg0 (0x50) to DW_OP_reg31 (0x6F)
             0x50..=0x6F => {
                 let dw_reg_num = (op - 0x50) as u16;
-                let value = get_register_value(dw_reg_num, abi, registers);
+                let value = abi.get_register_value(dw_reg_num, registers);
                 stack.push(value);
             }
 
@@ -40,27 +40,4 @@ pub fn evaluate_frame_base_bytes(bytes: &[u8], registers: &RegisterViewer, abi: 
     }
 
     stack.pop().unwrap()
-}
-
-/// Get register value using the dw_register index
-/// Use ABI to differentiate between different binary layout
-pub fn get_register_value(dw_reg: u16, abi: &Abi, registers: &RegisterViewer) -> u64 {
-    let raw_regs = registers.regs;
-
-    match abi {
-        Abi::SystemV => {
-            // Linux, macOS, BSD, Solaris
-            match dw_reg {
-                6 => raw_regs.rbp,
-                7 => raw_regs.rsp,
-                _ => unimplemented!(),
-            }
-        }
-        Abi::WindowsMsvc => match dw_reg {
-            13 => raw_regs.rbp,
-            23 => raw_regs.rsp,
-            _ => unimplemented!(),
-        },
-        _ => unimplemented!("Does not support abi yet"),
-    }
 }
