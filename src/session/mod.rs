@@ -181,8 +181,9 @@ impl DebugSession {
 
         let endian = &self.metadata.endian;
         let encoding = self.metadata.encoding.unwrap();
+        let abi = &self.metadata.abi;
 
-        let addresses = node.get_addresses(&regs, encoding, *endian);
+        let addresses = node.get_addresses(&regs, encoding, *endian, abi);
 
         addresses.iter().for_each(|add| {
             let data = os::peek_data(self.pid, *add);

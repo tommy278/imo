@@ -1,23 +1,40 @@
-//! A simple example of parsing `.debug_info`.
-//!
-//! This example demonstrates how to parse the `.debug_info` section of a
-//! DWARF object file and iterate over the compilation units and their DIEs.
-//! It also demonstrates how to find the DWO unit for each CU in a DWP file.
-//!
-//! Most of the complexity is due to loading the sections from the object
-//! file and DWP file, which is not something that is provided by gimli itself.
+/*
+ * Based on the 'simple.rs' example from the gimli project.
+ * Source: https://github.com/gimli-rs/gimli/blob/main/crates/examples/src/bin/simple.rs
+ * * The implementation below was adapted to support specific address lookup
+ * and integrated into the project's native debugger architecture.
+ */
 
 // style: allow verbose lifetimes
 #![allow(clippy::needless_lifetimes)]
 
-use gimli::{
-    Encoding, EndianSlice, Expression, Operation, Reader as _, Register, RunTimeEndian, constants,
-};
-use object::{Object, ObjectSection};
+use gimli::{Encoding, EndianSlice, Expression, Reader as _, RunTimeEndian, constants};
+use object::{BinaryFormat, Object, ObjectSection};
 use rustc_hash::FxHashMap;
 use std::{borrow, error, fs};
 
+use crate::helpers::dwarf::evaluate_frame_base_bytes;
 use crate::interface::RegisterViewer;
+
+#[derive(Debug, Default)]
+pub enum Abi {
+    #[default]
+    SystemV,
+    WindowsMsvc,
+    Unknown,
+}
+
+impl Abi {
+    fn new(format: BinaryFormat) -> Self {
+        match format {
+            BinaryFormat::Xcoff => Self::SystemV,
+            BinaryFormat::Elf => Self::SystemV,
+            BinaryFormat::MachO => Self::SystemV,
+            BinaryFormat::Coff => Self::WindowsMsvc,
+            _ => Self::Unknown,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub enum DwarfType {
@@ -74,10 +91,9 @@ impl DebugVariable {
         regs: &RegisterViewer,
         encoding: Encoding,
         endian: RunTimeEndian,
-        frame_base: &[u8],
+        abi: &Abi,
+        bytes: &[u8],
     ) -> Option<u64> {
-        let raw_regs = regs.regs;
-
         let expression = Expression(EndianSlice::new(&self.location, endian));
 
         let mut evaluation = expression.evaluation(encoding);
@@ -86,7 +102,8 @@ impl DebugVariable {
         loop {
             match result {
                 gimli::EvaluationResult::RequiresFrameBase => {
-                    result = evaluation.resume_with_frame_base(raw_regs.rsp).unwrap();
+                    let frame_base = evaluate_frame_base_bytes(bytes, regs, abi);
+                    result = evaluation.resume_with_frame_base(frame_base).unwrap();
                 }
                 gimli::EvaluationResult::Complete => {
                     let pieces = evaluation.result();
@@ -124,6 +141,7 @@ impl ScopeCacheNode {
         regs: &RegisterViewer,
         encoding: Encoding,
         endian: RunTimeEndian,
+        abi: &Abi,
     ) -> Vec<u64> {
         let mut values = Vec::new();
 
@@ -139,7 +157,7 @@ impl ScopeCacheNode {
         let bytes = bytes.unwrap();
 
         self.variables.iter().for_each(|var| {
-            if let Some(value) = var.parse_value(regs, encoding, endian, &bytes) {
+            if let Some(value) = var.parse_value(regs, encoding, endian, abi, &bytes) {
                 values.push(value);
             }
         });
@@ -165,6 +183,7 @@ pub struct DebuggerMetadataCache {
     // Store additional data
     pub encoding: Option<Encoding>,
     pub endian: RunTimeEndian,
+    pub abi: Abi,
 }
 
 impl DebuggerMetadataCache {
@@ -266,6 +285,8 @@ pub fn lookup_vars(binary_path: &str, info_cache: &mut DebuggerMetadataCache) {
     // file into memory.
     let mmap = unsafe { memmap2::Mmap::map(&file).unwrap() };
     let object = object::File::parse(&*mmap).unwrap();
+
+    info_cache.abi = Abi::new(object.format());
 
     // Update endian in info_cache
     info_cache.endian = if object.is_little_endian() {
