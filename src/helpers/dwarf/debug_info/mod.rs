@@ -72,10 +72,7 @@ pub enum DwarfType {
     },
 
     /// Pointer type
-    Pointer {
-        byte_size: u64,
-        target_type_offset: usize,
-    },
+    Pointer { target_type_offset: usize },
 
     /// Constant type
     Const { target_type_offset: usize },
@@ -135,6 +132,9 @@ impl DwarfType {
                 },
                 _ => None,
             },
+            DwarfType::Pointer { target_type_offset } => {
+                Some(DebugValue::Pointer(raw_data as usize))
+            }
             _ => todo!(),
         }
     }

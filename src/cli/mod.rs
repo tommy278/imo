@@ -141,6 +141,8 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
             "debug" => {
                 let scope = session.get_scope_info().expect("Could not find target");
                 println!("{:?}", scope);
+                let ty_idx = &session.metadata.type_index;
+                println!("{:?}", ty_idx);
                 // session.debug(scope);
             }
             "q" | "quit" => {

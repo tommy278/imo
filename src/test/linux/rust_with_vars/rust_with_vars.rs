@@ -9,9 +9,10 @@ fn main() {
     let b = false;
     let t = true;
     let arr: [i32; 5] = [0, 1, 2, 3, 4];
+    let ptr = std::ptr::addr_of!(x);
+    println!("{:p}", ptr);
 
     // NOTE: Debugger does not recognize these types yet
     let vec = vec![1, 2, 3, 4, 5];
-    let ptr = Box::new(12);
     println!("{}", x + y);
 }

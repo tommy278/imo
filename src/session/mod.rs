@@ -199,9 +199,8 @@ impl DebugSession {
         let encoding = self.metadata.encoding.unwrap();
         let abi = &self.metadata.abi;
 
-        println!("Started...");
-
         if let Some(variable) = node.get_variable_with_name(name) {
+            println!("{:?}", variable);
             let bytes = node.scope.get_bytes().unwrap();
             let address = variable
                 .parse_value(&regs, encoding, endian, abi, bytes)
@@ -210,6 +209,9 @@ impl DebugSession {
 
             if let Some(ty) = self.metadata.type_index.get(&variable.target_type_offset) {
                 return ty.dwarf_type.to_debug_value(raw_data);
+            } else {
+                // TODO: Handle this better
+                eprintln!("Could not find node");
             }
         }
         None

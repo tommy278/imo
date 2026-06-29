@@ -163,14 +163,10 @@ fn dump_unit(
                 }
             }
             constants::DW_TAG_pointer_type => {
-                let mut byte_size = None;
                 let mut target_type_offset = None;
 
                 for attr in entry.attrs() {
                     match attr.name() {
-                        gimli::DW_AT_byte_size => {
-                            byte_size = attr.value().udata_value();
-                        }
                         gimli::DW_AT_type => {
                             if let gimli::AttributeValue::UnitRef(offset) = attr.value() {
                                 target_type_offset = Some(offset.0);
@@ -180,17 +176,15 @@ fn dump_unit(
                     }
                 }
 
-                if let (Some(byte_size), Some(target_type_offset)) = (byte_size, target_type_offset)
-                {
-                    let pointer_type = DwarfType::Pointer {
-                        byte_size,
-                        target_type_offset,
-                    };
+                if let Some(target_type_offset) = target_type_offset {
+                    let pointer_type = DwarfType::Pointer { target_type_offset };
                     let cache_node = TypeCacheNode {
                         dwarf_type: pointer_type,
                         offset,
                     };
                     info_cache.type_index.insert(offset, cache_node);
+                } else {
+                    println!("Skipped...");
                 }
             }
             constants::DW_TAG_const_type => {
