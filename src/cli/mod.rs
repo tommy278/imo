@@ -139,11 +139,11 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 }
             }
             "debug" => {
-                // let scope = session.get_scope_info().expect("Could not find target");
-                // println!("{:?}", scope);
-                session.metadata.type_index.keys().for_each(|key| {
+                let scope = session.get_scope_info().expect("Could not find target");
+                println!("{:?}", scope);
+                /* session.metadata.type_index.keys().for_each(|key| {
                     println!("Valid Key: {}", key);
-                });
+                }); */
                 // session.debug(scope);
             }
             // Another debug

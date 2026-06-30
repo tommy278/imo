@@ -200,7 +200,6 @@ impl DebugSession {
         let abi = &self.metadata.abi;
 
         if let Some(variable) = node.get_variable_with_name(name) {
-            println!("{:?}", variable);
             let bytes = node.scope.get_bytes().unwrap();
             let address = variable
                 .parse_value(&regs, encoding, endian, abi, bytes)

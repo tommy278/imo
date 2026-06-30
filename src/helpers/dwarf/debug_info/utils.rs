@@ -183,8 +183,6 @@ fn dump_unit(
                         offset,
                     };
                     info_cache.type_index.insert(offset, cache_node);
-                } else {
-                    println!("Skipped...");
                 }
             }
             constants::DW_TAG_const_type => {
@@ -235,49 +233,41 @@ fn dump_unit(
                     cursor.next_dfs().unwrap();
 
                     while let Some(entry) = cursor.next_dfs().unwrap() {
-                        match entry.tag() {
-                            constants::DW_TAG_subrange_type => {
-                                for attr in entry.attrs() {
-                                    match attr.name() {
-                                        gimli::DW_AT_count => {
-                                            println!("{:?}", attr.value());
-                                            element_count = match attr.value() {
-                                                gimli::AttributeValue::Data1(v) => Some(v as u64),
-                                                _ => None,
-                                            };
-                                        }
-                                        gimli::DW_AT_upper_bound => {
-                                            if element_count.is_none() {
-                                                // TODO: Hanlde case where count is not explicitly given
-                                                todo!()
-                                            }
-                                        }
-                                        _ => {}
+                        if entry.tag() == constants::DW_TAG_subrange_type {
+                            for attr in entry.attrs() {
+                                match attr.name() {
+                                    gimli::DW_AT_count => {
+                                        element_count = match attr.value() {
+                                            gimli::AttributeValue::Data1(v) => Some(v as u64),
+                                            _ => None,
+                                        };
                                     }
+                                    gimli::DW_AT_upper_bound => {
+                                        if element_count.is_none() {
+                                            // TODO: Hanlde case where count is not explicitly given
+                                            todo!()
+                                        }
+                                    }
+                                    _ => continue,
                                 }
                             }
-                            _ => continue,
+                            break;
                         }
-                        if let (Some(target_type_offset), Some(count)) =
-                            (target_type_offset, element_count)
-                        {
-                            let array_type = DwarfType::Array {
-                                target_type_offset: target_type_offset.0,
-                                count,
-                            };
+                    }
+                    if let (Some(target_type_offset), Some(count)) =
+                        (target_type_offset, element_count)
+                    {
+                        let array_type = DwarfType::Array {
+                            target_type_offset: target_type_offset.0,
+                            count,
+                        };
 
-                            let cache_node = TypeCacheNode {
-                                dwarf_type: array_type,
-                                offset,
-                            };
+                        let cache_node = TypeCacheNode {
+                            dwarf_type: array_type,
+                            offset,
+                        };
 
-                            println!("{:?}", cache_node);
-
-                            info_cache.type_index.insert(offset, cache_node);
-
-                            // Return back to none to validate future count parsing
-                            element_count = None;
-                        }
+                        info_cache.type_index.insert(offset, cache_node);
                     }
                 }
             }
@@ -388,7 +378,7 @@ fn dump_unit(
                     };
                     let node = ScopeCacheNode {
                         scope: inlined,
-                        offset: entry.offset().0,
+                        offset,
                         variables: Vec::new(),
                     };
 
@@ -445,7 +435,7 @@ fn dump_unit(
 
                     let node = ScopeCacheNode {
                         scope: inlined,
-                        offset: entry.offset().0,
+                        offset,
                         variables: Vec::new(),
                     };
 
