@@ -10,6 +10,7 @@ fn main() {
     let t = true;
     let arr: [i32; 6] = [120, -1, 26, 34, -5000, 720];
     let small_arr: [u8; 4] = [10, 18, 19, 20];
+    let matrix = [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]];
     let ptr = std::ptr::addr_of!(x);
     println!("{:p}", ptr);
 

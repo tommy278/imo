@@ -86,7 +86,7 @@ pub enum DwarfType {
 }
 
 impl DwarfType {
-    fn get_byte_size(&self) -> u64 {
+    fn get_byte_size(&self, type_index: &FxHashMap<usize, TypeCacheNode>) -> u64 {
         match self {
             DwarfType::Base { byte_size, .. } => *byte_size,
 
@@ -97,7 +97,15 @@ impl DwarfType {
             DwarfType::Const { .. } => 8,
 
             // TODO: Figure out how to handle nested arrays
-            DwarfType::Array { .. } => 0,
+            DwarfType::Array {
+                count,
+                target_type_offset,
+            } => {
+                let ty = type_index.get(target_type_offset).unwrap();
+                let resolved_size = ty.dwarf_type.get_byte_size(type_index);
+
+                count * resolved_size
+            }
         }
     }
 }
@@ -165,23 +173,21 @@ impl DwarfType {
                 target_type_offset,
                 count,
             } => {
-                println!("Count is {}", count);
                 let mut array = Vec::new();
                 let ty = type_index.get(target_type_offset).unwrap();
 
-                let offset_num = ty.dwarf_type.get_byte_size();
-
-                if offset_num == 0 {
-                    eprintln!("Something went wrong, should not be 0");
-                }
+                let offset_num = ty.dwarf_type.get_byte_size(type_index);
 
                 let mut offset = 0;
 
                 for _ in 0..*count {
-                    let raw_data = crate::session::linux::peek_data(pid, address + offset);
-                    let var =
-                        ty.dwarf_type
-                            .to_debug_value(type_index, address + offset, pid, raw_data);
+                    println!("Offset is {}", offset);
+                    let resolved = address + offset;
+                    let raw_data = crate::session::linux::peek_data(pid, resolved);
+                    let var = ty
+                        .dwarf_type
+                        .to_debug_value(type_index, resolved, pid, raw_data);
+
                     offset += offset_num;
                     array.push(var.unwrap());
                 }
