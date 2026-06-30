@@ -5,7 +5,7 @@ pub mod linux;
 use rustc_hash::FxHashMap;
 use std::path::Path;
 
-use crate::helpers::dwarf::debug_info::{self, DebuggerMetadataCache, DwarfType};
+use crate::helpers::dwarf::debug_info::{self, DebuggerMetadataCache};
 use crate::helpers::dwarf::{self, debug_info::ScopeCacheNode};
 use crate::interface::{DebugValue, RegisterViewer};
 use crate::session::interface::{BreakpointData, BreakpointMutationResult, BreakpointTarget};
@@ -208,7 +208,12 @@ impl DebugSession {
             let raw_data = os::peek_data(self.pid, address);
 
             if let Some(ty) = self.metadata.type_index.get(&variable.target_type_offset) {
-                return ty.dwarf_type.to_debug_value(raw_data);
+                return ty.dwarf_type.to_debug_value(
+                    &self.metadata.type_index,
+                    address,
+                    self.pid,
+                    raw_data,
+                );
             } else {
                 // TODO: Handle this better
                 eprintln!("Could not find node");

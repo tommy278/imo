@@ -15,6 +15,7 @@ use object::BinaryFormat;
 use crate::helpers::dwarf::debug_info::utils::lookup_vars;
 use crate::helpers::dwarf::evaluate_frame_base_bytes;
 use crate::interface::{DebugValue, RegisterViewer};
+use crate::session::ProcessId;
 
 /// Store different binary format to extract register values safely
 #[derive(Debug, Default)]
@@ -85,7 +86,30 @@ pub enum DwarfType {
 }
 
 impl DwarfType {
-    pub fn to_debug_value(&self, raw_data: i64) -> Option<DebugValue> {
+    fn get_byte_size(&self) -> u64 {
+        match self {
+            DwarfType::Base { byte_size, .. } => *byte_size,
+
+            // Pointer has a fixed size
+            DwarfType::Pointer { .. } => 8,
+
+            // TODO: this will probably change
+            DwarfType::Const { .. } => 8,
+
+            // TODO: Figure out how to handle nested arrays
+            DwarfType::Array { .. } => 0,
+        }
+    }
+}
+
+impl DwarfType {
+    pub fn to_debug_value(
+        &self,
+        type_index: &FxHashMap<usize, TypeCacheNode>,
+        address: u64,
+        pid: ProcessId,
+        raw_data: i64,
+    ) -> Option<DebugValue> {
         match self {
             DwarfType::Base {
                 name,
@@ -141,8 +165,27 @@ impl DwarfType {
                 target_type_offset,
                 count,
             } => {
-                println!("{:?}", count);
-                Some(DebugValue::Pointer(raw_data as usize))
+                println!("Count is {}", count);
+                let mut array = Vec::new();
+                let ty = type_index.get(target_type_offset).unwrap();
+
+                let offset_num = ty.dwarf_type.get_byte_size();
+
+                if offset_num == 0 {
+                    eprintln!("Something went wrong, should not be 0");
+                }
+
+                let mut offset = 0;
+
+                for _ in 0..*count {
+                    let raw_data = crate::session::linux::peek_data(pid, address + offset);
+                    let var =
+                        ty.dwarf_type
+                            .to_debug_value(type_index, address + offset, pid, raw_data);
+                    offset += offset_num;
+                    array.push(var.unwrap());
+                }
+                Some(DebugValue::Array(array))
             }
             _ => todo!(),
         }
@@ -259,7 +302,7 @@ impl ScopeCacheNode {
         let bytes = bytes.unwrap();
 
         self.variables.iter().for_each(|var| {
-            if let Some(value) = var.parse_value(regs, encoding, endian, abi, &bytes) {
+            if let Some(value) = var.parse_value(regs, encoding, endian, abi, bytes) {
                 values.push(value);
             }
         });

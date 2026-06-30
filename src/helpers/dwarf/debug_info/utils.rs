@@ -240,14 +240,9 @@ fn dump_unit(
                                 for attr in entry.attrs() {
                                     match attr.name() {
                                         gimli::DW_AT_count => {
-                                            // Accept all possible variation
+                                            println!("{:?}", attr.value());
                                             element_count = match attr.value() {
                                                 gimli::AttributeValue::Data1(v) => Some(v as u64),
-                                                gimli::AttributeValue::Data2(v) => Some(v as u64),
-                                                gimli::AttributeValue::Data4(v) => Some(v as u64),
-                                                gimli::AttributeValue::Data8(v) => Some(v),
-                                                gimli::AttributeValue::Udata(v) => Some(v),
-                                                gimli::AttributeValue::Sdata(v) => Some(v as u64),
                                                 _ => None,
                                             };
                                         }
@@ -263,28 +258,27 @@ fn dump_unit(
                             }
                             _ => continue,
                         }
+                        if let (Some(target_type_offset), Some(count)) =
+                            (target_type_offset, element_count)
+                        {
+                            let array_type = DwarfType::Array {
+                                target_type_offset: target_type_offset.0,
+                                count,
+                            };
+
+                            let cache_node = TypeCacheNode {
+                                dwarf_type: array_type,
+                                offset,
+                            };
+
+                            println!("{:?}", cache_node);
+
+                            info_cache.type_index.insert(offset, cache_node);
+
+                            // Return back to none to validate future count parsing
+                            element_count = None;
+                        }
                     }
-                }
-
-                println!(
-                    "Array at {:?}: Type={:?}, Count={:?}",
-                    entry.offset(),
-                    target_type_offset,
-                    element_count
-                );
-
-                if let (Some(target_type_offset), Some(count)) = (target_type_offset, element_count)
-                {
-                    let array_type = DwarfType::Array {
-                        target_type_offset: target_type_offset.0,
-                        count,
-                    };
-
-                    let cache_node = TypeCacheNode {
-                        dwarf_type: array_type,
-                        offset,
-                    };
-                    info_cache.type_index.insert(offset, cache_node);
                 }
             }
             constants::DW_TAG_variable => {

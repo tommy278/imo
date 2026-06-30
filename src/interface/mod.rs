@@ -106,4 +106,5 @@ pub enum DebugValue {
     String(String),
     Boolean(bool),
     Pointer(usize),
+    Array(Vec<DebugValue>),
 }
