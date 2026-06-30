@@ -8,7 +8,7 @@ fn main() {
     let opt = Some(12);
     let b = false;
     let t = true;
-    let arr: [i32; 5] = [0, 1, 2, 3, 4];
+    let arr: [i32; 6] = [0, 1, 2, 3, 4, 6];
     let ptr = std::ptr::addr_of!(x);
     println!("{:p}", ptr);
 

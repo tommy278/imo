@@ -139,11 +139,21 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 }
             }
             "debug" => {
-                let scope = session.get_scope_info().expect("Could not find target");
-                println!("{:?}", scope);
-                let ty_idx = &session.metadata.type_index;
-                println!("{:?}", ty_idx);
+                // let scope = session.get_scope_info().expect("Could not find target");
+                // println!("{:?}", scope);
+                session.metadata.type_index.keys().for_each(|key| {
+                    println!("Valid Key: {}", key);
+                });
                 // session.debug(scope);
+            }
+            // Another debug
+            "deb" => {
+                let arg = parts.next().unwrap();
+
+                let arg = arg.parse::<usize>().unwrap();
+
+                let ty = session.metadata.type_index.get(&arg);
+                println!("{:?}", ty);
             }
             "q" | "quit" => {
                 // End current debug session

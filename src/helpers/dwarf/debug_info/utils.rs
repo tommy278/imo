@@ -214,31 +214,72 @@ fn dump_unit(
             }
             constants::DW_TAG_array_type => {
                 let mut target_type_offset = None;
-                let mut sibling_offset = None;
 
                 for attr in entry.attrs() {
                     match attr.name() {
                         gimli::DW_AT_type => {
                             if let gimli::AttributeValue::UnitRef(offset) = attr.value() {
-                                target_type_offset = Some(offset.0);
-                            }
-                        }
-                        gimli::DW_AT_sibling => {
-                            if let gimli::AttributeValue::UnitRef(offset) = attr.value() {
-                                sibling_offset = Some(offset.0);
+                                target_type_offset = Some(offset);
                             }
                         }
                         _ => continue,
                     }
                 }
 
-                if let (Some(target_type_offset), Some(sibling_offset)) =
-                    (target_type_offset, sibling_offset)
+                let mut element_count = None;
+
+                if entry.has_children() {
+                    let mut cursor = unit.entries_at_offset(entry.offset()).unwrap();
+
+                    // Skip array entry, move to first child
+                    cursor.next_dfs().unwrap();
+
+                    while let Some(entry) = cursor.next_dfs().unwrap() {
+                        match entry.tag() {
+                            constants::DW_TAG_subrange_type => {
+                                for attr in entry.attrs() {
+                                    match attr.name() {
+                                        gimli::DW_AT_count => {
+                                            // Accept all possible variation
+                                            element_count = match attr.value() {
+                                                gimli::AttributeValue::Data1(v) => Some(v as u64),
+                                                gimli::AttributeValue::Data2(v) => Some(v as u64),
+                                                gimli::AttributeValue::Data4(v) => Some(v as u64),
+                                                gimli::AttributeValue::Data8(v) => Some(v),
+                                                gimli::AttributeValue::Udata(v) => Some(v),
+                                                gimli::AttributeValue::Sdata(v) => Some(v as u64),
+                                                _ => None,
+                                            };
+                                        }
+                                        gimli::DW_AT_upper_bound => {
+                                            if element_count.is_none() {
+                                                // TODO: Hanlde case where count is not explicitly given
+                                                todo!()
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                            _ => continue,
+                        }
+                    }
+                }
+
+                println!(
+                    "Array at {:?}: Type={:?}, Count={:?}",
+                    entry.offset(),
+                    target_type_offset,
+                    element_count
+                );
+
+                if let (Some(target_type_offset), Some(count)) = (target_type_offset, element_count)
                 {
                     let array_type = DwarfType::Array {
-                        target_type_offset,
-                        sibling_offset,
+                        target_type_offset: target_type_offset.0,
+                        count,
                     };
+
                     let cache_node = TypeCacheNode {
                         dwarf_type: array_type,
                         offset,

@@ -80,7 +80,7 @@ pub enum DwarfType {
     /// Array type
     Array {
         target_type_offset: usize,
-        sibling_offset: usize,
+        count: u64,
     },
 }
 
@@ -132,7 +132,16 @@ impl DwarfType {
                 },
                 _ => None,
             },
+            // Pointer
             DwarfType::Pointer { target_type_offset } => {
+                Some(DebugValue::Pointer(raw_data as usize))
+            }
+            // TODO: Handle arrays
+            DwarfType::Array {
+                target_type_offset,
+                count,
+            } => {
+                println!("{:?}", count);
                 Some(DebugValue::Pointer(raw_data as usize))
             }
             _ => todo!(),
