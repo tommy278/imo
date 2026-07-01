@@ -1,8 +1,6 @@
 use nix::sys::ptrace::AddressType;
 use nix::{libc::user_regs_struct, sys::ptrace};
-use std::fs::{File, read_to_string};
-use std::io::Read;
-use std::os::unix::fs::FileExt;
+use std::fs::read_to_string;
 
 // Define the platform aliases exposed to mod.rs
 pub type ProcessId = nix::unistd::Pid;

@@ -113,6 +113,7 @@ fn dump_unit(
     if info_cache.encoding.is_none() {
         info_cache.encoding = Some(unit.encoding());
     }
+
     // Iterate over the Debugging Information Entries (DIEs) in the unit.
     let mut entries = unit.entries();
     // Keep track of the index of the function being processed inside the vec
@@ -120,6 +121,13 @@ fn dump_unit(
 
     while let Some(entry) = entries.next_dfs()? {
         let offset = entry.offset().0;
+
+        println!(
+            "<{}><{:x}> {}",
+            entry.depth(),
+            entry.offset().0,
+            entry.tag()
+        );
 
         // Parse each entries for the needed values while skipping redundant values
         match entry.tag() {
@@ -443,7 +451,11 @@ fn dump_unit(
                     current_scope_idx = Some(info_cache.execution_scopes.len() - 1);
                 }
             }
-            _ => continue,
+            _ => {
+                for attr in entry.attrs() {
+                    println!("Name: {:?}, Value: {:?}", attr.name(), attr.value());
+                }
+            }
         }
     }
     Ok(())

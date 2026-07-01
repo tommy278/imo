@@ -96,7 +96,7 @@ impl DwarfType {
             // TODO: this will probably change
             DwarfType::Const { .. } => 8,
 
-            // TODO: Figure out how to handle nested arrays
+            // Recursively find the size and multiply by count all the way down
             DwarfType::Array {
                 count,
                 target_type_offset,
@@ -168,7 +168,7 @@ impl DwarfType {
             DwarfType::Pointer { target_type_offset } => {
                 Some(DebugValue::Pointer(raw_data as usize))
             }
-            // TODO: Handle arrays
+            // Array
             DwarfType::Array {
                 target_type_offset,
                 count,

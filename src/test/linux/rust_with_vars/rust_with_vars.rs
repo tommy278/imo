@@ -1,6 +1,8 @@
 // NOTE: Compile with rustc -g rust_with_vars.rs
 
 fn main() {
+    // Skip char support for now
+    let c: char = 'l';
     let f: f32 = 3.141;
     let x: i64 = 10000000;
     let y: i64 = -15;

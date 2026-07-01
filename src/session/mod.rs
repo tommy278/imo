@@ -217,6 +217,8 @@ impl DebugSession {
                 // TODO: Handle this better
                 eprintln!("Could not find node");
             }
+        } else {
+            println!("Could not finf var");
         }
         None
     }
