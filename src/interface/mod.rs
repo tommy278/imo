@@ -107,4 +107,5 @@ pub enum DebugValue {
     Boolean(bool),
     Pointer(usize),
     Array(Vec<DebugValue>),
+    Option(Option<Box<DebugValue>>),
 }

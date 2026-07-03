@@ -122,13 +122,6 @@ fn dump_unit(
     while let Some(entry) = entries.next_dfs()? {
         let offset = entry.offset().0;
 
-        println!(
-            "<{}><{:x}> {}",
-            entry.depth(),
-            entry.offset().0,
-            entry.tag()
-        );
-
         // Parse each entries for the needed values while skipping redundant values
         match entry.tag() {
             constants::DW_TAG_base_type => {
@@ -277,6 +270,48 @@ fn dump_unit(
 
                         info_cache.type_index.insert(offset, cache_node);
                     }
+                }
+            }
+            constants::DW_TAG_structure_type => {
+                let mut name = None;
+                let mut byte_size = None;
+                let mut alignment = None;
+
+                for attr in entry.attrs() {
+                    match attr.name() {
+                        gimli::DW_AT_name => {
+                            if let Ok(str) = unit.attr_string(attr.value()) {
+                                name = Some(str.to_string_lossy().unwrap().to_string());
+                            }
+                        }
+                        gimli::DW_AT_byte_size => {
+                            if let gimli::AttributeValue::Udata(size) = attr.value() {
+                                byte_size = Some(size);
+                            }
+                        }
+                        gimli::DW_AT_alignment => {
+                            if let gimli::AttributeValue::Udata(ali) = attr.value() {
+                                alignment = Some(ali);
+                            }
+                        }
+                        _ => continue,
+                    }
+                }
+
+                if let (Some(name), Some(byte_size), Some(alignment)) = (name, byte_size, alignment)
+                {
+                    let struct_type = DwarfType::Structure {
+                        name,
+                        byte_size,
+                        alignment,
+                    };
+
+                    let cache_node = TypeCacheNode {
+                        dwarf_type: struct_type,
+                        offset,
+                    };
+
+                    info_cache.type_index.insert(offset, cache_node);
                 }
             }
             constants::DW_TAG_variable => {
@@ -451,11 +486,7 @@ fn dump_unit(
                     current_scope_idx = Some(info_cache.execution_scopes.len() - 1);
                 }
             }
-            _ => {
-                for attr in entry.attrs() {
-                    println!("Name: {:?}, Value: {:?}", attr.name(), attr.value());
-                }
-            }
+            _ => continue,
         }
     }
     Ok(())

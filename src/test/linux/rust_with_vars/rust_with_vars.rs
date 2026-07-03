@@ -7,7 +7,13 @@ fn main() {
     let x: i64 = 10000000;
     let y: i64 = -15;
     let z: u16 = 256;
-    let opt = Some(12);
+
+    let u8_some: Option<u8> = Some(8);
+    let u16_some: Option<u16> = Some(16);
+    let u32_some: Option<u32> = Some(32);
+    let u64_some: Option<u64> = Some(64);
+    let non: Option<i32> = None;
+
     let b = false;
     let t = true;
     let arr: [i32; 6] = [120, -1, 26, 34, -5000, 720];
