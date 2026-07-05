@@ -67,14 +67,13 @@ impl Abi {
 
 #[derive(Debug, Clone)]
 pub struct EnumVariant {
-    pub name: Option<String>,
     pub discr_value: Option<u8>,
     pub fields: Vec<StructField>,
 }
 
 #[derive(Debug, Clone)]
 pub struct StructField {
-    pub name: Option<String>,
+    pub name: String,
     pub type_offset: usize,
     pub location: u64,
 }
@@ -113,8 +112,8 @@ pub enum DwarfType {
         byte_size: u64,
         alignment: u64,
 
-        discr_member_offset: Option<usize>,
-        variansts: Vec<EnumVariant>,
+        discr_member_offset: Option<u64>,
+        variants: Vec<EnumVariant>,
     },
 }
 
@@ -228,6 +227,31 @@ impl DwarfType {
                     array.push(var.unwrap());
                 }
                 Some(DebugValue::Array(array))
+            }
+            DwarfType::Enum {
+                name,
+                byte_size,
+                alignment,
+                discr_member_offset,
+                variants,
+            } => {
+                println!(
+                    "Name: {:?}, Size: {:?}, Ali: {:?}, Offset: {:?}, Variants: {:?}",
+                    name, byte_size, alignment, discr_member_offset, variants
+                );
+                let tag_byte =
+                    crate::session::linux::peek_data(pid, address + discr_member_offset.unwrap());
+
+                let active_variant = variants
+                    .iter()
+                    .find(|v| v.discr_value == Some(tag_byte as u8));
+
+                // println!(
+                //     "Active Variant: {:?}, Tag is {}",
+                //     active_variant, tag_byte as u8
+                // );
+
+                None
             }
             DwarfType::Structure {
                 name,

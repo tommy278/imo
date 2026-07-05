@@ -20,6 +20,8 @@ fn main() {
     let small_arr: [u8; 4] = [10, 18, 19, 20];
     let matrix = [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]];
     let ptr = std::ptr::addr_of!(x);
+    let e: Letters = Letters::E;
+    let ce: Option<CustomEnum> = Some(CustomEnum::Age(12));
 
     // NOTE: Debugger does not recognize these types yet
     let vec = vec![1, 2, 3, 4, 5];
@@ -30,4 +32,16 @@ fn main() {
     println!("{}", x + y);
 }
 
-pub type TestEnum = Option<Option<String>>;
+enum Letters {
+    A,
+    B,
+    C,
+    D,
+    E,
+}
+
+pub enum CustomEnum {
+    Name(String),
+    Age(u16),
+    Location(String),
+}

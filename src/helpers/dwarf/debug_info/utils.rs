@@ -5,7 +5,7 @@
  * and integrated into the project's native debugger architecture.
  */
 
-use gimli::{Reader as _, constants};
+use gimli::{DW_TAG_member, Reader as _, constants};
 use object::{Object, ObjectSection};
 use std::{borrow, error, fs};
 
@@ -293,7 +293,7 @@ fn dump_unit(
                 }
 
                 let mut is_enum = false;
-                let mut discr_offset = None;
+                let mut discr_member_offset = None;
                 let mut enum_variants = Vec::new();
 
                 let mut current_variant = None;
@@ -318,23 +318,15 @@ fn dump_unit(
                                     enum_variants.push(v);
                                 }
 
-                                let mut v_name = None;
                                 let mut v_discr = None;
 
-                                for attr in child_entry.attrs() {
-                                    if let Ok(str) = unit.attr_string(attr.value()) {
-                                        v_name = Some(str.to_string_lossy().unwrap().to_string());
-                                    }
-
-                                    if let Some(gimli::AttributeValue::Data1(val)) =
-                                        child_entry.attr_value(gimli::DW_AT_discr_value)
-                                    {
-                                        v_discr = Some(val);
-                                    }
+                                if let Some(gimli::AttributeValue::Data1(val)) =
+                                    child_entry.attr_value(gimli::DW_AT_discr_value)
+                                {
+                                    v_discr = Some(val);
                                 }
 
                                 current_variant = Some(EnumVariant {
-                                    name: v_name,
                                     discr_value: v_discr,
                                     fields: Vec::new(),
                                 })
@@ -343,7 +335,13 @@ fn dump_unit(
                                 if let Some(gimli::AttributeValue::UnitRef(offset)) =
                                     child_entry.attr_value(gimli::DW_AT_discr)
                                 {
-                                    discr_offset = Some(offset.0);
+                                    let entry = unit.entry(offset).unwrap();
+                                    let member =
+                                        entry.attr(gimli::DW_AT_data_member_location).unwrap();
+
+                                    if let gimli::AttributeValue::Udata(off) = member.value() {
+                                        discr_member_offset = Some(off);
+                                    }
                                     is_enum = true;
                                 }
                             }
@@ -378,18 +376,21 @@ fn dump_unit(
                                     }
                                 }
 
-                                let field = StructField {
-                                    name: field_name,
-                                    type_offset: type_off.unwrap(),
-                                    location: location.unwrap(),
-                                };
+                                if let (Some(name), Some(type_offset), Some(location)) =
+                                    (field_name, type_off, location)
+                                {
+                                    let field = StructField {
+                                        name,
+                                        type_offset,
+                                        location,
+                                    };
 
-                                if let Some(ref mut v) = current_variant {
-                                    v.fields.push(field);
+                                    if let Some(ref mut v) = current_variant {
+                                        v.fields.push(field);
+                                    }
                                 }
                             }
-                            // SAFETY: Dont understant why breaking here works. Simple tried it and it gave desired results.
-                            _ => break,
+                            _ => continue,
                         }
                     }
                 }
@@ -398,12 +399,9 @@ fn dump_unit(
                     enum_variants.push(v);
                 }
 
-                if is_enum {
-                    println!("Name: {:?}, variants: {:?}", name.unwrap(), enum_variants);
-                } else {
-                    if let (Some(name), Some(byte_size), Some(alignment)) =
-                        (name, byte_size, alignment)
-                    {
+                if let (Some(name), Some(byte_size), Some(alignment)) = (name, byte_size, alignment)
+                {
+                    if !is_enum {
                         let struct_type = DwarfType::Structure {
                             name,
                             byte_size,
@@ -415,7 +413,21 @@ fn dump_unit(
                             offset,
                         };
 
-                        // println!("{:?}", cache_node);
+                        info_cache.type_index.insert(offset, cache_node);
+                    } else {
+                        let enum_type = DwarfType::Enum {
+                            name,
+                            byte_size,
+                            alignment,
+                            discr_member_offset,
+                            variants: enum_variants,
+                        };
+
+                        let cache_node = TypeCacheNode {
+                            dwarf_type: enum_type,
+                            offset,
+                        };
+
                         info_cache.type_index.insert(offset, cache_node);
                     }
                 }
