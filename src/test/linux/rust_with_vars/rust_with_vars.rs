@@ -20,9 +20,14 @@ fn main() {
     let small_arr: [u8; 4] = [10, 18, 19, 20];
     let matrix = [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]];
     let ptr = std::ptr::addr_of!(x);
-    println!("{:p}", ptr);
 
     // NOTE: Debugger does not recognize these types yet
     let vec = vec![1, 2, 3, 4, 5];
+    let box_type = Box::new(12);
+    let string = String::from("Hello world");
+    let slice = &string[1..];
+    let static_str = "Hello World";
     println!("{}", x + y);
 }
+
+pub type TestEnum = Option<Option<String>>;

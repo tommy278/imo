@@ -2,7 +2,7 @@
 pub mod linux;
 
 use crate::session::PlatformRegStruct;
-use std::fmt;
+use std::{fmt, rc::Rc};
 
 pub struct RegisterViewer {
     pub regs: PlatformRegStruct,
@@ -103,6 +103,7 @@ pub enum DebugValue {
     Integer(i64),
     Unsigned(u64),
     Float(f64),
+    StringSlice(String),
     String(String),
     Boolean(bool),
     Pointer(usize),

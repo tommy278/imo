@@ -153,7 +153,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 let arg = arg.parse::<usize>().unwrap();
 
                 let ty = session.metadata.type_index.get(&arg);
-                println!("{:?}", ty);
+                println!("Val is: {:?}", ty);
             }
             "q" | "quit" => {
                 // End current debug session

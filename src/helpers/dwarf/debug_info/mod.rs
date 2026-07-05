@@ -65,6 +65,20 @@ impl Abi {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct EnumVariant {
+    pub name: Option<String>,
+    pub discr_value: Option<u8>,
+    pub fields: Vec<StructField>,
+}
+
+#[derive(Debug, Clone)]
+pub struct StructField {
+    pub name: Option<String>,
+    pub type_offset: usize,
+    pub location: u64,
+}
+
 /// Store different variations of data that can be generated from the dwarf data
 #[derive(Debug)]
 pub enum DwarfType {
@@ -93,6 +107,15 @@ pub enum DwarfType {
         byte_size: u64,
         alignment: u64,
     },
+
+    Enum {
+        name: String,
+        byte_size: u64,
+        alignment: u64,
+
+        discr_member_offset: Option<usize>,
+        variansts: Vec<EnumVariant>,
+    },
 }
 
 impl DwarfType {
@@ -118,7 +141,7 @@ impl DwarfType {
             }
 
             // TODO: Find a way to get the actual size
-            DwarfType::Structure { .. } => 0,
+            DwarfType::Structure { .. } | DwarfType::Enum { .. } => 0,
         }
     }
 }
@@ -214,6 +237,7 @@ impl DwarfType {
                 // TODO: Check if it is an option first
                 let raw_data = raw_data as u64;
 
+                Some(DebugValue::Integer(404))
                 // Low half determines whether Some or None
                 // 0 means None and 1 means Some
                 //
@@ -221,51 +245,49 @@ impl DwarfType {
                 // For Some it stores the value of the variant
                 // For None it can be ignored, it is garbage value
 
-                let mut low_half = None;
-                let mut high_half = None;
+                // let mut low_half = None;
+                // let mut high_half = None;
 
-                println!("name: {}, byt: {}, all: {}", name, byte_size, alignment);
+                // if *byte_size == 2 {
+                //     let raw_data = raw_data as u16;
+                //     let mask = u8::MAX as u16;
+                //     low_half = Some((raw_data & mask) as u64);
+                //     high_half = Some(((raw_data >> 8) & mask) as u64);
+                // } else if *byte_size == 4 {
+                //     let raw_data = raw_data as u32;
+                //     let mask = u16::MAX as u32;
+                //     low_half = Some((raw_data & mask) as u64);
+                //     high_half = Some(((raw_data >> 16) & mask) as u64);
+                // } else if *byte_size == 8 {
+                //     let mask = u32::MAX as u64;
+                //     low_half = Some(raw_data & mask);
+                //     high_half = Some((raw_data >> 32) & mask);
+                // } else if *byte_size == 16 {
+                //     low_half = Some(raw_data);
+                //     high_half = Some(crate::session::linux::peek_data(pid, address + 8) as u64);
+                // }
 
-                if *byte_size == 2 {
-                    let raw_data = raw_data as u16;
-                    let mask = u8::MAX as u16;
-                    low_half = Some((raw_data & mask) as u64);
-                    high_half = Some(((raw_data >> 8) & mask) as u64);
-                } else if *byte_size == 4 {
-                    let raw_data = raw_data as u32;
-                    let mask = u16::MAX as u32;
-                    low_half = Some((raw_data & mask) as u64);
-                    high_half = Some(((raw_data >> 16) & mask) as u64);
-                } else if *byte_size == 8 {
-                    let mask = u32::MAX as u64;
-                    low_half = Some(raw_data & mask);
-                    high_half = Some((raw_data >> 32) & mask);
-                } else if *byte_size == 16 {
-                    low_half = Some(raw_data);
-                    high_half = Some(crate::session::linux::peek_data(pid, address + 8) as u64);
-                }
+                // println!("Low\t{:?}\nHigh\t{:?}", low_half, high_half);
 
-                println!("Low\t{:?}\nHigh\t{:?}", low_half, high_half);
-
-                if let Some(low) = low_half {
-                    // Default to unsigned for now
-                    println!("Low: {:016X}, High: {:016x}", low, high_half.unwrap());
-                    if low == SOME {
-                        if let Some(high) = high_half {
-                            return Some(DebugValue::Option(Some(Box::new(DebugValue::Unsigned(
-                                high,
-                            )))));
-                        } else {
-                            unimplemented!()
-                        }
-                    } else if low == NONE {
-                        return Some(DebugValue::Option(None));
-                    } else {
-                        return Some(DebugValue::String("Invalid discriminant...".to_string()));
-                    }
-                } else {
-                    return Some(DebugValue::String("Something went awry...".to_string()));
-                }
+                // if let Some(low) = low_half {
+                //     // Default to unsigned for now
+                //     println!("Low: {:016X}, High: {:016x}", low, high_half.unwrap());
+                //     if low == SOME {
+                //         if let Some(high) = high_half {
+                //             return Some(DebugValue::Option(Some(Box::new(DebugValue::Unsigned(
+                //                 high,
+                //             )))));
+                //         } else {
+                //             unimplemented!()
+                //         }
+                //     } else if low == NONE {
+                //         return Some(DebugValue::Option(None));
+                //     } else {
+                //         return Some(DebugValue::String("Invalid discriminant...".to_string()));
+                //     }
+                // } else {
+                //     return Some(DebugValue::String("Something went awry...".to_string()));
+                // }
             }
             _ => todo!(),
         }

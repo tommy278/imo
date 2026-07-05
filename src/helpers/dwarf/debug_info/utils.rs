@@ -10,8 +10,8 @@ use object::{Object, ObjectSection};
 use std::{borrow, error, fs};
 
 use crate::helpers::dwarf::debug_info::{
-    Abi, DebugVariable, DebuggerMetadataCache, DwarfType, ExecutionScope, ScopeCacheNode,
-    TypeCacheNode,
+    Abi, DebugVariable, DebuggerMetadataCache, DwarfType, EnumVariant, ExecutionScope,
+    ScopeCacheNode, StructField, TypeCacheNode,
 };
 
 #[derive(Debug, Default)]
@@ -243,12 +243,6 @@ fn dump_unit(
                                             _ => None,
                                         };
                                     }
-                                    gimli::DW_AT_upper_bound => {
-                                        if element_count.is_none() {
-                                            // TODO: Hanlde case where count is not explicitly given
-                                            todo!()
-                                        }
-                                    }
                                     _ => continue,
                                 }
                             }
@@ -298,20 +292,132 @@ fn dump_unit(
                     }
                 }
 
-                if let (Some(name), Some(byte_size), Some(alignment)) = (name, byte_size, alignment)
-                {
-                    let struct_type = DwarfType::Structure {
-                        name,
-                        byte_size,
-                        alignment,
-                    };
+                let mut is_enum = false;
+                let mut discr_offset = None;
+                let mut enum_variants = Vec::new();
 
-                    let cache_node = TypeCacheNode {
-                        dwarf_type: struct_type,
-                        offset,
-                    };
+                let mut current_variant = None;
 
-                    info_cache.type_index.insert(offset, cache_node);
+                if entry.has_children() {
+                    let mut cursor = unit.entries_at_offset(entry.offset()).unwrap();
+                    cursor.next_dfs().unwrap();
+
+                    let start_depth = cursor.current().map(|e| e.depth()).unwrap_or_default();
+
+                    while let Some(child_entry) = cursor.next_dfs().unwrap() {
+                        if child_entry.depth() < start_depth {
+                            break;
+                        }
+
+                        match child_entry.tag() {
+                            gimli::DW_TAG_variant => {
+                                is_enum = true;
+
+                                // If we are tracking a variant, save it before starting a new one
+                                if let Some(v) = current_variant.take() {
+                                    enum_variants.push(v);
+                                }
+
+                                let mut v_name = None;
+                                let mut v_discr = None;
+
+                                for attr in child_entry.attrs() {
+                                    if let Ok(str) = unit.attr_string(attr.value()) {
+                                        v_name = Some(str.to_string_lossy().unwrap().to_string());
+                                    }
+
+                                    if let Some(gimli::AttributeValue::Data1(val)) =
+                                        child_entry.attr_value(gimli::DW_AT_discr_value)
+                                    {
+                                        v_discr = Some(val);
+                                    }
+                                }
+
+                                current_variant = Some(EnumVariant {
+                                    name: v_name,
+                                    discr_value: v_discr,
+                                    fields: Vec::new(),
+                                })
+                            }
+                            gimli::DW_TAG_variant_part => {
+                                if let Some(gimli::AttributeValue::UnitRef(offset)) =
+                                    child_entry.attr_value(gimli::DW_AT_discr)
+                                {
+                                    discr_offset = Some(offset.0);
+                                    is_enum = true;
+                                }
+                            }
+                            gimli::DW_TAG_member => {
+                                let mut field_name = None;
+                                let mut type_off = None;
+                                let mut location = None;
+
+                                for attr in child_entry.attrs() {
+                                    match attr.name() {
+                                        gimli::DW_AT_name => {
+                                            if let Ok(str) = unit.attr_string(attr.value()) {
+                                                field_name = Some(
+                                                    str.to_string_lossy().unwrap().to_string(),
+                                                );
+                                            }
+                                        }
+                                        gimli::DW_AT_type => {
+                                            if let gimli::AttributeValue::UnitRef(offset) =
+                                                attr.value()
+                                            {
+                                                type_off = Some(offset.0);
+                                            }
+                                        }
+                                        gimli::DW_AT_data_member_location => {
+                                            if let gimli::AttributeValue::Udata(loc) = attr.value()
+                                            {
+                                                location = Some(loc);
+                                            }
+                                        }
+                                        _ => continue,
+                                    }
+                                }
+
+                                let field = StructField {
+                                    name: field_name,
+                                    type_offset: type_off.unwrap(),
+                                    location: location.unwrap(),
+                                };
+
+                                if let Some(ref mut v) = current_variant {
+                                    v.fields.push(field);
+                                }
+                            }
+                            // SAFETY: Dont understant why breaking here works. Simple tried it and it gave desired results.
+                            _ => break,
+                        }
+                    }
+                }
+
+                if let Some(v) = current_variant {
+                    enum_variants.push(v);
+                }
+
+                if is_enum {
+                    println!("Name: {:?}, variants: {:?}", name.unwrap(), enum_variants);
+                } else {
+                    if let (Some(name), Some(byte_size), Some(alignment)) =
+                        (name, byte_size, alignment)
+                    {
+                        let struct_type = DwarfType::Structure {
+                            name,
+                            byte_size,
+                            alignment,
+                        };
+
+                        let cache_node = TypeCacheNode {
+                            dwarf_type: struct_type,
+                            offset,
+                        };
+
+                        // println!("{:?}", cache_node);
+                        info_cache.type_index.insert(offset, cache_node);
+                    }
                 }
             }
             constants::DW_TAG_variable => {
