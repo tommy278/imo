@@ -103,6 +103,7 @@ pub enum DebugValue {
     Integer(i64),
     Unsigned(u64),
     Float(f64),
+    Char(char),
     StringSlice(String),
     String(String),
     Boolean(bool),

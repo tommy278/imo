@@ -201,6 +201,16 @@ impl DwarfType {
                         8 => Some(DebugValue::Unsigned(raw_data as u64)),
                         _ => Some(DebugValue::Unsigned(raw_data as u64)),
                     },
+
+                    // Chars
+                    16 => {
+                        let raw_char = raw_data as u32;
+                        if let Some(char) = char::from_u32(raw_char) {
+                            return Some(DebugValue::Char(char));
+                        };
+
+                        None
+                    }
                     _ => None,
                 }
             }
