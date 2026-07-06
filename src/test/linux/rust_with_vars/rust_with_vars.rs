@@ -21,7 +21,11 @@ fn main() {
     let matrix = [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]];
     let ptr = std::ptr::addr_of!(x);
     let e: Letters = Letters::E;
-    let ce: Option<CustomEnum> = Some(CustomEnum::Age(12));
+    let cid = CustomEnum::Id(101);
+    let ce: Option<CustomEnum> = Some(CustomEnum::Age(12, true));
+    let cn = CustomEnum::Name("Luke".to_string());
+    let ok: Result<u8, &str> = Ok(152);
+    let err: Result<u8, &str> = Err("Hello");
     let de: Option<String> = Some(String::from("Hello World"));
 
     // NOTE: Debugger does not recognize these types yet
@@ -42,7 +46,8 @@ enum Letters {
 }
 
 pub enum CustomEnum {
+    Id(u8),
     Name(String),
-    Age(u16),
+    Age(u16, bool),
     Location(String),
 }

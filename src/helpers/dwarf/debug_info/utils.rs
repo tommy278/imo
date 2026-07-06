@@ -5,8 +5,7 @@
  * and integrated into the project's native debugger architecture.
  */
 
-use gimli::{DW_TAG_member, Reader as _, constants};
-use nix::libc::PIDFD_GET_TIME_FOR_CHILDREN_NAMESPACE;
+use gimli::{Reader as _, constants};
 use object::{Object, ObjectSection};
 use std::{borrow, error, fs};
 
@@ -413,6 +412,7 @@ fn dump_unit(
                                             variant = Some(EnumVariant {
                                                 discr_value,
                                                 fields: Vec::new(),
+                                                is_fallback: false,
                                             });
                                         }
                                         gimli::DW_TAG_member => {
@@ -493,9 +493,21 @@ fn dump_unit(
                     } else {
                         // Add the fallback fields to a part of the main field
                         if !fallback_fields.is_empty() {
+                            // Remove duplicate fields
+                            fallback_fields.retain(|fallback| {
+                                !enum_variants.iter().any(|variant| {
+                                    variant.fields.iter().any(|f| {
+                                        f.type_offset == fallback.type_offset
+                                            && f.location == fallback.location
+                                    })
+                                })
+                            });
+
+                            // Store the fallback fields
                             enum_variants.push(EnumVariant {
                                 discr_value: None,
                                 fields: fallback_fields,
+                                is_fallback: true,
                             })
                         }
 

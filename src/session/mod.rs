@@ -204,15 +204,11 @@ impl DebugSession {
             let address = variable
                 .parse_value(&regs, encoding, endian, abi, bytes)
                 .unwrap();
-            let raw_data = os::peek_data(self.pid, address);
 
             if let Some(ty) = self.metadata.type_index.get(&variable.target_type_offset) {
-                return ty.dwarf_type.to_debug_value(
-                    &self.metadata.type_index,
-                    address,
-                    self.pid,
-                    raw_data,
-                );
+                return ty
+                    .dwarf_type
+                    .to_debug_value(&self.metadata.type_index, address, self.pid);
             } else {
                 // TODO: Handle this better
                 eprintln!("Could not find node");

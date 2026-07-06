@@ -7,6 +7,8 @@ pub mod utils;
  * and integrated into the project's native debugger architecture.
  */
 
+use std::collections::btree_map::Values;
+
 use rustc_hash::FxHashMap;
 
 use gimli::{Encoding, EndianSlice, Expression, RunTimeEndian};
@@ -69,6 +71,7 @@ impl Abi {
 pub struct EnumVariant {
     pub discr_value: Option<u8>,
     pub fields: Vec<StructField>,
+    is_fallback: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -151,56 +154,59 @@ impl DwarfType {
         type_index: &FxHashMap<usize, TypeCacheNode>,
         address: u64,
         pid: ProcessId,
-        raw_data: i64,
     ) -> Option<DebugValue> {
         match self {
             DwarfType::Base {
                 name,
                 encoding,
                 byte_size,
-            } => match encoding {
-                // Boolean
-                2 => {
-                    let masked = raw_data & 0xFF;
-                    Some(DebugValue::Boolean(masked != 0))
-                }
+            } => {
+                let raw_data = crate::session::linux::peek_data(pid, address);
+                match encoding {
+                    // Boolean
+                    2 => {
+                        let masked = raw_data & 0xFF;
+                        Some(DebugValue::Boolean(masked != 0))
+                    }
 
-                // Float
-                4 => match byte_size {
-                    4 => {
-                        let bits_32 = (raw_data & 0xFFFF_FFFF) as u32;
-                        let float_val = f32::from_bits(bits_32);
-                        Some(DebugValue::Float(float_val as f64))
-                    }
-                    8 => {
-                        let bits_64 = raw_data as u64;
-                        let float_val = f64::from_bits(bits_64);
-                        Some(DebugValue::Float(float_val))
-                    }
+                    // Float
+                    4 => match byte_size {
+                        4 => {
+                            let bits_32 = (raw_data & 0xFFFF_FFFF) as u32;
+                            let float_val = f32::from_bits(bits_32);
+                            Some(DebugValue::Float(float_val as f64))
+                        }
+                        8 => {
+                            let bits_64 = raw_data as u64;
+                            let float_val = f64::from_bits(bits_64);
+                            Some(DebugValue::Float(float_val))
+                        }
+                        _ => None,
+                    },
+
+                    // Signed integers
+                    5 => match byte_size {
+                        1 => Some(DebugValue::Integer((raw_data as i8) as i64)),
+                        2 => Some(DebugValue::Integer((raw_data as i16) as i64)),
+                        4 => Some(DebugValue::Integer((raw_data as i32) as i64)),
+                        8 => Some(DebugValue::Integer(raw_data)),
+                        _ => Some(DebugValue::Integer(raw_data)),
+                    },
+
+                    // Unsigned integers
+                    7 => match byte_size {
+                        1 => Some(DebugValue::Unsigned((raw_data as u8) as u64)),
+                        2 => Some(DebugValue::Unsigned((raw_data as u16) as u64)),
+                        4 => Some(DebugValue::Unsigned((raw_data as u32) as u64)),
+                        8 => Some(DebugValue::Unsigned(raw_data as u64)),
+                        _ => Some(DebugValue::Unsigned(raw_data as u64)),
+                    },
                     _ => None,
-                },
-
-                // Signed integers
-                5 => match byte_size {
-                    1 => Some(DebugValue::Integer((raw_data as i8) as i64)),
-                    2 => Some(DebugValue::Integer((raw_data as i16) as i64)),
-                    4 => Some(DebugValue::Integer((raw_data as i32) as i64)),
-                    8 => Some(DebugValue::Integer(raw_data)),
-                    _ => Some(DebugValue::Integer(raw_data)),
-                },
-
-                // Unsigned integers
-                7 => match byte_size {
-                    1 => Some(DebugValue::Unsigned((raw_data as u8) as u64)),
-                    2 => Some(DebugValue::Unsigned((raw_data as u16) as u64)),
-                    4 => Some(DebugValue::Unsigned((raw_data as u32) as u64)),
-                    8 => Some(DebugValue::Unsigned(raw_data as u64)),
-                    _ => Some(DebugValue::Unsigned(raw_data as u64)),
-                },
-                _ => None,
-            },
+                }
+            }
             // Pointer
             DwarfType::Pointer { target_type_offset } => {
+                let raw_data = crate::session::linux::peek_data(pid, address);
                 Some(DebugValue::Pointer(raw_data as usize))
             }
             // Array
@@ -216,12 +222,8 @@ impl DwarfType {
                 let mut offset = 0;
 
                 for _ in 0..*count {
-                    println!("Offset is {}", offset);
                     let resolved = address + offset;
-                    let raw_data = crate::session::linux::peek_data(pid, resolved);
-                    let var = ty
-                        .dwarf_type
-                        .to_debug_value(type_index, resolved, pid, raw_data);
+                    let var = ty.dwarf_type.to_debug_value(type_index, resolved, pid);
 
                     offset += offset_num;
                     array.push(var.unwrap());
@@ -235,27 +237,55 @@ impl DwarfType {
                 discr_member_offset,
                 variants,
             } => {
-                // println!(
-                //     "Name: {:?}, Size: {:?}, Ali: {:?}, Offset: {:?}, Variants: {:?}",
-                //     name, byte_size, alignment, discr_member_offset, variants
-                // );
                 let tag_byte =
                     crate::session::linux::peek_data(pid, address + discr_member_offset.unwrap());
 
                 let active_variant = variants
                     .iter()
-                    .find(|v| v.discr_value == Some(tag_byte as u8));
+                    .find(|v| v.discr_value == Some(tag_byte as u8))
+                    .or_else(|| variants.iter().find(|v| v.is_fallback));
 
-                // println!("Should be same, {:?}", tag_byte as u8);
-                // println!("Tag is {:?}", tag_byte as u64 as u8);
-                variants.iter().for_each(|var| {
-                    println!("{:?}", var);
-                });
+                if let Some(var) = active_variant {
+                    assert!(var.fields.len() >= 1, "Active variant list is empty");
 
-                println!(
-                    "Active Variant: {:?}, Tag is {}",
-                    active_variant, tag_byte as u8
-                );
+                    if var.fields.len() == 1 {
+                        let first = unsafe { var.fields.first().unwrap_unchecked() };
+                        let ty = type_index.get(&first.type_offset).unwrap();
+
+                        let value =
+                            ty.dwarf_type
+                                .to_debug_value(type_index, address + first.location, pid);
+
+                        let res = format!("{}({:?})", first.name, value);
+                        println!("{}", res);
+                    } else {
+                        let fields = var.fields.clone();
+                        let name = &fields[0].name;
+
+                        let mut values = Vec::new();
+
+                        // Skip the first entry
+                        for i in 1..fields.len() {
+                            let field = &fields[i];
+                            // Parse through rust anonymous fields
+                            if field.name.starts_with("__") {
+                                let ty = type_index.get(&field.type_offset).unwrap();
+
+                                let value = ty.dwarf_type.to_debug_value(
+                                    type_index,
+                                    address + field.location,
+                                    pid,
+                                );
+
+                                values.push(value);
+                            }
+                        }
+
+                        println!("{}({:?}) -> Value", name, values);
+                    }
+                }
+
+                println!("{:?}", active_variant);
 
                 None
             }
@@ -265,7 +295,7 @@ impl DwarfType {
                 alignment,
             } => {
                 // TODO: Check if it is an option first
-                let raw_data = raw_data as u64;
+                //
 
                 Some(DebugValue::Integer(404))
                 // Low half determines whether Some or None
