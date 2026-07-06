@@ -1,6 +1,8 @@
 use nix::sys::ptrace::AddressType;
+use nix::sys::uio::{RemoteIoVec, process_vm_readv};
 use nix::{libc::user_regs_struct, sys::ptrace};
 use std::fs::read_to_string;
+use std::io::IoSliceMut;
 
 // Define the platform aliases exposed to mod.rs
 pub type ProcessId = nix::unistd::Pid;
@@ -50,6 +52,24 @@ pub fn get_regs(pid: ProcessId) -> PlatformRegStruct {
 
 pub fn peek_data(pid: ProcessId, address: u64) -> i64 {
     ptrace::read(pid, address as AddressType).unwrap()
+}
+
+pub fn read_bytes(pid: ProcessId, remote_address: usize, len: usize) -> Vec<u8> {
+    let mut buffer = vec![0u8; len];
+    let local_iov = IoSliceMut::new(&mut buffer);
+
+    let remote_iov = RemoteIoVec {
+        base: remote_address,
+        len,
+    };
+
+    let bytes_read = process_vm_readv(pid, &mut [local_iov], &[remote_iov]).unwrap();
+
+    if bytes_read == len {
+        return buffer;
+    }
+
+    unimplemented!("Error reading bytes");
 }
 
 /* pub fn peek_data(pid: ProcessId, address: u64) -> u32 {

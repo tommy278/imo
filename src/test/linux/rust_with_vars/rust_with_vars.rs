@@ -25,7 +25,7 @@ fn main() {
     let ce: Option<CustomEnum> = Some(CustomEnum::Age(12, true));
     let cn = CustomEnum::Name("Luke".to_string());
     let ok: Result<u8, &str> = Ok(152);
-    let err: Result<u8, &str> = Err("Hello");
+    let err: Result<u8, u16> = Err(256);
     let de: Option<String> = Some(String::from("Hello World"));
 
     // NOTE: Debugger does not recognize these types yet

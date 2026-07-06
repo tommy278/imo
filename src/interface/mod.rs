@@ -109,5 +109,15 @@ pub enum DebugValue {
     Boolean(bool),
     Pointer(usize),
     Array(Vec<DebugValue>),
+    Vec(Vec<DebugValue>),
+    RawVecInner {
+        heap_pointer_value: usize,
+        cap: u64,
+    },
+    RawParts {
+        heap_pointer_value: usize,
+        len: u64,
+        cap: u64,
+    },
     Option(Option<Box<DebugValue>>),
 }

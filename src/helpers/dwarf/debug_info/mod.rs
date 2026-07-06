@@ -7,8 +7,6 @@ pub mod utils;
  * and integrated into the project's native debugger architecture.
  */
 
-use std::collections::btree_map::Values;
-
 use rustc_hash::FxHashMap;
 
 use gimli::{Encoding, EndianSlice, Expression, RunTimeEndian};
@@ -108,6 +106,8 @@ pub enum DwarfType {
         name: String,
         byte_size: u64,
         alignment: u64,
+
+        fields: Vec<StructField>,
     },
 
     Enum {
@@ -142,8 +142,8 @@ impl DwarfType {
                 count * resolved_size
             }
 
-            // TODO: Find a way to get the actual size
-            DwarfType::Structure { .. } | DwarfType::Enum { .. } => 0,
+            DwarfType::Structure { byte_size, .. } => *byte_size,
+            DwarfType::Enum { byte_size, .. } => *byte_size,
         }
     }
 }
@@ -295,7 +295,7 @@ impl DwarfType {
                     }
                 }
 
-                println!("{:?}", active_variant);
+                println!("{:?}", variants);
 
                 None
             }
@@ -303,61 +303,138 @@ impl DwarfType {
                 name,
                 byte_size,
                 alignment,
+                fields,
             } => {
-                // TODO: Check if it is an option first
-                //
+                // Handle base case for known rust types
+                if name == "String" {
+                    let vec_field = fields.iter().find(|f| f.name == "vec").unwrap();
+                    let vec_ty = type_index.get(&vec_field.type_offset).unwrap();
 
-                Some(DebugValue::Integer(404))
-                // Low half determines whether Some or None
-                // 0 means None and 1 means Some
-                //
-                // High half is the actual value being stored
-                // For Some it stores the value of the variant
-                // For None it can be ignored, it is garbage value
+                    let raw_parts = vec_ty.dwarf_type.to_debug_value(
+                        type_index,
+                        address + vec_field.location,
+                        pid,
+                    );
 
-                // let mut low_half = None;
-                // let mut high_half = None;
+                    if let Some(DebugValue::RawParts {
+                        heap_pointer_value,
+                        len,
+                        cap,
+                    }) = raw_parts
+                    {
+                        let res = crate::session::linux::read_bytes(
+                            pid,
+                            heap_pointer_value,
+                            len as usize,
+                        );
 
-                // if *byte_size == 2 {
-                //     let raw_data = raw_data as u16;
-                //     let mask = u8::MAX as u16;
-                //     low_half = Some((raw_data & mask) as u64);
-                //     high_half = Some(((raw_data >> 8) & mask) as u64);
-                // } else if *byte_size == 4 {
-                //     let raw_data = raw_data as u32;
-                //     let mask = u16::MAX as u32;
-                //     low_half = Some((raw_data & mask) as u64);
-                //     high_half = Some(((raw_data >> 16) & mask) as u64);
-                // } else if *byte_size == 8 {
-                //     let mask = u32::MAX as u64;
-                //     low_half = Some(raw_data & mask);
-                //     high_half = Some((raw_data >> 32) & mask);
-                // } else if *byte_size == 16 {
-                //     low_half = Some(raw_data);
-                //     high_half = Some(crate::session::linux::peek_data(pid, address + 8) as u64);
-                // }
+                        let string = String::from_utf8_lossy(&res).into_owned();
 
-                // println!("Low\t{:?}\nHigh\t{:?}", low_half, high_half);
+                        return Some(DebugValue::String(string));
+                    }
+                }
+                if name == "Vec<u8, alloc::alloc::Global>" {
+                    let len_field = fields.iter().find(|f| f.name == "len").unwrap();
+                    let len_ty = type_index.get(&len_field.type_offset).unwrap();
 
-                // if let Some(low) = low_half {
-                //     // Default to unsigned for now
-                //     println!("Low: {:016X}, High: {:016x}", low, high_half.unwrap());
-                //     if low == SOME {
-                //         if let Some(high) = high_half {
-                //             return Some(DebugValue::Option(Some(Box::new(DebugValue::Unsigned(
-                //                 high,
-                //             )))));
-                //         } else {
-                //             unimplemented!()
-                //         }
-                //     } else if low == NONE {
-                //         return Some(DebugValue::Option(None));
-                //     } else {
-                //         return Some(DebugValue::String("Invalid discriminant...".to_string()));
-                //     }
-                // } else {
-                //     return Some(DebugValue::String("Something went awry...".to_string()));
-                // }
+                    let len = len_ty.dwarf_type.to_debug_value(
+                        type_index,
+                        address + len_field.location,
+                        pid,
+                    );
+
+                    let buf_field = fields.iter().find(|f| f.name == "buf").unwrap();
+                    let buf_ty = type_index.get(&buf_field.type_offset).unwrap();
+
+                    let buf = buf_ty.dwarf_type.to_debug_value(
+                        type_index,
+                        address + buf_field.location,
+                        pid,
+                    );
+
+                    if let (
+                        Some(DebugValue::RawVecInner {
+                            heap_pointer_value,
+                            cap,
+                        }),
+                        Some(DebugValue::Unsigned(len)),
+                    ) = (buf, len)
+                    {
+                        let raw_parts = DebugValue::RawParts {
+                            heap_pointer_value,
+                            len,
+                            cap,
+                        };
+                        return Some(raw_parts);
+                    }
+                }
+
+                if name == "RawVecInner<alloc::alloc::Global>" {
+                    let ptr_field = fields.iter().find(|f| f.name == "ptr").unwrap();
+                    let ptr_ty = type_index.get(&ptr_field.type_offset).unwrap();
+
+                    let heap_pointer = ptr_ty.dwarf_type.to_debug_value(
+                        type_index,
+                        address + ptr_field.location,
+                        pid,
+                    );
+
+                    let cap_field = fields.iter().find(|f| f.name == "cap").unwrap();
+                    let cap_ty = type_index.get(&cap_field.type_offset).unwrap();
+
+                    let capacity = cap_ty.dwarf_type.to_debug_value(
+                        type_index,
+                        address + cap_field.location,
+                        pid,
+                    );
+
+                    if let (Some(DebugValue::Pointer(ptr)), Some(DebugValue::Unsigned(cap))) =
+                        (heap_pointer, capacity)
+                    {
+                        return Some(DebugValue::RawVecInner {
+                            heap_pointer_value: ptr,
+                            cap,
+                        });
+                    }
+                }
+
+                // Filter the field for only those that take space (Ignore phantom data)
+                let physical_fields: Vec<&StructField> = fields
+                    .iter()
+                    .filter(|field| {
+                        if let Some(ty) = type_index.get(&field.type_offset) {
+                            ty.dwarf_type.get_byte_size(type_index) > 0
+                        } else {
+                            true
+                        }
+                    })
+                    .collect();
+
+                if physical_fields.len() == 1 {
+                    let single_field = physical_fields[0];
+                    let ty = type_index.get(&single_field.type_offset);
+
+                    if let Some(ty) = ty {
+                        return ty.dwarf_type.to_debug_value(
+                            type_index,
+                            address + single_field.location,
+                            pid,
+                        );
+                    }
+                }
+
+                let mut store = Vec::new();
+
+                for field in fields {
+                    let ty = type_index.get(&field.type_offset).unwrap();
+
+                    let value = ty.dwarf_type.to_debug_value(type_index, address, pid);
+                    store.push(value);
+                }
+
+                println!("{:?}", store);
+
+                None
             }
             _ => todo!(),
         }

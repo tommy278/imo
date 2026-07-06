@@ -6,6 +6,6 @@ edition = "2024"
 [dependencies]
 gimli = "0.33.0"
 memmap2 = "0.9.10"
-nix = { version = "0.31.3", features = ["process", "ptrace", "signal", "personality"] }
+nix = { version = "0.31.3", features = ["process", "ptrace", "signal", "personality", "uio"] }
 object = "0.39.1"
 rustc-hash = "2.1.2"

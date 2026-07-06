@@ -299,6 +299,7 @@ fn dump_unit(
                 let mut enum_variants = Vec::new();
 
                 // Fallback for Niche Optimized Variants that are not captured under the variant path
+                // Also doubles down as storage for regular structs
                 let mut fallback_fields = Vec::new();
 
                 if entry.has_children() {
@@ -469,6 +470,9 @@ fn dump_unit(
                                         _ => continue,
                                     }
                                 }
+                                if let Some(var) = variant {
+                                    enum_variants.push(var);
+                                }
                             }
                             _ => continue,
                         }
@@ -482,6 +486,7 @@ fn dump_unit(
                             name,
                             byte_size,
                             alignment,
+                            fields: fallback_fields,
                         };
 
                         let cache_node = TypeCacheNode {
