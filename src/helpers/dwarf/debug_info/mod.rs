@@ -235,10 +235,10 @@ impl DwarfType {
                 discr_member_offset,
                 variants,
             } => {
-                println!(
-                    "Name: {:?}, Size: {:?}, Ali: {:?}, Offset: {:?}, Variants: {:?}",
-                    name, byte_size, alignment, discr_member_offset, variants
-                );
+                // println!(
+                //     "Name: {:?}, Size: {:?}, Ali: {:?}, Offset: {:?}, Variants: {:?}",
+                //     name, byte_size, alignment, discr_member_offset, variants
+                // );
                 let tag_byte =
                     crate::session::linux::peek_data(pid, address + discr_member_offset.unwrap());
 
@@ -246,10 +246,16 @@ impl DwarfType {
                     .iter()
                     .find(|v| v.discr_value == Some(tag_byte as u8));
 
-                // println!(
-                //     "Active Variant: {:?}, Tag is {}",
-                //     active_variant, tag_byte as u8
-                // );
+                // println!("Should be same, {:?}", tag_byte as u8);
+                // println!("Tag is {:?}", tag_byte as u64 as u8);
+                variants.iter().for_each(|var| {
+                    println!("{:?}", var);
+                });
+
+                println!(
+                    "Active Variant: {:?}, Tag is {}",
+                    active_variant, tag_byte as u8
+                );
 
                 None
             }

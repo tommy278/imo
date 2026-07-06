@@ -6,6 +6,7 @@
  */
 
 use gimli::{DW_TAG_member, Reader as _, constants};
+use nix::libc::PIDFD_GET_TIME_FOR_CHILDREN_NAMESPACE;
 use object::{Object, ObjectSection};
 use std::{borrow, error, fs};
 
@@ -294,67 +295,36 @@ fn dump_unit(
 
                 let mut is_enum = false;
                 let mut discr_member_offset = None;
+
+                // Storage for each enum variants
                 let mut enum_variants = Vec::new();
 
-                let mut current_variant = None;
+                // Fallback for Niche Optimized Variants that are not captured under the variant path
+                let mut fallback_fields = Vec::new();
 
                 if entry.has_children() {
+                    // Iterate through children
                     let mut cursor = unit.entries_at_offset(entry.offset()).unwrap();
-                    cursor.next_dfs().unwrap();
-
+                    cursor.next_dfs().unwrap(); // Skip first since it is the current entry
                     let start_depth = cursor.current().map(|e| e.depth()).unwrap_or_default();
 
                     while let Some(child_entry) = cursor.next_dfs().unwrap() {
-                        if child_entry.depth() < start_depth {
+                        if child_entry.depth() <= start_depth {
                             break;
                         }
 
                         match child_entry.tag() {
-                            gimli::DW_TAG_variant => {
-                                is_enum = true;
-
-                                // If we are tracking a variant, save it before starting a new one
-                                if let Some(v) = current_variant.take() {
-                                    enum_variants.push(v);
-                                }
-
-                                let mut v_discr = None;
-
-                                if let Some(gimli::AttributeValue::Data1(val)) =
-                                    child_entry.attr_value(gimli::DW_AT_discr_value)
-                                {
-                                    v_discr = Some(val);
-                                }
-
-                                current_variant = Some(EnumVariant {
-                                    discr_value: v_discr,
-                                    fields: Vec::new(),
-                                })
-                            }
-                            gimli::DW_TAG_variant_part => {
-                                if let Some(gimli::AttributeValue::UnitRef(offset)) =
-                                    child_entry.attr_value(gimli::DW_AT_discr)
-                                {
-                                    let entry = unit.entry(offset).unwrap();
-                                    let member =
-                                        entry.attr(gimli::DW_AT_data_member_location).unwrap();
-
-                                    if let gimli::AttributeValue::Udata(off) = member.value() {
-                                        discr_member_offset = Some(off);
-                                    }
-                                    is_enum = true;
-                                }
-                            }
+                            // Capture fields that are in the Niche Optimized Variants
                             gimli::DW_TAG_member => {
-                                let mut field_name = None;
-                                let mut type_off = None;
+                                let mut type_offset = None;
                                 let mut location = None;
+                                let mut name = None;
 
                                 for attr in child_entry.attrs() {
                                     match attr.name() {
                                         gimli::DW_AT_name => {
                                             if let Ok(str) = unit.attr_string(attr.value()) {
-                                                field_name = Some(
+                                                name = Some(
                                                     str.to_string_lossy().unwrap().to_string(),
                                                 );
                                             }
@@ -363,7 +333,7 @@ fn dump_unit(
                                             if let gimli::AttributeValue::UnitRef(offset) =
                                                 attr.value()
                                             {
-                                                type_off = Some(offset.0);
+                                                type_offset = Some(offset.0);
                                             }
                                         }
                                         gimli::DW_AT_data_member_location => {
@@ -377,7 +347,7 @@ fn dump_unit(
                                 }
 
                                 if let (Some(name), Some(type_offset), Some(location)) =
-                                    (field_name, type_off, location)
+                                    (name, type_offset, location)
                                 {
                                     let field = StructField {
                                         name,
@@ -385,18 +355,124 @@ fn dump_unit(
                                         location,
                                     };
 
-                                    if let Some(ref mut v) = current_variant {
-                                        v.fields.push(field);
+                                    fallback_fields.push(field);
+                                }
+                            }
+                            // Descend to the variant part
+                            gimli::DW_TAG_variant_part => {
+                                is_enum = true;
+
+                                if let Some(gimli::AttributeValue::UnitRef(discr_offset)) =
+                                    child_entry.attr_value(gimli::DW_AT_discr)
+                                {
+                                    let discr_entry = unit.entry(discr_offset).unwrap();
+                                    if let Some(gimli::AttributeValue::Udata(off)) =
+                                        discr_entry.attr_value(gimli::DW_AT_data_member_location)
+                                    {
+                                        discr_member_offset = Some(off);
+                                    }
+                                }
+
+                                // Further iterate through the children
+                                let mut entries =
+                                    unit.entries_at_offset(child_entry.offset()).unwrap();
+                                entries.next_dfs().unwrap();
+
+                                let variant_part_depth = entries.current().unwrap().depth();
+
+                                // Keep track of the current variant
+                                let mut variant: Option<EnumVariant> = None;
+
+                                while let Some(sub_entry) = entries.next_dfs().unwrap() {
+                                    if sub_entry.depth() <= variant_part_depth {
+                                        break;
+                                    }
+
+                                    match sub_entry.tag() {
+                                        gimli::DW_TAG_variant => {
+                                            let mut discr_value = None;
+
+                                            for attr in sub_entry.attrs() {
+                                                match attr.name() {
+                                                    gimli::DW_AT_discr_value => {
+                                                        if let gimli::AttributeValue::Data1(value) =
+                                                            attr.value()
+                                                        {
+                                                            discr_value = Some(value);
+                                                        }
+                                                    }
+                                                    _ => continue,
+                                                }
+                                            }
+
+                                            if let Some(var) = variant.take() {
+                                                enum_variants.push(var);
+                                            }
+
+                                            // Update varaint when encountering the variant tag
+                                            variant = Some(EnumVariant {
+                                                discr_value,
+                                                fields: Vec::new(),
+                                            });
+                                        }
+                                        gimli::DW_TAG_member => {
+                                            let mut type_offset = None;
+                                            let mut location = None;
+                                            let mut name = None;
+
+                                            for attr in sub_entry.attrs() {
+                                                match attr.name() {
+                                                    gimli::DW_AT_name => {
+                                                        if let Ok(str) =
+                                                            unit.attr_string(attr.value())
+                                                        {
+                                                            name = Some(
+                                                                str.to_string_lossy()
+                                                                    .unwrap()
+                                                                    .to_string(),
+                                                            );
+                                                        }
+                                                    }
+                                                    gimli::DW_AT_type => {
+                                                        if let gimli::AttributeValue::UnitRef(
+                                                            offset,
+                                                        ) = attr.value()
+                                                        {
+                                                            type_offset = Some(offset.0);
+                                                        }
+                                                    }
+                                                    gimli::DW_AT_data_member_location => {
+                                                        if let gimli::AttributeValue::Udata(loc) =
+                                                            attr.value()
+                                                        {
+                                                            location = Some(loc);
+                                                        }
+                                                    }
+                                                    _ => continue,
+                                                }
+                                            }
+
+                                            if let (Some(name), Some(type_offset), Some(location)) =
+                                                (name, type_offset, location)
+                                            {
+                                                let field = StructField {
+                                                    name,
+                                                    type_offset,
+                                                    location,
+                                                };
+
+                                                if let Some(ref mut current_variant) = variant {
+                                                    current_variant.fields.push(field);
+                                                }
+                                            }
+                                        }
+                                        _ => continue,
                                     }
                                 }
                             }
                             _ => continue,
                         }
                     }
-                }
-
-                if let Some(v) = current_variant {
-                    enum_variants.push(v);
                 }
 
                 if let (Some(name), Some(byte_size), Some(alignment)) = (name, byte_size, alignment)
@@ -415,6 +491,14 @@ fn dump_unit(
 
                         info_cache.type_index.insert(offset, cache_node);
                     } else {
+                        // Add the fallback fields to a part of the main field
+                        if !fallback_fields.is_empty() {
+                            enum_variants.push(EnumVariant {
+                                discr_value: None,
+                                fields: fallback_fields,
+                            })
+                        }
+
                         let enum_type = DwarfType::Enum {
                             name,
                             byte_size,

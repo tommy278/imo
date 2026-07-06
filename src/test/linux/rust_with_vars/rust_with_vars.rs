@@ -22,6 +22,7 @@ fn main() {
     let ptr = std::ptr::addr_of!(x);
     let e: Letters = Letters::E;
     let ce: Option<CustomEnum> = Some(CustomEnum::Age(12));
+    let de: Option<String> = Some(String::from("Hello World"));
 
     // NOTE: Debugger does not recognize these types yet
     let vec = vec![1, 2, 3, 4, 5];
