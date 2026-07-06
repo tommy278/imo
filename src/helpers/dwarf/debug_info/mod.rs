@@ -162,6 +162,12 @@ impl DwarfType {
                 byte_size,
             } => {
                 let raw_data = crate::session::linux::peek_data(pid, address);
+
+                if name == "usize" {
+                    return Some(DebugValue::Usize(raw_data as u64));
+                } else if name == "isize" {
+                    return Some(DebugValue::Isize(raw_data as i64));
+                }
                 match encoding {
                     // Boolean
                     2 => {
@@ -357,7 +363,7 @@ impl DwarfType {
                             heap_pointer_value,
                             cap,
                         }),
-                        Some(DebugValue::Unsigned(len)),
+                        Some(DebugValue::Usize(len)),
                     ) = (buf, len)
                     {
                         let raw_parts = DebugValue::RawParts {
@@ -388,7 +394,7 @@ impl DwarfType {
                         pid,
                     );
 
-                    if let (Some(DebugValue::Pointer(ptr)), Some(DebugValue::Unsigned(cap))) =
+                    if let (Some(DebugValue::Pointer(ptr)), Some(DebugValue::Usize(cap))) =
                         (heap_pointer, capacity)
                     {
                         return Some(DebugValue::RawVecInner {

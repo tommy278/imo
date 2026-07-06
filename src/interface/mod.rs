@@ -102,6 +102,8 @@ impl fmt::Display for RegisterViewer {
 pub enum DebugValue {
     Integer(i64),
     Unsigned(u64),
+    Usize(u64),
+    Isize(i64),
     Float(f64),
     Char(char),
     StringSlice(String),
