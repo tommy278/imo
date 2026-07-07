@@ -498,20 +498,17 @@ fn dump_unit(
                     } else {
                         // Add the fallback fields to a part of the main field
                         if !fallback_fields.is_empty() {
-                            // Remove duplicate fields
-                            fallback_fields.retain(|fallback| {
-                                !enum_variants.iter().any(|variant| {
-                                    variant.fields.iter().any(|f| {
-                                        f.type_offset == fallback.type_offset
-                                            && f.location == fallback.location
-                                    })
-                                })
-                            });
+                            // Remove optimized fields, reserved for tuples to use
+                            // NOTE: None is never optimized so safe to remove
+                            let filtered: Vec<StructField> = fallback_fields
+                                .into_iter()
+                                .filter(|var| !var.name.starts_with("__") && var.name != "None")
+                                .collect();
 
                             // Store the fallback fields
                             enum_variants.push(EnumVariant {
                                 discr_value: None,
-                                fields: fallback_fields,
+                                fields: filtered,
                                 is_fallback: true,
                             })
                         }

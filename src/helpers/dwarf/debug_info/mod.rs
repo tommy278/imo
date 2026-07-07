@@ -17,9 +17,6 @@ use crate::helpers::dwarf::evaluate_frame_base_bytes;
 use crate::interface::{DebugValue, RegisterViewer};
 use crate::session::ProcessId;
 
-pub const SOME: u64 = 1;
-pub const NONE: u64 = 0;
-
 /// Store different binary format to extract register values safely
 #[derive(Debug, Default)]
 pub enum Abi {
@@ -149,6 +146,16 @@ impl DwarfType {
 }
 
 impl DwarfType {
+    pub fn get_name(&self) -> String {
+        match self {
+            DwarfType::Base { name, .. } => name.to_owned(),
+            DwarfType::Pointer { .. } => "ptr".to_owned(),
+            DwarfType::Const { .. } => "const".to_owned(),
+            DwarfType::Array { .. } => "array".to_owned(),
+            DwarfType::Structure { name, .. } => name.to_owned(),
+            DwarfType::Enum { name, .. } => name.to_owned(),
+        }
+    }
     pub fn to_debug_value(
         &self,
         type_index: &FxHashMap<usize, TypeCacheNode>,
@@ -253,55 +260,40 @@ impl DwarfType {
                 discr_member_offset,
                 variants,
             } => {
-                let tag_byte =
-                    crate::session::linux::peek_data(pid, address + discr_member_offset.unwrap());
+                let tag_byte = crate::session::linux::peek_data(
+                    pid,
+                    address + discr_member_offset.unwrap_or_default(),
+                );
 
                 let active_variant = variants
                     .iter()
                     .find(|v| v.discr_value == Some(tag_byte as u8))
                     .or_else(|| variants.iter().find(|v| v.is_fallback));
 
-                if let Some(var) = active_variant {
-                    assert!(var.fields.len() >= 1, "Active variant list is empty");
+                // TODO: Handle variants name display
 
-                    if var.fields.len() == 1 {
-                        let first = unsafe { var.fields.first().unwrap_unchecked() };
-                        let ty = type_index.get(&first.type_offset).unwrap();
+                if let Some(active_variant) = active_variant {
+                    if let Some(field_def) = active_variant.fields.first() {
+                        let ty = type_index.get(&field_def.type_offset).unwrap();
 
-                        let value =
-                            ty.dwarf_type
-                                .to_debug_value(type_index, address + first.location, pid);
+                        let name = ty.dwarf_type.get_name();
 
-                        let res = format!("{}({:?})", first.name, value);
-                        println!("{}", res);
+                        let inner_value = ty
+                            .dwarf_type
+                            .to_debug_value(type_index, address + field_def.location, pid)
+                            .unwrap();
+
+                        return Some(DebugValue::Variant {
+                            name,
+                            field: vec![inner_value],
+                        });
                     } else {
-                        let fields = var.fields.clone();
-                        let name = &fields[0].name;
-
-                        let mut values = Vec::new();
-
-                        // Skip the first entry
-                        for i in 1..fields.len() {
-                            let field = &fields[i];
-                            // Parse through rust anonymous fields
-                            if field.name.starts_with("__") {
-                                let ty = type_index.get(&field.type_offset).unwrap();
-
-                                let value = ty.dwarf_type.to_debug_value(
-                                    type_index,
-                                    address + field.location,
-                                    pid,
-                                );
-
-                                values.push(value);
-                            }
-                        }
-
-                        println!("{}({:?}) -> Value", name, values);
+                        return Some(DebugValue::Variant {
+                            name: "".to_string(),
+                            field: vec![],
+                        });
                     }
                 }
-
-                println!("{:?}", variants);
 
                 None
             }
@@ -429,18 +421,50 @@ impl DwarfType {
                     }
                 }
 
-                let mut store = Vec::new();
+                let mut values = Vec::new();
 
                 for field in fields {
                     let ty = type_index.get(&field.type_offset).unwrap();
 
-                    let value = ty.dwarf_type.to_debug_value(type_index, address, pid);
-                    store.push(value);
+                    let value = ty
+                        .dwarf_type
+                        .to_debug_value(type_index, address + field.location, pid)
+                        .unwrap();
+
+                    values.push(value);
                 }
 
-                println!("{:?}", store);
+                if name == "&str" {
+                    assert!(values.len() == 2);
 
-                None
+                    let ptr = &values[0];
+                    let len = &values[1];
+
+                    if let (DebugValue::Pointer(ptr), DebugValue::Usize(len)) = (ptr, len) {
+                        let res =
+                            crate::session::linux::read_bytes(pid, *ptr as usize, *len as usize);
+
+                        let string = String::from_utf8_lossy(&res).into_owned();
+
+                        return Some(DebugValue::StringSlice(string));
+                    }
+                }
+
+                let is_tuple = name.starts_with('(')
+                    && fields
+                        .iter()
+                        .all(|f| f.name.starts_with("__") && f.name[2..].parse::<usize>().is_ok());
+
+                if is_tuple {
+                    return Some(DebugValue::Tuple(values));
+                }
+
+                let structure = DebugValue::Struct {
+                    name: name.to_owned(),
+                    fields: values,
+                };
+
+                return Some(structure);
             }
             _ => todo!(),
         }

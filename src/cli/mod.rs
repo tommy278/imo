@@ -132,7 +132,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
 
                 if let Some(scope) = session.get_scope_info() {
                     if let Some(val) = session.get_var_value(scope, arg) {
-                        println!("{} = {:?}", arg, val);
+                        println!("{} = {}", arg, val);
                     }
                 } else {
                     println!("Could not get scope info")

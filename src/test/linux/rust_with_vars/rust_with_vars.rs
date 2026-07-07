@@ -24,16 +24,26 @@ fn main() {
     let cid = CustomEnum::Id(101);
     let ce: Option<CustomEnum> = Some(CustomEnum::Age(12, true));
     let cn = CustomEnum::Name("Luke".to_string());
+    let cs = CustomStruct {
+        name: "Tim".to_string(),
+        id: 102,
+        age: 216,
+        en: CustomEnum::Id(10),
+    };
     let ok: Result<u8, &str> = Ok(152);
     let err: Result<u8, u16> = Err(256);
     let de: Option<String> = Some(String::from("Hello World"));
+    let tup = ("Tuple".to_string(), true);
+    let ms = MyOption::Some("Test");
+    let mn: MyOption<i32> = MyOption::None;
+    let ec = EdgeCaseEnum::LayoutTrap(42, 999_999_999, true);
 
     // NOTE: Debugger does not recognize these types yet
     let vec = vec![1, 2, 3, 4, 5];
     let box_type = Box::new(12);
-    let string = String::from("Hello world");
-    let slice = &string[1..];
     let static_str = "Hello World";
+    let string = String::from(static_str);
+    let slice = &string[1..];
     println!("{}", x + y);
 }
 
@@ -45,9 +55,25 @@ enum Letters {
     E,
 }
 
+pub enum MyOption<T> {
+    Some(T),
+    None,
+}
+
 pub enum CustomEnum {
     Id(u8),
     Name(String),
     Age(u16, bool),
     Location(String),
+}
+
+pub struct CustomStruct {
+    name: String,
+    id: usize,
+    age: u8,
+    en: CustomEnum,
+}
+
+pub enum EdgeCaseEnum {
+    LayoutTrap(u8, u64, bool),
 }

@@ -98,6 +98,7 @@ impl fmt::Display for RegisterViewer {
 }
 
 /// Covers all possible return values for the data found
+/// Add enums
 #[derive(Debug)]
 pub enum DebugValue {
     Integer(i64),
@@ -112,6 +113,7 @@ pub enum DebugValue {
     Pointer(usize),
     Array(Vec<DebugValue>),
     Vec(Vec<DebugValue>),
+    Tuple(Vec<DebugValue>),
     RawVecInner {
         heap_pointer_value: usize,
         cap: u64,
@@ -121,5 +123,92 @@ pub enum DebugValue {
         len: u64,
         cap: u64,
     },
-    Option(Option<Box<DebugValue>>),
+    Variant {
+        name: String,
+        field: Vec<DebugValue>,
+    },
+    Struct {
+        name: String,
+        fields: Vec<DebugValue>,
+    },
+}
+
+impl fmt::Display for DebugValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DebugValue::Integer(int) => write!(f, "{int}"),
+            DebugValue::Unsigned(u) => write!(f, "{u}"),
+            DebugValue::Usize(usize) => write!(f, "{usize}"),
+            DebugValue::Isize(isize) => write!(f, "{isize}"),
+            DebugValue::Float(fl) => write!(f, "{fl}"),
+            DebugValue::Char(c) => write!(f, "{c}"),
+            DebugValue::String(s) => write!(f, "{s}"),
+            DebugValue::StringSlice(slice) => write!(f, "{slice}"),
+            DebugValue::Boolean(bool) => write!(f, "{bool}"),
+            DebugValue::Pointer(ptr) => write!(f, "{ptr}"),
+            DebugValue::Array(arr) => write!(f, "{:?}", arr),
+            DebugValue::Vec(vec) => write!(f, "{:?}", vec),
+            DebugValue::Tuple(tup) => {
+                let mut format = String::from("(");
+
+                for t in tup {
+                    format.push_str(&format!("{},", t));
+                }
+
+                format.pop();
+                format.push_str(")");
+
+                writeln!(f, "{format}")
+            }
+            DebugValue::RawVecInner {
+                heap_pointer_value,
+                cap,
+            } => write!(
+                f,
+                "RawVecInner {{\nptr: {}\ncapacity: {}}}",
+                heap_pointer_value, cap
+            ),
+            DebugValue::RawParts {
+                heap_pointer_value,
+                len,
+                cap,
+            } => write!(
+                f,
+                "RawParts {{\nptr: {}\nlen: {}\ncap: {}}}",
+                heap_pointer_value, len, cap
+            ),
+            DebugValue::Variant { name, field } => {
+                if field.is_empty() {
+                    write!(f, "{name}")?;
+                    return Ok(());
+                }
+
+                let mut format = format!("{} (", name);
+
+                for v in field {
+                    format.push_str(&format!("{},", v));
+                }
+                format.pop();
+                format.push_str(")");
+
+                write!(f, "{format}")
+            }
+            DebugValue::Struct { name, fields } => {
+                if fields.is_empty() {
+                    write!(f, "{name}")?;
+                    return Ok(());
+                }
+
+                let mut format = format!("{} {{", name);
+
+                for field in fields {
+                    format.push_str(&format!("\n{}", field));
+                }
+
+                format.push_str("\n}");
+
+                write!(f, "{format}")
+            }
+        }
+    }
 }
