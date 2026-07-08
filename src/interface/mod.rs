@@ -149,6 +149,9 @@ impl fmt::Display for DebugValue {
             DebugValue::Array(arr) => write!(f, "{:?}", arr),
             DebugValue::Vec(vec) => write!(f, "{:?}", vec),
             DebugValue::Tuple(tup) => {
+                if tup.is_empty() {
+                    return Ok(());
+                }
                 let mut format = String::from("(");
 
                 for t in tup {
@@ -183,15 +186,9 @@ impl fmt::Display for DebugValue {
                     return Ok(());
                 }
 
-                let mut format = format!("{} (", name);
+                let first = field.first().unwrap();
 
-                for v in field {
-                    format.push_str(&format!("{},", v));
-                }
-                format.pop();
-                format.push_str(")");
-
-                write!(f, "{format}")
+                write!(f, "{}({})", name, first)
             }
             DebugValue::Struct { name, fields } => {
                 if fields.is_empty() {

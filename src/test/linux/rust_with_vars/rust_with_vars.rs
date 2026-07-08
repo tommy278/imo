@@ -1,5 +1,5 @@
 // NOTE: Compile with rustc -g rust_with_vars.rs
-
+use std::num::NonZeroU32;
 fn main() {
     // Skip char support for now
     let c: char = 'l';
@@ -32,11 +32,21 @@ fn main() {
     };
     let ok: Result<u8, &str> = Ok(152);
     let err: Result<u8, u16> = Err(256);
+    let ok2: Result<String, u8> = Ok("tested".to_string());
+    let err2: Result<&str, bool> = Err(false);
     let de: Option<String> = Some(String::from("Hello World"));
     let tup = ("Tuple".to_string(), true);
     let ms = MyOption::Some("Test");
     let mn: MyOption<i32> = MyOption::None;
     let ec = EdgeCaseEnum::LayoutTrap(42, 999_999_999, true);
+    let n = Niche::Value("niche".to_string());
+    let ne = Niche::Empty;
+    let oe: Option<char> = Some('b');
+    let nonzero_none: Option<NonZeroU32> = None;
+    let nested_some: Option<Option<bool>> = Some(None);
+    let nested_none: Option<Option<bool>> = None;
+    let status_a = StackedStatus::Active(true);
+    let status_b = StackedStatus::Suspended;
 
     // NOTE: Debugger does not recognize these types yet
     let vec = vec![1, 2, 3, 4, 5];
@@ -45,6 +55,13 @@ fn main() {
     let string = String::from(static_str);
     let slice = &string[1..];
     println!("{}", x + y);
+}
+
+pub enum StackedStatus {
+    Active(bool),
+    Pending,
+    Suspended,
+    Deleted,
 }
 
 enum Letters {
@@ -58,6 +75,11 @@ enum Letters {
 pub enum MyOption<T> {
     Some(T),
     None,
+}
+
+pub enum Niche {
+    Value(String),
+    Empty,
 }
 
 pub enum CustomEnum {

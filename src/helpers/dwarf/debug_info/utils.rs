@@ -395,10 +395,26 @@ fn dump_unit(
                                             for attr in sub_entry.attrs() {
                                                 match attr.name() {
                                                     gimli::DW_AT_discr_value => {
-                                                        if let gimli::AttributeValue::Data1(value) =
-                                                            attr.value()
-                                                        {
-                                                            discr_value = Some(value);
+                                                        discr_value = match attr.value() {
+                                                            gimli::AttributeValue::Data1(v) => {
+                                                                Some(v as u8)
+                                                            }
+                                                            gimli::AttributeValue::Data2(v) => {
+                                                                Some(v as u8)
+                                                            }
+                                                            gimli::AttributeValue::Data4(v) => {
+                                                                Some(v as u8)
+                                                            }
+                                                            gimli::AttributeValue::Data8(v) => {
+                                                                Some(v as u8)
+                                                            }
+                                                            gimli::AttributeValue::Sdata(v) => {
+                                                                Some(v as u8)
+                                                            }
+                                                            _ => panic!(
+                                                                "Discr value belongs to a type not parsed yet.\nValue is {:?}",
+                                                                attr.value()
+                                                            ),
                                                         }
                                                     }
                                                     _ => continue,
@@ -410,11 +426,13 @@ fn dump_unit(
                                             }
 
                                             // Update varaint when encountering the variant tag
+                                            // if let Some(discr_value) = discr_value {
                                             variant = Some(EnumVariant {
                                                 discr_value,
                                                 fields: Vec::new(),
                                                 is_fallback: false,
                                             });
+                                            // }
                                         }
                                         gimli::DW_TAG_member => {
                                             let mut type_offset = None;
@@ -499,7 +517,6 @@ fn dump_unit(
                         // Add the fallback fields to a part of the main field
                         if !fallback_fields.is_empty() {
                             // Remove optimized fields, reserved for tuples to use
-                            // NOTE: None is never optimized so safe to remove
                             let filtered: Vec<StructField> = fallback_fields
                                 .into_iter()
                                 .filter(|var| !var.name.starts_with("__") && var.name != "None")

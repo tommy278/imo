@@ -260,37 +260,54 @@ impl DwarfType {
                 discr_member_offset,
                 variants,
             } => {
-                let tag_byte = crate::session::linux::peek_data(
-                    pid,
-                    address + discr_member_offset.unwrap_or_default(),
-                );
+                let tag_byte = if let Some(discr_member_offset) = discr_member_offset {
+                    let tag =
+                        crate::session::linux::peek_data(pid, address + discr_member_offset) as u8;
+
+                    Some(tag)
+                } else {
+                    None
+                };
+
+                println!("Tag: {:?}", tag_byte);
 
                 let active_variant = variants
                     .iter()
-                    .find(|v| v.discr_value == Some(tag_byte as u8))
+                    .find(|v| {
+                        if let Some(tag_byte) = tag_byte {
+                            if let Some(value) = v.discr_value {
+                                return tag_byte == value;
+                            }
+                        }
+                        return false;
+                    })
                     .or_else(|| variants.iter().find(|v| v.is_fallback));
-
-                // TODO: Handle variants name display
 
                 if let Some(active_variant) = active_variant {
                     if let Some(field_def) = active_variant.fields.first() {
                         let ty = type_index.get(&field_def.type_offset).unwrap();
 
-                        let name = ty.dwarf_type.get_name();
+                        let inner_name = ty.dwarf_type.get_name();
 
-                        let inner_value = ty
+                        let mut inner_value = ty
                             .dwarf_type
                             .to_debug_value(type_index, address + field_def.location, pid)
                             .unwrap();
 
+                        if let DebugValue::Struct {
+                            name: ref mut struct_name,
+                            ..
+                        } = inner_value
+                        {
+                            if !name.contains("<") {
+                                *struct_name = format!("{}::{}", name, struct_name);
+                            }
+                            return Some(inner_value);
+                        }
+
                         return Some(DebugValue::Variant {
-                            name,
+                            name: inner_name,
                             field: vec![inner_value],
-                        });
-                    } else {
-                        return Some(DebugValue::Variant {
-                            name: "".to_string(),
-                            field: vec![],
                         });
                     }
                 }
