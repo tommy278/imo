@@ -269,8 +269,6 @@ impl DwarfType {
                     None
                 };
 
-                println!("Tag: {:?}", tag_byte);
-
                 let active_variant = variants
                     .iter()
                     .find(|v| {
@@ -289,27 +287,37 @@ impl DwarfType {
 
                         let inner_name = ty.dwarf_type.get_name();
 
-                        let mut inner_value = ty
-                            .dwarf_type
-                            .to_debug_value(type_index, address + field_def.location, pid)
-                            .unwrap();
+                        let inner_value = ty.dwarf_type.to_debug_value(
+                            type_index,
+                            address + field_def.location,
+                            pid,
+                        );
 
-                        if let DebugValue::Struct {
-                            name: ref mut struct_name,
-                            ..
-                        } = inner_value
-                        {
-                            if !name.contains("<") {
-                                *struct_name = format!("{}::{}", name, struct_name);
+                        if inner_value.is_some() {
+                            let mut inner_value = inner_value.unwrap();
+                            if let DebugValue::Struct {
+                                name: ref mut struct_name,
+                                ..
+                            } = inner_value
+                            {
+                                if !name.contains("<") {
+                                    *struct_name = format!("{}::{}", name, struct_name);
+                                }
+                                return Some(inner_value);
                             }
-                            return Some(inner_value);
-                        }
 
-                        return Some(DebugValue::Variant {
-                            name: inner_name,
-                            field: vec![inner_value],
-                        });
+                            return Some(DebugValue::Variant {
+                                name: inner_name,
+                                field: vec![inner_value],
+                            });
+                        } else {
+                            eprintln!("Invalid address");
+                        }
+                    } else {
+                        eprintln!("Could not find active field");
                     }
+                } else {
+                    eprintln!("Could not find active enum");
                 }
 
                 None
@@ -343,9 +351,12 @@ impl DwarfType {
                             len as usize,
                         );
 
-                        let string = String::from_utf8_lossy(&res).into_owned();
+                        if let Some(res) = res {
+                            let string = String::from_utf8_lossy(&res).into_owned();
 
-                        return Some(DebugValue::String(string));
+                            return Some(DebugValue::String(string));
+                        }
+                        return None;
                     }
                 }
                 if name == "Vec<u8, alloc::alloc::Global>" {
@@ -461,9 +472,12 @@ impl DwarfType {
                         let res =
                             crate::session::linux::read_bytes(pid, *ptr as usize, *len as usize);
 
-                        let string = String::from_utf8_lossy(&res).into_owned();
+                        if let Some(res) = res {
+                            let string = String::from_utf8_lossy(&res).into_owned();
 
-                        return Some(DebugValue::StringSlice(string));
+                            return Some(DebugValue::StringSlice(string));
+                        }
+                        return None;
                     }
                 }
 

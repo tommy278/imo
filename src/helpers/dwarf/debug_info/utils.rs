@@ -426,13 +426,15 @@ fn dump_unit(
                                             }
 
                                             // Update varaint when encountering the variant tag
-                                            // if let Some(discr_value) = discr_value {
-                                            variant = Some(EnumVariant {
-                                                discr_value,
-                                                fields: Vec::new(),
-                                                is_fallback: false,
-                                            });
-                                            // }
+                                            // Only store variants with discr_value.
+                                            // If it is missing it has been optimized and it will be in the fallback
+                                            if let Some(discr_value) = discr_value {
+                                                variant = Some(EnumVariant {
+                                                    discr_value: Some(discr_value),
+                                                    fields: Vec::new(),
+                                                    is_fallback: false,
+                                                });
+                                            }
                                         }
                                         gimli::DW_TAG_member => {
                                             let mut type_offset = None;
@@ -516,10 +518,18 @@ fn dump_unit(
                     } else {
                         // Add the fallback fields to a part of the main field
                         if !fallback_fields.is_empty() {
+                            fallback_fields.retain(|fallback| {
+                                !enum_variants.iter().any(|variant| {
+                                    variant.fields.iter().any(|f| {
+                                        f.type_offset == fallback.type_offset
+                                            && f.location == fallback.location
+                                    })
+                                })
+                            });
                             // Remove optimized fields, reserved for tuples to use
                             let filtered: Vec<StructField> = fallback_fields
                                 .into_iter()
-                                .filter(|var| !var.name.starts_with("__") && var.name != "None")
+                                .filter(|var| !var.name.starts_with("__"))
                                 .collect();
 
                             // Store the fallback fields

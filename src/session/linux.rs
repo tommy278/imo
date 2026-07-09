@@ -1,8 +1,10 @@
 use nix::sys::ptrace::AddressType;
 use nix::sys::uio::{RemoteIoVec, process_vm_readv};
 use nix::{libc::user_regs_struct, sys::ptrace};
+use std::fs::File;
 use std::fs::read_to_string;
 use std::io::IoSliceMut;
+use std::io::{BufRead, BufReader};
 
 // Define the platform aliases exposed to mod.rs
 pub type ProcessId = nix::unistd::Pid;
@@ -51,10 +53,14 @@ pub fn get_regs(pid: ProcessId) -> PlatformRegStruct {
 }
 
 pub fn peek_data(pid: ProcessId, address: u64) -> i64 {
-    ptrace::read(pid, address as AddressType).unwrap()
+    ptrace::read(pid, address as AddressType).expect("Could not read address")
 }
 
-pub fn read_bytes(pid: ProcessId, remote_address: usize, len: usize) -> Vec<u8> {
+pub fn read_bytes(pid: ProcessId, remote_address: usize, len: usize) -> Option<Vec<u8>> {
+    // TODO: Add an actual robust way to check if the address is valid
+    if len > 4096 * 4096 {
+        return None;
+    }
     let mut buffer = vec![0u8; len];
     let local_iov = IoSliceMut::new(&mut buffer);
 
@@ -66,16 +72,8 @@ pub fn read_bytes(pid: ProcessId, remote_address: usize, len: usize) -> Vec<u8> 
     let bytes_read = process_vm_readv(pid, &mut [local_iov], &[remote_iov]).unwrap();
 
     if bytes_read == len {
-        return buffer;
+        return Some(buffer);
     }
 
     unimplemented!("Error reading bytes");
 }
-
-/* pub fn peek_data(pid: ProcessId, address: u64) -> u32 {
-    let mut mem_file = File::open(format!("/proc/{}/mem", pid)).unwrap();
-    let mut buffer = [0u8; 4];
-
-    mem_file.read_exact_at(&mut buffer, address).unwrap();
-    u32::from_le_bytes(buffer)
-} */
