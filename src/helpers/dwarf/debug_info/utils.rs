@@ -432,7 +432,6 @@ fn dump_unit(
                                                 variant = Some(EnumVariant {
                                                     discr_value: Some(discr_value),
                                                     fields: Vec::new(),
-                                                    is_fallback: false,
                                                 });
                                             }
                                         }
@@ -536,7 +535,6 @@ fn dump_unit(
                             enum_variants.push(EnumVariant {
                                 discr_value: None,
                                 fields: filtered,
-                                is_fallback: true,
                             })
                         }
 

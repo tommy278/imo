@@ -54,7 +54,6 @@ fn main() {
     let static_str = "Hello World";
     let string = String::from(static_str);
     let slice = &string[1..];
-    println!("{}", x + y);
 }
 
 pub enum StackedStatus {

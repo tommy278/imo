@@ -66,7 +66,6 @@ impl Abi {
 pub struct EnumVariant {
     pub discr_value: Option<u8>,
     pub fields: Vec<StructField>,
-    is_fallback: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -279,7 +278,7 @@ impl DwarfType {
                         }
                         return false;
                     })
-                    .or_else(|| variants.iter().find(|v| v.is_fallback));
+                    .or_else(|| variants.iter().find(|v| v.discr_value == None));
 
                 if let Some(active_variant) = active_variant {
                     if let Some(field_def) = active_variant.fields.first() {
@@ -302,22 +301,24 @@ impl DwarfType {
                             {
                                 if !name.contains("<") {
                                     *struct_name = format!("{}::{}", name, struct_name);
+                                } else {
+                                    println!("{name}");
                                 }
                                 return Some(inner_value);
                             }
 
                             return Some(DebugValue::Variant {
                                 name: inner_name,
-                                field: vec![inner_value],
+                                field: Box::new(inner_value),
                             });
                         } else {
-                            eprintln!("Invalid address");
+                            return Some(DebugValue::Err("Invalid address".to_string()));
                         }
                     } else {
-                        eprintln!("Could not find active field");
+                        return Some(DebugValue::Err("Could not find active field".to_string()));
                     }
                 } else {
-                    eprintln!("Could not find active enum");
+                    return Some(DebugValue::Err("Could not find active enum".to_string()));
                 }
 
                 None
@@ -454,12 +455,15 @@ impl DwarfType {
                 for field in fields {
                     let ty = type_index.get(&field.type_offset).unwrap();
 
-                    let value = ty
-                        .dwarf_type
-                        .to_debug_value(type_index, address + field.location, pid)
-                        .unwrap();
+                    let value =
+                        ty.dwarf_type
+                            .to_debug_value(type_index, address + field.location, pid);
 
-                    values.push(value);
+                    if value.is_none() {
+                        return None;
+                    }
+
+                    values.push(value.unwrap());
                 }
 
                 if name == "&str" {

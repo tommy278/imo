@@ -125,12 +125,13 @@ pub enum DebugValue {
     },
     Variant {
         name: String,
-        field: Vec<DebugValue>,
+        field: Box<DebugValue>,
     },
     Struct {
         name: String,
         fields: Vec<DebugValue>,
     },
+    Err(String),
 }
 
 impl fmt::Display for DebugValue {
@@ -181,14 +182,7 @@ impl fmt::Display for DebugValue {
                 heap_pointer_value, len, cap
             ),
             DebugValue::Variant { name, field } => {
-                if field.is_empty() {
-                    write!(f, "{name}")?;
-                    return Ok(());
-                }
-
-                let first = field.first().unwrap();
-
-                write!(f, "{}({})", name, first)
+                write!(f, "{}({})", name, field)
             }
             DebugValue::Struct { name, fields } => {
                 if fields.is_empty() {
@@ -206,6 +200,7 @@ impl fmt::Display for DebugValue {
 
                 write!(f, "{format}")
             }
+            DebugValue::Err(err) => write!(f, "<{}>", err),
         }
     }
 }
