@@ -70,7 +70,19 @@ pub fn handle_breakpoint_setting(
         panic!("Error occured creating session")
     }
 
-    let unique_files: FxHashSet<&Path> = line_index.iter().map(|bp| bp.file.as_ref()).collect();
+    let unique_files: FxHashSet<&Path> = line_index
+        .iter()
+        .map(|bp| bp.file.as_ref())
+        .filter(|file| {
+            let path = file.to_string_lossy();
+            !path.contains("/rustc/") && !path.contains("/rust/deps")
+        })
+        .collect();
+
+    if unique_files.is_empty() {
+        println!("Cannot set breakpoint at target");
+        return;
+    }
 
     // All addresses belong to the same file
     if unique_files.len() == 1 {

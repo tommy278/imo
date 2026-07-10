@@ -242,7 +242,7 @@ impl DebugSession {
                         if let Some(var_decl_idx) =
                             line_order.iter().position(|&l| l == variable.decl_line)
                         {
-                            if var_decl_idx > current_idx {
+                            if var_decl_idx >= current_idx {
                                 return Some(DebugValue::Err(
                                     "Variable not initialized yet".to_string(),
                                 ));
