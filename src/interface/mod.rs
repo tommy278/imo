@@ -114,6 +114,10 @@ pub enum DebugValue {
     Array(Vec<DebugValue>),
     Vec(Vec<DebugValue>),
     Tuple(Vec<DebugValue>),
+    Enum {
+        name: String,
+        inner_name: String,
+    },
     RawVecInner {
         heap_pointer_value: usize,
         cap: u64,
@@ -163,6 +167,9 @@ impl fmt::Display for DebugValue {
                 format.push_str(")");
 
                 writeln!(f, "{format}")
+            }
+            DebugValue::Enum { name, inner_name } => {
+                write!(f, "{}::{}", name, inner_name)
             }
             DebugValue::RawVecInner {
                 heap_pointer_value,

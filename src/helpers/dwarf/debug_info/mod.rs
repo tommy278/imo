@@ -75,6 +75,12 @@ pub struct StructField {
     pub location: u64,
 }
 
+#[derive(Debug, Clone)]
+pub struct Enumerator {
+    name: String,
+    value: u64,
+}
+
 /// Store different variations of data that can be generated from the dwarf data
 #[derive(Debug)]
 pub enum DwarfType {
@@ -102,15 +108,20 @@ pub enum DwarfType {
         name: String,
         byte_size: u64,
         alignment: u64,
-
         fields: Vec<StructField>,
     },
 
+    // Basic C like enums
+    Enum {
+        name: String,
+        byte_size: u64,
+        fields: Vec<Enumerator>,
+    },
+    // Rust like enums, with fields
     Variant {
         name: String,
         byte_size: u64,
         alignment: u64,
-
         discr_member_offset: Option<u64>,
         variants: Vec<EnumVariant>,
     },
@@ -138,6 +149,8 @@ impl DwarfType {
                 count * resolved_size
             }
 
+            DwarfType::Enum { byte_size, .. } => *byte_size,
+
             DwarfType::Structure { byte_size, .. } => *byte_size,
             DwarfType::Variant { byte_size, .. } => *byte_size,
         }
@@ -151,6 +164,7 @@ impl DwarfType {
             DwarfType::Pointer { .. } => "ptr".to_owned(),
             DwarfType::Const { .. } => "const".to_owned(),
             DwarfType::Array { .. } => "array".to_owned(),
+            DwarfType::Enum { name, .. } => name.to_owned(),
             DwarfType::Structure { name, .. } => name.to_owned(),
             DwarfType::Variant { name, .. } => name.to_owned(),
         }
@@ -251,6 +265,32 @@ impl DwarfType {
                     array.push(var.unwrap());
                 }
                 Some(DebugValue::Array(array))
+            }
+            DwarfType::Enum {
+                name,
+                byte_size,
+                fields,
+            } => {
+                let data = crate::session::linux::peek_data(pid, address);
+
+                let const_value = match byte_size {
+                    1 => data as u8 as u64,
+                    2 => data as u16 as u64,
+                    4 => data as u32 as u64,
+                    8 | _ => data as u64,
+                };
+
+                let inner_name = fields
+                    .iter()
+                    .find(|f| f.value == const_value)
+                    .expect("Could not find target")
+                    .name
+                    .clone();
+
+                return Some(DebugValue::Enum {
+                    name: name.to_owned(),
+                    inner_name,
+                });
             }
             DwarfType::Variant {
                 name,

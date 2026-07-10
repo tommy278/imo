@@ -21,6 +21,7 @@ fn main() {
     let matrix = [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]];
     let ptr = std::ptr::addr_of!(x);
     let e: Letters = Letters::E;
+    let cl = Letters::C;
     let cid = CustomEnum::Id(101);
     let ce: Option<CustomEnum> = Some(CustomEnum::Age(12, true));
     let cn = CustomEnum::Name("Luke".to_string());
@@ -64,12 +65,13 @@ pub enum StackedStatus {
     Deleted,
 }
 
+#[repr(u64)]
 enum Letters {
-    A,
-    B,
-    C,
-    D,
-    E,
+    A = 100,
+    B = 200,
+    C = 300,
+    D = 400,
+    E = 500,
 }
 
 pub enum MyOption<T> {

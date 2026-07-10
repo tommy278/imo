@@ -10,7 +10,7 @@ use object::{Object, ObjectSection};
 use std::{borrow, error, fs};
 
 use crate::helpers::dwarf::debug_info::{
-    Abi, DebugVariable, DebuggerMetadataCache, DwarfType, EnumVariant, ExecutionScope,
+    Abi, DebugVariable, DebuggerMetadataCache, DwarfType, EnumVariant, Enumerator, ExecutionScope,
     ScopeCacheNode, StructField, TypeCacheNode,
 };
 
@@ -208,6 +208,88 @@ fn dump_unit(
                         dwarf_type: const_type,
                         offset,
                     };
+                    info_cache.type_index.insert(offset, cache_node);
+                }
+            }
+            constants::DW_TAG_enumeration_type => {
+                let mut name = None;
+                let mut byte_size = None;
+                let mut fields = Vec::new();
+
+                for attr in entry.attrs() {
+                    match attr.name() {
+                        gimli::DW_AT_name => {
+                            if let Ok(str) = unit.attr_string(attr.value()) {
+                                name = Some(str.to_string_lossy().unwrap().to_string());
+                            }
+                        }
+                        gimli::DW_AT_byte_size => {
+                            if let gimli::AttributeValue::Udata(size) = attr.value() {
+                                byte_size = Some(size);
+                            }
+                        }
+                        _ => continue,
+                    }
+                }
+
+                if entry.has_children() {
+                    let mut cursor = unit.entries_at_offset(entry.offset()).unwrap();
+
+                    cursor.next_dfs().unwrap();
+
+                    let start_depth = cursor.current().map(|e| e.depth()).unwrap_or_default();
+
+                    while let Some(child_entry) = cursor.next_dfs().unwrap() {
+                        if child_entry.depth() <= start_depth {
+                            break;
+                        }
+
+                        let mut inner_name = None;
+                        let mut const_value = None;
+
+                        match child_entry.tag() {
+                            gimli::DW_TAG_enumerator => {
+                                for attr in child_entry.attrs() {
+                                    match attr.name() {
+                                        gimli::DW_AT_name => {
+                                            if let Ok(str) = unit.attr_string(attr.value()) {
+                                                inner_name = Some(
+                                                    str.to_string_lossy().unwrap().to_string(),
+                                                );
+                                            }
+                                        }
+                                        gimli::DW_AT_const_value => {
+                                            if let gimli::AttributeValue::Udata(value) =
+                                                attr.value()
+                                            {
+                                                const_value = Some(value);
+                                            }
+                                        }
+                                        _ => continue,
+                                    }
+                                }
+                            }
+                            _ => continue,
+                        }
+
+                        if let (Some(name), Some(value)) = (inner_name, const_value) {
+                            fields.push(Enumerator { name, value });
+                        }
+                    }
+                }
+
+                if let (Some(name), Some(byte_size)) = (name, byte_size) {
+                    let enum_type = DwarfType::Enum {
+                        name,
+                        byte_size,
+                        fields,
+                    };
+
+                    let cache_node = TypeCacheNode {
+                        dwarf_type: enum_type,
+                        offset,
+                    };
+
                     info_cache.type_index.insert(offset, cache_node);
                 }
             }
