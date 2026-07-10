@@ -3,7 +3,8 @@ pub mod interface;
 pub mod linux;
 
 use rustc_hash::FxHashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use crate::helpers::dwarf::debug_info::{self, DebuggerMetadataCache};
 use crate::helpers::dwarf::{self, debug_info::ScopeCacheNode};
@@ -78,6 +79,12 @@ impl ManagedBreakpoint {
     }
 }
 
+#[derive(Debug)]
+pub struct SourceLocation {
+    pub file: Rc<Path>,
+    pub line: u64,
+}
+
 /// Cache for entire debug session
 #[derive(Debug)]
 pub struct DebugSession {
@@ -85,6 +92,11 @@ pub struct DebugSession {
     pub line_index: FxHashMap<u64, Vec<BreakpointTarget>>,
     pub base_address: u64,
     pub breakpoint_index_tracker: Vec<Option<BreakpointData>>,
+    pub address_to_location: FxHashMap<u64, SourceLocation>,
+
+    // Rust does not delcare variables in sequential order
+    // Used to find out the actual order in while files were declared
+    pub file_declaration_order: FxHashMap<PathBuf, Vec<u64>>,
 
     // Metdata
     pub metadata: DebuggerMetadataCache,
@@ -101,6 +113,8 @@ impl DebugSession {
             base_address: 0,
             breakpoint_index_tracker: Vec::new(),
             line_index: FxHashMap::default(),
+            address_to_location: FxHashMap::default(),
+            file_declaration_order: FxHashMap::default(),
             metadata: DebuggerMetadataCache::default(),
             active_breakpoints: FxHashMap::default(),
             pid,
@@ -176,6 +190,18 @@ impl DebugSession {
     // Other Methods
     // =================================================================
 
+    pub fn get_location_with_address(&self, relative_address: u64) -> Option<&SourceLocation> {
+        self.address_to_location.get(&relative_address)
+    }
+
+    pub fn get_file_decl_order(&self, file: PathBuf) -> Option<&Vec<u64>> {
+        self.file_declaration_order.get(&file)
+    }
+
+    pub fn get_relative_address(&self, absolute_address: u64) -> u64 {
+        absolute_address - self.base_address
+    }
+
     pub fn debug(&self, node: &debug_info::ScopeCacheNode) {
         let regs = self.get_regs();
 
@@ -199,7 +225,33 @@ impl DebugSession {
         let encoding = self.metadata.encoding.unwrap();
         let abi = &self.metadata.abi;
 
+        // Since rust does not declare variables in sequential order
+        // We store the actual order the variables were actually declared
+        // We use this to check if the decl_line is before our current index
+        // If it is that means it has been declared and if not then it hasnt
+
         if let Some(variable) = node.get_variable_with_name(name) {
+            let current_pc = regs.regs.rip - self.base_address;
+
+            if let Some(info) = self.address_to_location.get(&current_pc) {
+                let SourceLocation { file, line } = info;
+                let file = file.to_path_buf();
+
+                if let Some(line_order) = self.get_file_decl_order(file) {
+                    if let Some(current_idx) = line_order.iter().position(|&l| l == *line) {
+                        if let Some(var_decl_idx) =
+                            line_order.iter().position(|&l| l == variable.decl_line)
+                        {
+                            if var_decl_idx > current_idx {
+                                return Some(DebugValue::Err(
+                                    "Variable not initialized yet".to_string(),
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+
             let bytes = node.scope.get_bytes().unwrap();
             let address = variable
                 .parse_value(&regs, encoding, endian, abi, bytes)
@@ -210,11 +262,10 @@ impl DebugSession {
                     .dwarf_type
                     .to_debug_value(&self.metadata.type_index, address, self.pid);
             } else {
-                // TODO: Handle this better
                 eprintln!("Could not find node");
             }
         } else {
-            println!("Could not finf var");
+            println!("Could not find var");
         }
         None
     }

@@ -1,10 +1,8 @@
 use nix::sys::ptrace::AddressType;
 use nix::sys::uio::{RemoteIoVec, process_vm_readv};
 use nix::{libc::user_regs_struct, sys::ptrace};
-use std::fs::File;
 use std::fs::read_to_string;
 use std::io::IoSliceMut;
-use std::io::{BufRead, BufReader};
 
 // Define the platform aliases exposed to mod.rs
 pub type ProcessId = nix::unistd::Pid;
@@ -57,10 +55,6 @@ pub fn peek_data(pid: ProcessId, address: u64) -> i64 {
 }
 
 pub fn read_bytes(pid: ProcessId, remote_address: usize, len: usize) -> Option<Vec<u8>> {
-    // TODO: Add an actual robust way to check if the address is valid
-    if len > 4096 * 4096 {
-        return None;
-    }
     let mut buffer = vec![0u8; len];
     let local_iov = IoSliceMut::new(&mut buffer);
 

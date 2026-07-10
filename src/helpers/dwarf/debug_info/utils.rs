@@ -559,6 +559,7 @@ fn dump_unit(
                 let mut name = None;
                 let mut target_type_offset = None;
                 let mut location = None;
+                let mut line = None;
 
                 for attr in entry.attrs() {
                     match attr.name() {
@@ -578,17 +579,25 @@ fn dump_unit(
                                 location = Some(slice.to_vec());
                             }
                         }
+                        gimli::DW_AT_decl_line => {
+                            if let gimli::AttributeValue::Udata(decl_line) = attr.value() {
+                                line = Some(decl_line as u64);
+                            } else {
+                                println!("Skipped: {:?}", attr.value());
+                            }
+                        }
                         _ => continue,
                     }
                 }
 
-                if let (Some(name), Some(target_type_offset), Some(location)) =
-                    (name, target_type_offset, location)
+                if let (Some(name), Some(target_type_offset), Some(location), Some(decl_line)) =
+                    (name, target_type_offset, location, line)
                 {
                     let debug_var = DebugVariable {
                         name,
                         target_type_offset,
                         location,
+                        decl_line,
                     };
 
                     if let Some(idx) = current_scope_idx {

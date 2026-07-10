@@ -286,34 +286,28 @@ impl DwarfType {
 
                         let inner_name = ty.dwarf_type.get_name();
 
-                        let inner_value = ty.dwarf_type.to_debug_value(
-                            type_index,
-                            address + field_def.location,
-                            pid,
-                        );
+                        let mut inner_value = ty
+                            .dwarf_type
+                            .to_debug_value(type_index, address + field_def.location, pid)
+                            .unwrap();
 
-                        if inner_value.is_some() {
-                            let mut inner_value = inner_value.unwrap();
-                            if let DebugValue::Struct {
-                                name: ref mut struct_name,
-                                ..
-                            } = inner_value
-                            {
-                                if !name.contains("<") {
-                                    *struct_name = format!("{}::{}", name, struct_name);
-                                } else {
-                                    println!("{name}");
-                                }
-                                return Some(inner_value);
+                        if let DebugValue::Struct {
+                            name: ref mut struct_name,
+                            ..
+                        } = inner_value
+                        {
+                            if !name.contains("<") {
+                                *struct_name = format!("{}::{}", name, struct_name);
+                            } else {
+                                println!("{name}");
                             }
-
-                            return Some(DebugValue::Variant {
-                                name: inner_name,
-                                field: Box::new(inner_value),
-                            });
-                        } else {
-                            return Some(DebugValue::Err("Invalid address".to_string()));
+                            return Some(inner_value);
                         }
+
+                        return Some(DebugValue::Variant {
+                            name: inner_name,
+                            field: Box::new(inner_value),
+                        });
                     } else {
                         return Some(DebugValue::Err("Could not find active field".to_string()));
                     }
@@ -544,6 +538,7 @@ pub struct DebugVariable {
     pub name: String,
     pub target_type_offset: usize,
     pub location: Vec<u8>,
+    pub decl_line: u64,
 }
 
 impl DebugVariable {

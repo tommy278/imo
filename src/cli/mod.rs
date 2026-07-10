@@ -118,9 +118,18 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                             }
                         }
                     }
-                    "reg" => {
+                    "r" | "reg" => {
                         let regs = session.get_regs();
                         println!("{}", regs);
+                    }
+                    "line" => {
+                        let arg = parts.next().expect("No args");
+
+                        let absolute_address = arg.parse::<u64>().expect("Could not parse address");
+
+                        if let Some(var) = session.get_location_with_address(absolute_address) {
+                            println!("{:?}", var);
+                        }
                     }
                     _ => {
                         todo!()
@@ -140,14 +149,15 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                     println!("Could not get scope info")
                 }
             }
-            "debug" => {
-                let scope = session.get_scope_info().expect("Could not find target");
-                println!("{:?}", scope);
-                /* session.metadata.type_index.keys().for_each(|key| {
-                    println!("Valid Key: {}", key);
-                }); */
-                // session.debug(scope);
-            }
+            // "debug" => {
+            //     let path = std::path::PathBuf::from(
+            //         "/Users/tommy/Projects/imo/src/test/linux/running_task/running_task.c",
+            //     );
+
+            //     if let Some(val) = session.get_file_decl_order(path) {
+            //         println!("{:?}", val);
+            //     }
+            // }
             // Another debug
             "deb" => {
                 let arg = parts.next().unwrap();

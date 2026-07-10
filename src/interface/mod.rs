@@ -2,7 +2,7 @@
 pub mod linux;
 
 use crate::session::PlatformRegStruct;
-use std::{fmt, rc::Rc};
+use std::fmt;
 
 pub struct RegisterViewer {
     pub regs: PlatformRegStruct,

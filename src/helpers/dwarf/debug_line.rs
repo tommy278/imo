@@ -54,6 +54,7 @@ fn update_session_cache(
 
     // Iterate over the compilation units.
     let mut iter = dwarf.units();
+
     while let Some(header) = iter.next()? {
         let unit = dwarf.unit(header)?;
         let unit = unit.unit_ref(&dwarf);
@@ -139,6 +140,25 @@ fn update_session_cache(
                                 file: Rc::clone(file_rc),
                                 relative_address,
                             });
+
+                        session.address_to_location.insert(
+                            relative_address,
+                            SourceLocation {
+                                file: Rc::clone(file_rc),
+                                line,
+                            },
+                        );
+
+                        let declaration_history = session
+                            .file_declaration_order
+                            .entry(file_rc.to_path_buf())
+                            .or_insert_with(Vec::new);
+
+                        // Only push if not on the same line
+                        if declaration_history.last() != Some(&line) {
+                            declaration_history.push(line);
+                        }
+
                         registered_lines.insert(line);
                     }
                 }
