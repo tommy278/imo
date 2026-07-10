@@ -336,17 +336,19 @@ impl DwarfType {
                             ..
                         } = inner_value
                         {
+                            // Skip long rust names with angle brackets
                             if !name.contains("<") {
                                 *struct_name = format!("{}::{}", name, struct_name);
-                            } else {
-                                println!("{name}");
                             }
-                            return Some(inner_value);
+                            return Some(DebugValue::Variant {
+                                name: inner_name,
+                                field: None,
+                            });
                         }
 
                         return Some(DebugValue::Variant {
                             name: inner_name,
-                            field: Box::new(inner_value),
+                            field: Some(Box::new(inner_value)),
                         });
                     } else {
                         return Some(DebugValue::Err("Could not find active field".to_string()));
@@ -354,8 +356,6 @@ impl DwarfType {
                 } else {
                     return Some(DebugValue::Err("Could not find active enum".to_string()));
                 }
-
-                None
             }
             DwarfType::Structure {
                 name,

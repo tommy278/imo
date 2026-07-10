@@ -129,7 +129,7 @@ pub enum DebugValue {
     },
     Variant {
         name: String,
-        field: Box<DebugValue>,
+        field: Option<Box<DebugValue>>,
     },
     Struct {
         name: String,
@@ -189,7 +189,11 @@ impl fmt::Display for DebugValue {
                 heap_pointer_value, len, cap
             ),
             DebugValue::Variant { name, field } => {
-                write!(f, "{}({})", name, field)
+                if let Some(field) = field {
+                    write!(f, "{}({})", name, field)?;
+                    return Ok(());
+                }
+                write!(f, "{}", name)
             }
             DebugValue::Struct { name, fields } => {
                 if fields.is_empty() {
