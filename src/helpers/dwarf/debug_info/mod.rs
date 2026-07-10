@@ -106,7 +106,7 @@ pub enum DwarfType {
         fields: Vec<StructField>,
     },
 
-    Enum {
+    Variant {
         name: String,
         byte_size: u64,
         alignment: u64,
@@ -139,7 +139,7 @@ impl DwarfType {
             }
 
             DwarfType::Structure { byte_size, .. } => *byte_size,
-            DwarfType::Enum { byte_size, .. } => *byte_size,
+            DwarfType::Variant { byte_size, .. } => *byte_size,
         }
     }
 }
@@ -152,7 +152,7 @@ impl DwarfType {
             DwarfType::Const { .. } => "const".to_owned(),
             DwarfType::Array { .. } => "array".to_owned(),
             DwarfType::Structure { name, .. } => name.to_owned(),
-            DwarfType::Enum { name, .. } => name.to_owned(),
+            DwarfType::Variant { name, .. } => name.to_owned(),
         }
     }
     pub fn to_debug_value(
@@ -252,7 +252,7 @@ impl DwarfType {
                 }
                 Some(DebugValue::Array(array))
             }
-            DwarfType::Enum {
+            DwarfType::Variant {
                 name,
                 byte_size,
                 alignment,

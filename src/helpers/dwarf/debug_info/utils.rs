@@ -538,7 +538,7 @@ fn dump_unit(
                             })
                         }
 
-                        let enum_type = DwarfType::Enum {
+                        let enum_type = DwarfType::Variant {
                             name,
                             byte_size,
                             alignment,
