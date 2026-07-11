@@ -331,18 +331,36 @@ impl DwarfType {
                             .to_debug_value(type_index, address + field_def.location, pid)
                             .unwrap();
 
+                        // Handle all possible variations to display names
                         if let DebugValue::Struct {
                             name: ref mut struct_name,
-                            ..
+                            fields,
                         } = inner_value
                         {
                             // Skip long rust names with angle brackets
                             if !name.contains("<") {
                                 *struct_name = format!("{}::{}", name, struct_name);
                             }
+
+                            // No field because for structs the variant doesnt have the fields but it belongs to the struct
+                            // Example Some(12) would be displayed as Option<u32>::Some(12) otherwise
+                            if fields.is_empty() {
+                                return Some(DebugValue::Variant {
+                                    name: struct_name.to_string(),
+                                    field: None,
+                                });
+                            }
                             return Some(DebugValue::Variant {
                                 name: inner_name,
                                 field: None,
+                            });
+                        }
+
+                        // Again skip long rust names with angle brackets
+                        if !name.contains("<") {
+                            return Some(DebugValue::Variant {
+                                name: format!("{}::{}", name, inner_name),
+                                field: Some(Box::new(inner_value)),
                             });
                         }
 
