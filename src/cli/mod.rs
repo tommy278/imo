@@ -30,7 +30,8 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 session.continue_session();
                 break;
             }
-            "s" | "step" => {
+            // Step a single instruction
+            "si" => {
                 session.begin_step_process();
                 break;
             }

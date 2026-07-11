@@ -250,6 +250,8 @@ impl DebugSession {
                         }
                     }
                 }
+            } else {
+                return None;
             }
 
             let bytes = node.scope.get_bytes().unwrap();

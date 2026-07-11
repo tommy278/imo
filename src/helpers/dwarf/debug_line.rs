@@ -131,7 +131,7 @@ fn update_session_cache(
                     let is_already_registered = registered_lines.contains(&line);
                     let relative_address = row.address();
 
-                    if !is_already_registered && row.is_stmt() {
+                    if !is_already_registered {
                         session
                             .line_index
                             .entry(line)
@@ -141,25 +141,25 @@ fn update_session_cache(
                                 relative_address,
                             });
 
-                        session.address_to_location.insert(
-                            relative_address,
-                            SourceLocation {
-                                file: Rc::clone(file_rc),
-                                line,
-                            },
-                        );
-
-                        let declaration_history = session
-                            .file_declaration_order
-                            .entry(file_rc.to_path_buf())
-                            .or_insert_with(Vec::new);
-
-                        // Only push if not on the same line
-                        if declaration_history.last() != Some(&line) {
-                            declaration_history.push(line);
-                        }
-
                         registered_lines.insert(line);
+                    }
+
+                    session.address_to_location.insert(
+                        relative_address,
+                        SourceLocation {
+                            file: Rc::clone(file_rc),
+                            line,
+                        },
+                    );
+
+                    let declaration_history = session
+                        .file_declaration_order
+                        .entry(file_rc.to_path_buf())
+                        .or_insert_with(Vec::new);
+
+                    // Only push if not on the same line
+                    if declaration_history.last() != Some(&line) {
+                        declaration_history.push(line);
                     }
                 }
             }
