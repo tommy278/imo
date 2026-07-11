@@ -175,6 +175,7 @@ impl DwarfType {
         address: u64,
         pid: ProcessId,
     ) -> Option<DebugValue> {
+        println!("{}", self.get_name());
         match self {
             DwarfType::Base {
                 name,
@@ -507,15 +508,12 @@ impl DwarfType {
                 for field in fields {
                     let ty = type_index.get(&field.type_offset).unwrap();
 
-                    let value =
-                        ty.dwarf_type
-                            .to_debug_value(type_index, address + field.location, pid);
+                    let value = ty
+                        .dwarf_type
+                        .to_debug_value(type_index, address + field.location, pid)
+                        .unwrap();
 
-                    if value.is_none() {
-                        return None;
-                    }
-
-                    values.push(value.unwrap());
+                    values.push(value);
                 }
 
                 if name == "&str" {
@@ -537,10 +535,7 @@ impl DwarfType {
                     }
                 }
 
-                let is_tuple = name.starts_with('(')
-                    && fields
-                        .iter()
-                        .all(|f| f.name.starts_with("__") && f.name[2..].parse::<usize>().is_ok());
+                let is_tuple = fields.iter().all(|f| f.name.starts_with("__"));
 
                 if is_tuple {
                     return Some(DebugValue::Tuple(values));

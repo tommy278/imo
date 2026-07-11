@@ -138,6 +138,15 @@ pub enum DebugValue {
     Err(String),
 }
 
+impl DebugValue {
+    fn is_tuple(&self) -> bool {
+        match self {
+            DebugValue::Tuple(..) => true,
+            _ => false,
+        }
+    }
+}
+
 impl fmt::Display for DebugValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -146,9 +155,9 @@ impl fmt::Display for DebugValue {
             DebugValue::Usize(usize) => write!(f, "{usize}"),
             DebugValue::Isize(isize) => write!(f, "{isize}"),
             DebugValue::Float(fl) => write!(f, "{fl}"),
-            DebugValue::Char(c) => write!(f, "{c}"),
-            DebugValue::String(s) => write!(f, "{s}"),
-            DebugValue::StringSlice(slice) => write!(f, "{slice}"),
+            DebugValue::Char(c) => write!(f, "\'{c}\'"),
+            DebugValue::String(s) => write!(f, "\"{s}\""),
+            DebugValue::StringSlice(slice) => write!(f, "\"{slice}\""),
             DebugValue::Boolean(bool) => write!(f, "{bool}"),
             DebugValue::Pointer(ptr) => write!(f, "{ptr}"),
             DebugValue::Array(arr) => write!(f, "{:?}", arr),
@@ -166,7 +175,7 @@ impl fmt::Display for DebugValue {
                 format.pop();
                 format.push_str(")");
 
-                writeln!(f, "{format}")
+                write!(f, "{format}")
             }
             DebugValue::Enum { name, inner_name } => {
                 write!(f, "{}::{}", name, inner_name)
@@ -190,7 +199,12 @@ impl fmt::Display for DebugValue {
             ),
             DebugValue::Variant { name, field } => {
                 if let Some(field) = field {
-                    write!(f, "{}({})", name, field)?;
+                    // Avoid double parentheses from tuple and variant
+                    if field.is_tuple() {
+                        write!(f, "{}{}", name, field)?;
+                    } else {
+                        write!(f, "{}({})", name, field)?;
+                    }
                     return Ok(());
                 }
                 write!(f, "{}", name)
