@@ -97,9 +97,15 @@ impl fmt::Display for RegisterViewer {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct DebugStructField {
+    pub name: String,
+    pub value: DebugValue,
+}
+
 /// Covers all possible return values for the data found
 /// Add enums
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum DebugValue {
     Integer(i64),
     Unsigned(u64),
@@ -133,7 +139,7 @@ pub enum DebugValue {
     },
     Struct {
         name: String,
-        fields: Vec<DebugValue>,
+        fields: Vec<DebugStructField>,
     },
     Err(String),
 }
@@ -218,7 +224,7 @@ impl fmt::Display for DebugValue {
                 let mut format = format!("{} {{", name);
 
                 for field in fields {
-                    format.push_str(&format!("\n{}", field));
+                    format.push_str(&format!("\n   {}: {}", field.name, field.value));
                 }
 
                 format.push_str("\n}");

@@ -14,7 +14,7 @@ use object::BinaryFormat;
 
 use crate::helpers::dwarf::debug_info::utils::lookup_vars;
 use crate::helpers::dwarf::evaluate_frame_base_bytes;
-use crate::interface::{DebugValue, RegisterViewer};
+use crate::interface::{DebugStructField, DebugValue, RegisterViewer};
 use crate::session::ProcessId;
 
 /// Store different binary format to extract register values safely
@@ -175,7 +175,6 @@ impl DwarfType {
         address: u64,
         pid: ProcessId,
     ) -> Option<DebugValue> {
-        println!("{}", self.get_name());
         match self {
             DwarfType::Base {
                 name,
@@ -513,14 +512,17 @@ impl DwarfType {
                         .to_debug_value(type_index, address + field.location, pid)
                         .unwrap();
 
-                    values.push(value);
+                    values.push(DebugStructField {
+                        name: field.name.to_string(),
+                        value,
+                    });
                 }
 
                 if name == "&str" {
                     assert!(values.len() == 2);
 
-                    let ptr = &values[0];
-                    let len = &values[1];
+                    let ptr = &values[0].value;
+                    let len = &values[1].value;
 
                     if let (DebugValue::Pointer(ptr), DebugValue::Usize(len)) = (ptr, len) {
                         let res =
@@ -538,7 +540,9 @@ impl DwarfType {
                 let is_tuple = fields.iter().all(|f| f.name.starts_with("__"));
 
                 if is_tuple {
-                    return Some(DebugValue::Tuple(values));
+                    let tup_values: Vec<DebugValue> =
+                        values.iter().map(|f| f.value.clone()).collect();
+                    return Some(DebugValue::Tuple(tup_values));
                 }
 
                 let structure = DebugValue::Struct {
