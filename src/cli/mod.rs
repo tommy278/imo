@@ -150,15 +150,15 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                     println!("Could not get scope info")
                 }
             }
-            // "debug" => {
-            //     let path = std::path::PathBuf::from(
-            //         "/Users/tommy/Projects/imo/src/test/linux/running_task/running_task.c",
-            //     );
+            "debug" => {
+                let path = std::path::PathBuf::from(
+                    "/Users/tommy/Projects/imo/src/test/linux/rust_with_vars/rust_with_vars.rs",
+                );
 
-            //     if let Some(val) = session.get_file_decl_order(path) {
-            //         println!("{:?}", val);
-            //     }
-            // }
+                if let Some(val) = session.get_file_decl_order(path) {
+                    println!("{:?}", val);
+                }
+            }
             // Another debug
             "deb" => {
                 let arg = parts.next().unwrap();

@@ -1,5 +1,5 @@
 // NOTE: Compile with rustc -g rust_with_vars.rs
-use std::num::NonZeroU32;
+use std::collections::HashMap;
 fn main() {
     // Skip char support for now
     let c: char = 'l';
@@ -43,7 +43,6 @@ fn main() {
     let n = Niche::Value("niche".to_string());
     let ne = Niche::Empty;
     let oe: Option<char> = Some('b');
-    let nonzero_none: Option<NonZeroU32> = None;
     let nested_some: Option<Option<bool>> = Some(None);
     let nested_none: Option<Option<bool>> = None;
     let status_a = StackedStatus::Active(true);
@@ -51,6 +50,8 @@ fn main() {
 
     // NOTE: Debugger does not recognize these types yet
     let vec = vec![1, 2, 3, 4, 5];
+    let g: HashMap<u8, String> = HashMap::new();
+    let nested_vec = vec![vec![2]];
     let box_type = Box::new(12);
     let static_str = "Hello World";
     let string = String::from(static_str);

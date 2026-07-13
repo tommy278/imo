@@ -11,7 +11,7 @@ use std::{borrow, error, fs};
 
 use crate::helpers::dwarf::debug_info::{
     Abi, DebugVariable, DebuggerMetadataCache, DwarfType, EnumVariant, Enumerator, ExecutionScope,
-    ScopeCacheNode, StructField, TypeCacheNode,
+    GenericField, ScopeCacheNode, StructField, TypeCacheNode,
 };
 
 #[derive(Debug, Default)]
@@ -165,6 +165,7 @@ fn dump_unit(
             }
             constants::DW_TAG_pointer_type => {
                 let mut target_type_offset = None;
+                let mut name = None;
 
                 for attr in entry.attrs() {
                     match attr.name() {
@@ -173,12 +174,20 @@ fn dump_unit(
                                 target_type_offset = Some(offset.0);
                             }
                         }
+                        gimli::DW_AT_name => {
+                            if let Ok(str) = unit.attr_string(attr.value()) {
+                                name = Some(str.to_string_lossy().unwrap().to_string());
+                            }
+                        }
                         _ => continue,
                     }
                 }
 
-                if let Some(target_type_offset) = target_type_offset {
-                    let pointer_type = DwarfType::Pointer { target_type_offset };
+                if let (Some(name), Some(target_type_offset)) = (name, target_type_offset) {
+                    let pointer_type = DwarfType::Pointer {
+                        name,
+                        target_type_offset,
+                    };
                     let cache_node = TypeCacheNode {
                         dwarf_type: pointer_type,
                         offset,
@@ -384,6 +393,9 @@ fn dump_unit(
                 // Also doubles down as storage for regular structs
                 let mut fallback_fields = Vec::new();
 
+                // Storage for generic fields for example Vec<T> will produce T and the type it belongs to eg. i32
+                let mut generics: Vec<GenericField> = Vec::new();
+
                 if entry.has_children() {
                     // Iterate through children
                     let mut cursor = unit.entries_at_offset(entry.offset()).unwrap();
@@ -438,6 +450,36 @@ fn dump_unit(
                                     };
 
                                     fallback_fields.push(field);
+                                }
+                            }
+                            gimli::DW_TAG_template_type_parameter => {
+                                let mut name = None;
+                                let mut type_offset = None;
+
+                                for attr in child_entry.attrs() {
+                                    match attr.name() {
+                                        gimli::DW_AT_name => {
+                                            if let Ok(str) = unit.attr_string(attr.value()) {
+                                                name = Some(
+                                                    str.to_string_lossy().unwrap().to_string(),
+                                                );
+                                            }
+                                        }
+                                        gimli::DW_AT_type => {
+                                            if let gimli::AttributeValue::UnitRef(offset) =
+                                                attr.value()
+                                            {
+                                                type_offset = Some(offset.0);
+                                            }
+                                        }
+                                        _ => continue,
+                                    }
+                                }
+
+                                if let (Some(name), Some(type_offset)) = (name, type_offset) {
+                                    if !generics.iter().any(|g| g.name == name) {
+                                        generics.push(GenericField { name, type_offset });
+                                    }
                                 }
                             }
                             // Descend to the variant part
@@ -587,6 +629,7 @@ fn dump_unit(
                             name,
                             byte_size,
                             alignment,
+                            generics,
                             fields: fallback_fields,
                         };
 

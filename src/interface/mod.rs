@@ -120,6 +120,7 @@ pub enum DebugValue {
     Array(Vec<DebugValue>),
     Vec(Vec<DebugValue>),
     Tuple(Vec<DebugValue>),
+    Box(Box<DebugValue>),
     Enum {
         name: String,
         inner_name: String,
@@ -168,6 +169,7 @@ impl fmt::Display for DebugValue {
             DebugValue::Pointer(ptr) => write!(f, "{ptr}"),
             DebugValue::Array(arr) => write!(f, "{:?}", arr),
             DebugValue::Vec(vec) => write!(f, "{:?}", vec),
+            DebugValue::Box(val) => write!(f, "Box({})", val),
             DebugValue::Tuple(tup) => {
                 if tup.is_empty() {
                     return Ok(());

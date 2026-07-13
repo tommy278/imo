@@ -76,6 +76,12 @@ pub struct StructField {
 }
 
 #[derive(Debug, Clone)]
+pub struct GenericField {
+    pub name: String,
+    pub type_offset: usize,
+}
+
+#[derive(Debug, Clone)]
 pub struct Enumerator {
     name: String,
     value: u64,
@@ -92,7 +98,10 @@ pub enum DwarfType {
     },
 
     /// Pointer type
-    Pointer { target_type_offset: usize },
+    Pointer {
+        name: String,
+        target_type_offset: usize,
+    },
 
     /// Constant type
     Const { target_type_offset: usize },
@@ -108,6 +117,7 @@ pub enum DwarfType {
         name: String,
         byte_size: u64,
         alignment: u64,
+        generics: Vec<GenericField>,
         fields: Vec<StructField>,
     },
 
@@ -241,8 +251,19 @@ impl DwarfType {
                 }
             }
             // Pointer
-            DwarfType::Pointer { target_type_offset } => {
+            DwarfType::Pointer {
+                name,
+                target_type_offset,
+            } => {
                 let raw_data = crate::session::linux::peek_data(pid, address);
+                if name.starts_with("alloc::boxed::Box<") {
+                    let ty = type_index.get(target_type_offset).unwrap();
+                    let val = ty
+                        .dwarf_type
+                        .to_debug_value(type_index, raw_data as u64, pid)
+                        .unwrap();
+                    return Some(DebugValue::Box(Box::new(val)));
+                }
                 Some(DebugValue::Pointer(raw_data as usize))
             }
             // Array
@@ -379,6 +400,7 @@ impl DwarfType {
                 name,
                 byte_size,
                 alignment,
+                generics,
                 fields,
             } => {
                 // Handle base case for known rust types
