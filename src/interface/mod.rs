@@ -167,8 +167,38 @@ impl fmt::Display for DebugValue {
             DebugValue::StringSlice(slice) => write!(f, "\"{slice}\""),
             DebugValue::Boolean(bool) => write!(f, "{bool}"),
             DebugValue::Pointer(ptr) => write!(f, "{ptr}"),
-            DebugValue::Array(arr) => write!(f, "{:?}", arr),
-            DebugValue::Vec(vec) => write!(f, "{:?}", vec),
+            DebugValue::Array(arr) => {
+                if arr.is_empty() {
+                    write!(f, "[]")?;
+                    return Ok(());
+                }
+                let mut format = format!("[");
+
+                for val in arr {
+                    format.push_str(&format!("{},", val))
+                }
+
+                format.pop();
+                format.push(']');
+
+                write!(f, "{format}")
+            }
+            DebugValue::Vec(vec) => {
+                if vec.is_empty() {
+                    write!(f, "[]")?;
+                    return Ok(());
+                }
+                let mut format = format!("[");
+
+                for val in vec {
+                    format.push_str(&format!("{},", val))
+                }
+
+                format.pop();
+                format.push(']');
+
+                write!(f, "{format}")
+            }
             DebugValue::Box(val) => write!(f, "Box({})", val),
             DebugValue::Tuple(tup) => {
                 if tup.is_empty() {

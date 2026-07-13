@@ -276,13 +276,11 @@ impl DwarfType {
 
                 let offset_num = ty.dwarf_type.get_byte_size(type_index);
 
-                let mut offset = 0;
+                for i in 0..*count {
+                    let var =
+                        ty.dwarf_type
+                            .to_debug_value(type_index, address + offset_num * i, pid);
 
-                for _ in 0..*count {
-                    let resolved = address + offset;
-                    let var = ty.dwarf_type.to_debug_value(type_index, resolved, pid);
-
-                    offset += offset_num;
                     array.push(var.unwrap());
                 }
                 Some(DebugValue::Array(array))
@@ -432,6 +430,55 @@ impl DwarfType {
                             return Some(DebugValue::String(string));
                         }
                         return None;
+                    }
+                }
+
+                if name.starts_with("Vec<") {
+                    let len_field = fields.iter().find(|f| f.name == "len").unwrap();
+                    let len_ty = type_index.get(&len_field.type_offset).unwrap();
+
+                    let len = len_ty.dwarf_type.to_debug_value(
+                        type_index,
+                        address + len_field.location,
+                        pid,
+                    );
+
+                    let buf_field = fields.iter().find(|f| f.name == "buf").unwrap();
+                    let buf_ty = type_index.get(&buf_field.type_offset).unwrap();
+
+                    let buf = buf_ty.dwarf_type.to_debug_value(
+                        type_index,
+                        address + buf_field.location,
+                        pid,
+                    );
+
+                    let value = generics.iter().find(|g| g.name == "T").unwrap();
+                    let ty = type_index.get(&value.type_offset).unwrap();
+
+                    let size = ty.dwarf_type.get_byte_size(type_index);
+
+                    if let (
+                        Some(DebugValue::RawVecInner {
+                            heap_pointer_value,
+                            cap,
+                        }),
+                        Some(DebugValue::Usize(len)),
+                    ) = (buf, len)
+                    {
+                        let mut buffer = Vec::with_capacity(cap as usize);
+
+                        for i in 0..len {
+                            let data = ty
+                                .dwarf_type
+                                .to_debug_value(
+                                    type_index,
+                                    heap_pointer_value as u64 + i * size,
+                                    pid,
+                                )
+                                .unwrap();
+                            buffer.push(data);
+                        }
+                        return Some(DebugValue::Vec(buffer));
                     }
                 }
                 if name == "Vec<u8, alloc::alloc::Global>" {
