@@ -145,11 +145,33 @@ pub enum DebugValue {
     Err(String),
 }
 
+pub fn to_buffer(collection: &[DebugValue]) -> Vec<u8> {
+    let mut buffer = Vec::new();
+
+    for c in collection {
+        match c {
+            DebugValue::Integer(num) => buffer.push(*num as u8),
+            DebugValue::Unsigned(num) => buffer.push(*num as u8),
+            _ => continue,
+        }
+    }
+
+    buffer
+}
+
 impl DebugValue {
     fn is_tuple(&self) -> bool {
         match self {
             DebugValue::Tuple(..) => true,
             _ => false,
+        }
+    }
+
+    fn inner_vec(&self) -> Vec<DebugValue> {
+        match self {
+            DebugValue::Array(arr) => arr.to_vec(),
+            DebugValue::Vec(vec) => vec.to_vec(),
+            _ => Vec::new(),
         }
     }
 }

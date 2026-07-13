@@ -14,7 +14,7 @@ use object::BinaryFormat;
 
 use crate::helpers::dwarf::debug_info::utils::lookup_vars;
 use crate::helpers::dwarf::evaluate_frame_base_bytes;
-use crate::interface::{DebugStructField, DebugValue, RegisterViewer};
+use crate::interface::{DebugStructField, DebugValue, RegisterViewer, to_buffer};
 use crate::session::ProcessId;
 
 /// Store different binary format to extract register values safely
@@ -406,30 +406,17 @@ impl DwarfType {
                     let vec_field = fields.iter().find(|f| f.name == "vec").unwrap();
                     let vec_ty = type_index.get(&vec_field.type_offset).unwrap();
 
-                    let raw_parts = vec_ty.dwarf_type.to_debug_value(
+                    let buffer = vec_ty.dwarf_type.to_debug_value(
                         type_index,
                         address + vec_field.location,
                         pid,
                     );
 
-                    if let Some(DebugValue::RawParts {
-                        heap_pointer_value,
-                        len,
-                        cap,
-                    }) = raw_parts
-                    {
-                        let res = crate::session::linux::read_bytes(
-                            pid,
-                            heap_pointer_value,
-                            len as usize,
-                        );
+                    if let Some(DebugValue::Vec(buf)) = buffer {
+                        let raw_values = to_buffer(&buf);
+                        let string = String::from_utf8_lossy(&raw_values).into_owned();
 
-                        if let Some(res) = res {
-                            let string = String::from_utf8_lossy(&res).into_owned();
-
-                            return Some(DebugValue::String(string));
-                        }
-                        return None;
+                        return Some(DebugValue::String(string));
                     }
                 }
 
@@ -479,41 +466,6 @@ impl DwarfType {
                             buffer.push(data);
                         }
                         return Some(DebugValue::Vec(buffer));
-                    }
-                }
-                if name == "Vec<u8, alloc::alloc::Global>" {
-                    let len_field = fields.iter().find(|f| f.name == "len").unwrap();
-                    let len_ty = type_index.get(&len_field.type_offset).unwrap();
-
-                    let len = len_ty.dwarf_type.to_debug_value(
-                        type_index,
-                        address + len_field.location,
-                        pid,
-                    );
-
-                    let buf_field = fields.iter().find(|f| f.name == "buf").unwrap();
-                    let buf_ty = type_index.get(&buf_field.type_offset).unwrap();
-
-                    let buf = buf_ty.dwarf_type.to_debug_value(
-                        type_index,
-                        address + buf_field.location,
-                        pid,
-                    );
-
-                    if let (
-                        Some(DebugValue::RawVecInner {
-                            heap_pointer_value,
-                            cap,
-                        }),
-                        Some(DebugValue::Usize(len)),
-                    ) = (buf, len)
-                    {
-                        let raw_parts = DebugValue::RawParts {
-                            heap_pointer_value,
-                            len,
-                            cap,
-                        };
-                        return Some(raw_parts);
                     }
                 }
 
