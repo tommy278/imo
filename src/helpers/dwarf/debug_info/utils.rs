@@ -183,7 +183,7 @@ fn dump_unit(
                     }
                 }
 
-                if let (Some(name), Some(target_type_offset)) = (name, target_type_offset) {
+                if let Some(target_type_offset) = target_type_offset {
                     let pointer_type = DwarfType::Pointer {
                         name,
                         target_type_offset,

@@ -99,7 +99,7 @@ pub enum DwarfType {
 
     /// Pointer type
     Pointer {
-        name: String,
+        name: Option<String>,
         target_type_offset: usize,
     },
 
@@ -256,13 +256,15 @@ impl DwarfType {
                 target_type_offset,
             } => {
                 let raw_data = crate::session::linux::peek_data(pid, address);
-                if name.starts_with("alloc::boxed::Box<") {
-                    let ty = type_index.get(target_type_offset).unwrap();
-                    let val = ty
-                        .dwarf_type
-                        .to_debug_value(type_index, raw_data as u64, pid)
-                        .unwrap();
-                    return Some(DebugValue::Box(Box::new(val)));
+                if let Some(name) = name {
+                    if name.starts_with("alloc::boxed::Box<") {
+                        let ty = type_index.get(target_type_offset).unwrap();
+                        let val = ty
+                            .dwarf_type
+                            .to_debug_value(type_index, raw_data as u64, pid)
+                            .unwrap();
+                        return Some(DebugValue::Box(Box::new(val)));
+                    }
                 }
                 Some(DebugValue::Pointer(raw_data as usize))
             }
