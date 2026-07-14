@@ -144,7 +144,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                     if let Some(val) = session.get_var_value(scope, arg) {
                         println!("{} = {}", arg, val);
                     } else {
-                        println!("Var not in scope");
+                        println!("Var '{}' not in scope at current breakpoint", arg);
                     }
                 } else {
                     println!("Could not get scope info")
@@ -158,6 +158,10 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 if let Some(val) = session.get_file_decl_order(path) {
                     println!("{:?}", val);
                 }
+            }
+            "scope" => {
+                let scope = session.get_scope_info();
+                println!("{:?}", scope);
             }
             // Another debug
             "deb" => {

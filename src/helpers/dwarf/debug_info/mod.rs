@@ -257,13 +257,16 @@ impl DwarfType {
             } => {
                 let raw_data = crate::session::linux::peek_data(pid, address);
                 if let Some(name) = name {
+                    let ty = type_index.get(target_type_offset).unwrap();
+                    let val = ty
+                        .dwarf_type
+                        .to_debug_value(type_index, raw_data as u64, pid)
+                        .unwrap();
                     if name.starts_with("alloc::boxed::Box<") {
-                        let ty = type_index.get(target_type_offset).unwrap();
-                        let val = ty
-                            .dwarf_type
-                            .to_debug_value(type_index, raw_data as u64, pid)
-                            .unwrap();
                         return Some(DebugValue::Box(Box::new(val)));
+                    }
+                    if name.contains(";") {
+                        return Some(val);
                     }
                 }
                 Some(DebugValue::Pointer(raw_data as usize))

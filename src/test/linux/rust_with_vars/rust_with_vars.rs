@@ -48,9 +48,17 @@ fn main() {
     let status_a = StackedStatus::Active(true);
     let status_b = StackedStatus::Suspended;
 
+    if x > 12 {
+        let mut names = Vec::new();
+        names.push("Halland");
+        names.push("Dave");
+        names.push("Cleo");
+        println!("Hello World");
+    }
+
     // NOTE: Debugger does not recognize these types yet
     let vec = vec![1, 2, 3, 4, 5];
-    let g: HashMap<u8, String> = HashMap::new();
+    let mut g: HashMap<u8, &str> = HashMap::new();
     let nested_vec = vec![vec![2]];
     let box_type = Box::new(12);
     let static_str = "Hello World";

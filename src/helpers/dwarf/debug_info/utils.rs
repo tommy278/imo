@@ -707,8 +707,6 @@ fn dump_unit(
                         gimli::DW_AT_decl_line => {
                             if let gimli::AttributeValue::Udata(decl_line) = attr.value() {
                                 line = Some(decl_line as u64);
-                            } else {
-                                println!("Skipped: {:?}", attr.value());
                             }
                         }
                         _ => continue,

@@ -2,7 +2,7 @@ pub mod interface;
 #[cfg(target_os = "linux")]
 pub mod linux;
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -263,11 +263,7 @@ impl DebugSession {
                 return ty
                     .dwarf_type
                     .to_debug_value(&self.metadata.type_index, address, self.pid);
-            } else {
-                eprintln!("Could not find node");
             }
-        } else {
-            println!("Could not find var");
         }
         None
     }
