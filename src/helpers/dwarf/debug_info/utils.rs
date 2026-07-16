@@ -5,27 +5,14 @@
  * and integrated into the project's native debugger architecture.
  */
 
-use gimli::{Reader as _, constants};
+use gimli::{EndianSlice, Reader as _, RelocateReader, RunTimeEndian, UnitRef, constants};
 use object::{Object, ObjectSection};
 use std::{borrow, error, fs};
 
 use crate::helpers::dwarf::debug_info::{
-    Abi, DebugVariable, DebuggerMetadataCache, DwarfType, EnumVariant, Enumerator, ExecutionScope,
-    GenericField, ScopeCacheNode, StructField, TypeCacheNode,
+    Abi, DebuggerMetadataCache, DwarfType, EnumVariant, Enumerator, ExecutionScope, GenericField,
+    Reader, RelocationMap, ScopeCacheNode, StructField, TypeCacheNode, helpers::extract_variable,
 };
-
-#[derive(Debug, Default)]
-struct RelocationMap(object::read::RelocationMap);
-
-impl<'a> gimli::read::Relocate for &'a RelocationMap {
-    fn relocate_address(&self, offset: usize, value: u64) -> gimli::Result<u64> {
-        Ok(self.0.relocate(offset as u64, value))
-    }
-
-    fn relocate_offset(&self, offset: usize, value: usize) -> gimli::Result<usize> {
-        <usize as gimli::ReaderOffset>::from_u64(self.0.relocate(offset as u64, value as u64))
-    }
-}
 
 // The section data that will be stored in `DwarfSections` and `DwarfPackageSections`.
 #[derive(Default)]
@@ -36,9 +23,6 @@ struct Section<'data> {
 
 // The reader type that will be stored in `Dwarf` and `DwarfPackage`.
 // If you don't need relocations, you can use `gimli::EndianSlice` directly.
-type Reader<'data> =
-    gimli::RelocateReader<gimli::EndianSlice<'data, gimli::RunTimeEndian>, &'data RelocationMap>;
-
 pub fn lookup_vars(binary_path: &str, info_cache: &mut DebuggerMetadataCache) {
     let file = fs::File::open(binary_path).unwrap();
     // SAFETY: This is not safe. `gimli` does not mitigate against modifications to the
@@ -105,8 +89,8 @@ fn dump_file(
     Ok(())
 }
 
-fn dump_unit(
-    unit: gimli::UnitRef<Reader>,
+fn dump_unit<'a>(
+    unit: UnitRef<'a, RelocateReader<EndianSlice<'a, RunTimeEndian>, &'a RelocationMap>>,
     info_cache: &mut DebuggerMetadataCache,
 ) -> Result<(), gimli::Error> {
     // Update encoding in cache
@@ -681,54 +665,13 @@ fn dump_unit(
                 }
             }
             constants::DW_TAG_variable => {
-                let mut name = None;
-                let mut target_type_offset = None;
-                let mut location = None;
-                let mut line = None;
+                let debug_var = extract_variable(entry, unit);
 
-                for attr in entry.attrs() {
-                    match attr.name() {
-                        gimli::DW_AT_name => {
-                            if let Ok(str) = unit.attr_string(attr.value()) {
-                                name = Some(str.to_string_lossy().unwrap().to_string());
-                            }
-                        }
-                        gimli::DW_AT_type => {
-                            if let gimli::AttributeValue::UnitRef(offset) = attr.value() {
-                                target_type_offset = Some(offset.0);
-                            }
-                        }
-                        gimli::DW_AT_location => {
-                            if let gimli::AttributeValue::Exprloc(expression) = attr.value() {
-                                let slice = expression.0.inner();
-                                location = Some(slice.to_vec());
-                            }
-                        }
-                        gimli::DW_AT_decl_line => {
-                            if let gimli::AttributeValue::Udata(decl_line) = attr.value() {
-                                line = Some(decl_line as u64);
-                            }
-                        }
-                        _ => continue,
-                    }
-                }
+                if let (Some(idx), Some(debug_var)) = (current_scope_idx, debug_var) {
+                    let node: &mut ScopeCacheNode =
+                        info_cache.execution_scopes.get_mut(idx).unwrap();
 
-                if let (Some(name), Some(target_type_offset), Some(location), Some(decl_line)) =
-                    (name, target_type_offset, location, line)
-                {
-                    let debug_var = DebugVariable {
-                        name,
-                        target_type_offset,
-                        location,
-                        decl_line,
-                    };
-
-                    if let Some(idx) = current_scope_idx {
-                        let node: &mut ScopeCacheNode =
-                            info_cache.execution_scopes.get_mut(idx).unwrap();
-
-                        node.variables.push(debug_var);
-                    }
+                    node.variables.push(debug_var);
                 }
             }
             constants::DW_TAG_subprogram => {

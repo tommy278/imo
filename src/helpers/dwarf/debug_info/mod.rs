@@ -1,3 +1,4 @@
+pub mod helpers;
 pub mod utils;
 
 /*
@@ -16,6 +17,22 @@ use crate::helpers::dwarf::debug_info::utils::lookup_vars;
 use crate::helpers::dwarf::evaluate_frame_base_bytes;
 use crate::interface::{DebugStructField, DebugValue, RegisterViewer, to_buffer};
 use crate::session::ProcessId;
+
+pub type Reader<'data> =
+    gimli::RelocateReader<gimli::EndianSlice<'data, gimli::RunTimeEndian>, &'data RelocationMap>;
+
+#[derive(Debug, Default)]
+pub struct RelocationMap(object::read::RelocationMap);
+
+impl<'a> gimli::read::Relocate for &'a RelocationMap {
+    fn relocate_address(&self, offset: usize, value: u64) -> gimli::Result<u64> {
+        Ok(self.0.relocate(offset as u64, value))
+    }
+
+    fn relocate_offset(&self, offset: usize, value: usize) -> gimli::Result<usize> {
+        <usize as gimli::ReaderOffset>::from_u64(self.0.relocate(offset as u64, value as u64))
+    }
+}
 
 /// Store different binary format to extract register values safely
 #[derive(Debug, Default)]
