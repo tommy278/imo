@@ -140,7 +140,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
             "p" | "print" => {
                 let arg = parts.next().expect("No args");
 
-                if let Some(scope) = session.get_scope_info() {
+                if let Some(scope) = session.find_current_scope() {
                     if let Some(val) = session.get_var_value(scope, arg) {
                         println!("{} = {}", arg, val);
                     } else {
@@ -160,7 +160,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 }
             }
             "scope" => {
-                let scope = session.get_scope_info();
+                let scope = session.find_current_scope();
                 println!("{:?}", scope);
             }
             // Another debug

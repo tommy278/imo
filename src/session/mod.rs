@@ -217,6 +217,11 @@ impl DebugSession {
         });
     }
 
+    pub fn find_current_scope(&self) -> Option<&ScopeCacheNode> {
+        let current_pc = self.get_regs().regs.rip - self.base_address;
+        self.metadata.find_scope_by_pc(current_pc)
+    }
+
     /// Get the value of a variable with the given name
     pub fn get_var_value(&self, node: &ScopeCacheNode, name: &str) -> Option<DebugValue> {
         let regs = self.get_regs();
@@ -268,17 +273,17 @@ impl DebugSession {
         None
     }
 
-    pub fn get_scope_info(&self) -> Option<&ScopeCacheNode> {
-        let regs = self.get_regs().regs;
+    // pub fn get_scope_info(&self) -> Option<&ScopeCacheNode> {
+    //     let regs = self.get_regs().regs;
 
-        let current_pc = regs.rip - self.base_address;
+    //     let current_pc = regs.rip - self.base_address;
 
-        if let Some(scope_idx) = self.metadata.find_scope_by_pc(current_pc) {
-            let active_node = &self.metadata.execution_scopes[scope_idx];
-            return Some(active_node);
-        }
-        None
-    }
+    //     if let Some(scope_idx) = self.metadata.find_scope_by_pc(current_pc) {
+    //         let active_node = &self.metadata.execution_scopes[scope_idx];
+    //         return Some(active_node);
+    //     }
+    //     None
+    // }
 
     /// Clear all breakpoint for line_number by default
     /// Only clear specified breakpoints if file name is provided

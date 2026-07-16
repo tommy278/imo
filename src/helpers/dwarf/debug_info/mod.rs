@@ -607,18 +607,15 @@ pub enum ExecutionScope {
     Function {
         display_name: String,
         linkage_name: String,
-        low_pc: u64,
-        high_pc: u64,
-
         // Bytes for the instruction on how to get the frame_base
         bytes: Option<Vec<u8>>,
     },
 
     Inlined {
         abstract_origin_offset: usize,
-        low_pc: u64,
-        high_pc: u64,
     },
+
+    LexicalBlock,
 }
 
 impl ExecutionScope {
@@ -628,7 +625,7 @@ impl ExecutionScope {
             ExecutionScope::Function { bytes, .. } => {
                 bytes.as_ref().map_or(None, |bytes| Some(bytes))
             }
-            ExecutionScope::Inlined { .. } => None,
+            ExecutionScope::Inlined { .. } | ExecutionScope::LexicalBlock => None,
         }
     }
 }
@@ -684,12 +681,21 @@ impl DebugVariable {
     }
 }
 
+#[derive(Debug)]
+pub struct AddressRange {
+    low_pc: u64,
+    high_pc: u64,
+}
+
 /// Current scope of event being executed
 #[derive(Debug)]
 pub struct ScopeCacheNode {
     pub scope: ExecutionScope,
     pub offset: usize,
     pub variables: Vec<DebugVariable>,
+
+    pub ranges: Vec<AddressRange>,
+    pub children: Vec<ScopeCacheNode>,
 }
 
 impl ScopeCacheNode {
@@ -723,6 +729,21 @@ impl ScopeCacheNode {
     pub fn get_variable_with_name(&self, name: &str) -> Option<&DebugVariable> {
         self.variables.iter().find(|var| var.name == name)
     }
+
+    pub fn find_active_scope(&self, pc: u64) -> Option<&ScopeCacheNode> {
+        let pc_in_scope = self.ranges.iter().any(|r| pc >= r.low_pc && pc < r.high_pc);
+        if !pc_in_scope {
+            return None;
+        }
+
+        for child in self.children.iter() {
+            if let Some(deepest_match) = child.find_active_scope(pc) {
+                return Some(deepest_match);
+            }
+        }
+
+        Some(self)
+    }
 }
 
 #[derive(Debug)]
@@ -754,59 +775,16 @@ impl DebuggerMetadataCache {
         lookup_vars(binary_path, &mut default_cache);
 
         // Sort the cache for binary seach later
-        default_cache.sort();
 
         default_cache
     }
 
-    /// Sort the scopes by their low_pc to make binary search possible
-    pub fn sort(&mut self) {
-        self.execution_scopes.sort_by_key(|node| match &node.scope {
-            ExecutionScope::Function { low_pc, .. } => *low_pc,
-            ExecutionScope::Inlined { low_pc, .. } => *low_pc,
-        });
-    }
-
-    /// Binary search to find a range where the pc can fit within a scope
-    pub fn find_scope_by_pc(&self, pc: u64) -> Option<usize> {
-        // Binary search to find where this PC would fit based on the sorted low_pc values
-        let search_result = self.execution_scopes.binary_search_by(|node| {
-            let node_low_pc = match &node.scope {
-                ExecutionScope::Function { low_pc, .. } => *low_pc,
-                ExecutionScope::Inlined { low_pc, .. } => *low_pc,
-            };
-            node_low_pc.cmp(&pc)
-        });
-
-        // Detarmine starting idx from the binary search result
-        let starting_idx = match search_result {
-            Ok(exact_idx) => exact_idx,
-            Err(insertion_idx) => {
-                if insertion_idx == 0 {
-                    return None;
-                }
-                insertion_idx - 1
-            }
-        };
-
-        // Linear scan backward slightly because multiple inline scopes might share the same low_pc
-        for idx in (0..=starting_idx).rev() {
-            let node = &self.execution_scopes[idx];
-            let (low, high) = match &node.scope {
-                ExecutionScope::Function {
-                    low_pc, high_pc, ..
-                } => (*low_pc, *high_pc),
-                ExecutionScope::Inlined {
-                    low_pc, high_pc, ..
-                } => (*low_pc, *high_pc),
-            };
-
-            // Found and index within scope
-            if pc >= low && pc < high {
-                return Some(idx);
+    pub fn find_scope_by_pc(&self, pc: u64) -> Option<&ScopeCacheNode> {
+        for scope in self.execution_scopes.iter() {
+            if scope.find_active_scope(pc).is_some() {
+                return Some(scope);
             }
         }
-
         None
     }
 }

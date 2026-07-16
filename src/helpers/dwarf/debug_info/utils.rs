@@ -5,13 +5,15 @@
  * and integrated into the project's native debugger architecture.
  */
 
-use gimli::{EndianSlice, Reader as _, RelocateReader, RunTimeEndian, UnitRef, constants};
+use gimli::{EndianSlice, Range, Reader as _, RelocateReader, RunTimeEndian, UnitRef, constants};
+use nix::libc::execl;
 use object::{Object, ObjectSection};
 use std::{borrow, error, fs};
 
 use crate::helpers::dwarf::debug_info::{
-    Abi, DebuggerMetadataCache, DwarfType, EnumVariant, Enumerator, ExecutionScope, GenericField,
-    Reader, RelocationMap, ScopeCacheNode, StructField, TypeCacheNode, helpers::extract_variable,
+    Abi, AddressRange, DebuggerMetadataCache, DwarfType, EnumVariant, Enumerator, ExecutionScope,
+    GenericField, Reader, RelocationMap, ScopeCacheNode, StructField, TypeCacheNode,
+    helpers::{extract_inline, extract_subprogram, extract_variable},
 };
 
 // The section data that will be stored in `DwarfSections` and `DwarfPackageSections`.
@@ -100,10 +102,8 @@ fn dump_unit<'a>(
 
     // Iterate over the Debugging Information Entries (DIEs) in the unit.
     let mut entries = unit.entries();
-    // Keep track of the index of the function being processed inside the vec
-    let mut current_scope_idx = None;
 
-    while let Some(entry) = entries.next_dfs()? {
+    while let Some(entry) = entries.current() {
         let offset = entry.offset().0;
 
         // Parse each entries for the needed values while skipping redundant values
@@ -146,6 +146,8 @@ fn dump_unit<'a>(
                     };
                     info_cache.type_index.insert(offset, cache_node);
                 }
+
+                entries.next_dfs()?;
             }
             constants::DW_TAG_pointer_type => {
                 let mut target_type_offset = None;
@@ -178,6 +180,8 @@ fn dump_unit<'a>(
                     };
                     info_cache.type_index.insert(offset, cache_node);
                 }
+
+                entries.next_dfs()?;
             }
             constants::DW_TAG_const_type => {
                 let mut target_type_offset = None;
@@ -203,6 +207,8 @@ fn dump_unit<'a>(
                     };
                     info_cache.type_index.insert(offset, cache_node);
                 }
+
+                entries.next_dfs()?;
             }
             constants::DW_TAG_enumeration_type => {
                 let mut name = None;
@@ -285,6 +291,8 @@ fn dump_unit<'a>(
 
                     info_cache.type_index.insert(offset, cache_node);
                 }
+
+                entries.next_dfs()?;
             }
             constants::DW_TAG_array_type => {
                 let mut target_type_offset = None;
@@ -340,6 +348,8 @@ fn dump_unit<'a>(
                         info_cache.type_index.insert(offset, cache_node);
                     }
                 }
+
+                entries.next_dfs()?;
             }
             constants::DW_TAG_structure_type => {
                 let mut name = None;
@@ -663,146 +673,22 @@ fn dump_unit<'a>(
                         info_cache.type_index.insert(offset, cache_node);
                     }
                 }
-            }
-            constants::DW_TAG_variable => {
-                let debug_var = extract_variable(entry, unit);
-
-                if let (Some(idx), Some(debug_var)) = (current_scope_idx, debug_var) {
-                    let node: &mut ScopeCacheNode =
-                        info_cache.execution_scopes.get_mut(idx).unwrap();
-
-                    node.variables.push(debug_var);
-                }
+                entries.next_dfs()?;
             }
             constants::DW_TAG_subprogram => {
-                let mut low_pc = None;
-                let mut high_pc_attr = None;
-                let mut display_name = None;
-                let mut linkage_name = None;
-
-                let mut bytes = None;
-
-                for attr in entry.attrs() {
-                    match attr.name() {
-                        gimli::DW_AT_low_pc => {
-                            if let gimli::AttributeValue::Addr(addr) = attr.value() {
-                                low_pc = Some(addr);
-                            }
-                        }
-                        gimli::DW_AT_high_pc => {
-                            high_pc_attr = Some(attr.value());
-                        }
-                        gimli::DW_AT_name => {
-                            if let Ok(str) = unit.attr_string(attr.value()) {
-                                display_name = Some(str.to_string_lossy().unwrap().to_string());
-                            }
-                        }
-                        gimli::DW_AT_linkage_name => {
-                            if let Ok(str) = unit.attr_string(attr.value()) {
-                                linkage_name = Some(str.to_string_lossy().unwrap().to_string());
-                            }
-                        }
-                        gimli::DW_AT_frame_base => {
-                            if let gimli::AttributeValue::Exprloc(expression) = attr.value() {
-                                bytes = Some(expression.0.inner().to_vec());
-                            }
-                        }
-                        _ => continue,
-                    }
-                }
-
-                // Ignore entries where the low_pc is 0
-                if low_pc.is_some_and(|pc| pc == 0) {
-                    continue;
-                }
-
-                let mut high_pc = None;
-                if let (Some(low), Some(high)) = (low_pc, high_pc_attr) {
-                    high_pc = match high {
-                        gimli::AttributeValue::Addr(addr) => Some(addr),
-                        gimli::AttributeValue::Udata(offset) => Some(low + offset),
-                        _ => None,
-                    };
-                }
-
-                if let (Some(low_pc), Some(high_pc), Some(display_name), Some(linkage_name)) =
-                    (low_pc, high_pc, display_name, linkage_name)
-                {
-                    let inlined = ExecutionScope::Function {
-                        display_name,
-                        linkage_name,
-                        low_pc,
-                        high_pc,
-                        bytes,
-                    };
-                    let node = ScopeCacheNode {
-                        scope: inlined,
-                        offset,
-                        variables: Vec::new(),
-                    };
-
-                    info_cache.execution_scopes.push(node);
-                    current_scope_idx = Some(info_cache.execution_scopes.len() - 1);
+                if let Some(function) = extract_subprogram(&mut entries, unit) {
+                    info_cache.execution_scopes.push(function);
                 }
             }
             constants::DW_TAG_inlined_subroutine => {
-                let mut low_pc = None;
-                let mut high_pc_attr = None;
-                let mut abstract_origin_offset = None;
-
-                for attr in entry.attrs() {
-                    match attr.name() {
-                        gimli::DW_AT_low_pc => {
-                            if let gimli::AttributeValue::Addr(addr) = attr.value() {
-                                low_pc = Some(addr);
-                            }
-                        }
-                        gimli::DW_AT_high_pc => {
-                            high_pc_attr = Some(attr.value());
-                        }
-                        gimli::DW_AT_abstract_origin => {
-                            if let gimli::AttributeValue::UnitRef(offset) = attr.value() {
-                                abstract_origin_offset = Some(offset.0);
-                            }
-                        }
-                        _ => continue,
-                    }
-                }
-
-                // Ignore entries where the low_pc is 0
-                if low_pc.is_some_and(|pc| pc == 0) {
-                    continue;
-                }
-
-                let mut high_pc = None;
-                if let (Some(low), Some(high)) = (low_pc, high_pc_attr) {
-                    high_pc = match high {
-                        gimli::AttributeValue::Addr(addr) => Some(addr),
-                        gimli::AttributeValue::Udata(offset) => Some(low + offset),
-                        _ => None,
-                    };
-                }
-
-                if let (Some(low_pc), Some(high_pc), Some(abstract_origin_offset)) =
-                    (low_pc, high_pc, abstract_origin_offset)
-                {
-                    let inlined = ExecutionScope::Inlined {
-                        abstract_origin_offset,
-                        low_pc,
-                        high_pc,
-                    };
-
-                    let node = ScopeCacheNode {
-                        scope: inlined,
-                        offset,
-                        variables: Vec::new(),
-                    };
-
-                    info_cache.execution_scopes.push(node);
-                    current_scope_idx = Some(info_cache.execution_scopes.len() - 1);
+                if let Some(inline) = extract_inline(&mut entries, unit) {
+                    info_cache.execution_scopes.push(inline);
                 }
             }
-            _ => continue,
+            gimli::DW_TAG_lexical_block => {}
+            _ => {
+                entries.next_dfs()?;
+            }
         }
     }
     Ok(())
