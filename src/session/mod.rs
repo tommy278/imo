@@ -219,6 +219,7 @@ impl DebugSession {
 
     pub fn find_current_scope(&self) -> Option<&ScopeCacheNode> {
         let current_pc = self.get_regs().regs.rip - self.base_address;
+        println!("Current PC: {}", current_pc);
         self.metadata.find_scope_by_pc(current_pc)
     }
 

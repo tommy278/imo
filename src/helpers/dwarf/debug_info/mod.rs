@@ -731,7 +731,7 @@ impl ScopeCacheNode {
     }
 
     pub fn find_active_scope(&self, pc: u64) -> Option<&ScopeCacheNode> {
-        let pc_in_scope = self.ranges.iter().any(|r| pc >= r.low_pc && pc < r.high_pc);
+        let pc_in_scope = self.ranges.iter().any(|r| r.low_pc <= pc && pc < r.high_pc);
         if !pc_in_scope {
             return None;
         }
@@ -774,15 +774,13 @@ impl DebuggerMetadataCache {
         // Populate the cache with data
         lookup_vars(binary_path, &mut default_cache);
 
-        // Sort the cache for binary seach later
-
         default_cache
     }
 
     pub fn find_scope_by_pc(&self, pc: u64) -> Option<&ScopeCacheNode> {
         for scope in self.execution_scopes.iter() {
-            if scope.find_active_scope(pc).is_some() {
-                return Some(scope);
+            if let Some(deepest_match) = scope.find_active_scope(pc) {
+                return Some(deepest_match);
             }
         }
         None

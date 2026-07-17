@@ -13,7 +13,7 @@ use std::{borrow, error, fs};
 use crate::helpers::dwarf::debug_info::{
     Abi, AddressRange, DebuggerMetadataCache, DwarfType, EnumVariant, Enumerator, ExecutionScope,
     GenericField, Reader, RelocationMap, ScopeCacheNode, StructField, TypeCacheNode,
-    helpers::{extract_inline, extract_subprogram, extract_variable},
+    helpers::{extract_inline, extract_lexical_block, extract_subprogram, extract_variable},
 };
 
 // The section data that will be stored in `DwarfSections` and `DwarfPackageSections`.
@@ -102,6 +102,9 @@ fn dump_unit<'a>(
 
     // Iterate over the Debugging Information Entries (DIEs) in the unit.
     let mut entries = unit.entries();
+
+    // NOTE: For some reason first entry is always none, so skip it to loop safely
+    entries.next_dfs()?;
 
     while let Some(entry) = entries.current() {
         let offset = entry.offset().0;
@@ -676,16 +679,23 @@ fn dump_unit<'a>(
                 entries.next_dfs()?;
             }
             constants::DW_TAG_subprogram => {
-                if let Some(function) = extract_subprogram(&mut entries, unit) {
+                if let Some(function) = extract_subprogram(&mut entries, &unit) {
                     info_cache.execution_scopes.push(function);
                 }
+                entries.next_dfs()?;
             }
             constants::DW_TAG_inlined_subroutine => {
-                if let Some(inline) = extract_inline(&mut entries, unit) {
+                if let Some(inline) = extract_inline(&mut entries, &unit) {
                     info_cache.execution_scopes.push(inline);
                 }
+                entries.next_dfs()?;
             }
-            gimli::DW_TAG_lexical_block => {}
+            constants::DW_TAG_lexical_block => {
+                if let Some(lexical_block) = extract_lexical_block(&mut entries, &unit) {
+                    info_cache.execution_scopes.push(lexical_block);
+                }
+                entries.next_dfs()?;
+            }
             _ => {
                 entries.next_dfs()?;
             }

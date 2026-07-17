@@ -160,8 +160,9 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 }
             }
             "scope" => {
-                let scope = session.find_current_scope();
-                println!("{:?}", scope);
+                if let Some(scope) = session.find_current_scope() {
+                    println!("{:?}", scope);
+                }
             }
             // Another debug
             "deb" => {

@@ -1,18 +1,12 @@
-use gimli::{
-    DebuggingInformationEntry, EndianSlice, EntriesCursor, Reader as _, RelocateReader,
-    RunTimeEndian, UnitRef, constants,
-};
+use gimli::{DebuggingInformationEntry, EntriesCursor, Reader as _, UnitRef, constants};
 
 use crate::helpers::dwarf::debug_info::{
-    AddressRange, DebugVariable, ExecutionScope, RelocationMap, ScopeCacheNode,
+    AddressRange, DebugVariable, ExecutionScope, Reader, ScopeCacheNode,
 };
 
 pub fn extract_variable<'a>(
-    entry: &DebuggingInformationEntry<
-        RelocateReader<EndianSlice<'a, RunTimeEndian>, &'a RelocationMap>,
-        usize,
-    >,
-    unit: UnitRef<'a, RelocateReader<EndianSlice<'a, RunTimeEndian>, &'a RelocationMap>>,
+    entry: &DebuggingInformationEntry<Reader<'a>, usize>,
+    unit: &UnitRef<Reader<'a>>,
 ) -> Option<DebugVariable> {
     let mut name = None;
     let mut target_type_offset = None;
@@ -62,11 +56,8 @@ pub fn extract_variable<'a>(
 }
 
 pub fn extract_subprogram<'a>(
-    cursor: &mut EntriesCursor<
-        'a,
-        RelocateReader<EndianSlice<'a, RunTimeEndian>, &'a RelocationMap>,
-    >,
-    unit: UnitRef<'a, RelocateReader<EndianSlice<'a, RunTimeEndian>, &'a RelocationMap>>,
+    cursor: &mut EntriesCursor<'a, Reader<'a>>,
+    unit: &UnitRef<'a, Reader<'a>>,
 ) -> Option<ScopeCacheNode> {
     let mut low_pc = None;
     let mut high_pc_attr = None;
@@ -118,7 +109,7 @@ pub fn extract_subprogram<'a>(
             }
             match child_entry.tag() {
                 constants::DW_TAG_variable => {
-                    let variable = extract_variable(child_entry, unit);
+                    let variable = extract_variable(child_entry, &unit);
 
                     if let Some(var) = variable {
                         variables.push(var);
@@ -136,8 +127,13 @@ pub fn extract_subprogram<'a>(
                         children.push(inline);
                     }
                 }
+
+                constants::DW_TAG_lexical_block => {
+                    if let Some(lexical_block) = extract_lexical_block(cursor, unit) {
+                        children.push(lexical_block);
+                    }
+                }
                 constants::DW_TAG_null => {
-                    cursor.next_dfs().unwrap();
                     break;
                 }
                 _ => continue,
@@ -184,11 +180,8 @@ pub fn extract_subprogram<'a>(
 }
 
 pub fn extract_inline<'a>(
-    cursor: &mut EntriesCursor<
-        'a,
-        RelocateReader<EndianSlice<'a, RunTimeEndian>, &'a RelocationMap>,
-    >,
-    unit: UnitRef<'a, RelocateReader<EndianSlice<'a, RunTimeEndian>, &'a RelocationMap>>,
+    cursor: &mut EntriesCursor<'a, Reader<'a>>,
+    unit: &UnitRef<'a, Reader<'a>>,
 ) -> Option<ScopeCacheNode> {
     let mut low_pc = None;
     let mut high_pc_attr = None;
@@ -219,7 +212,7 @@ pub fn extract_inline<'a>(
     let mut children = Vec::new();
 
     if entry.has_children() {
-        let parent_depth = cursor.depth();
+        let parent_depth = entry.depth();
 
         while let Some(child_entry) = cursor.next_dfs().unwrap() {
             if child_entry.depth() <= parent_depth {
@@ -243,8 +236,12 @@ pub fn extract_inline<'a>(
                         children.push(inline);
                     }
                 }
+                constants::DW_TAG_lexical_block => {
+                    if let Some(lexical_block) = extract_lexical_block(cursor, unit) {
+                        children.push(lexical_block);
+                    }
+                }
                 constants::DW_TAG_null => {
-                    cursor.next_dfs().unwrap();
                     break;
                 }
                 _ => continue,
@@ -277,6 +274,133 @@ pub fn extract_inline<'a>(
 
         let node = ScopeCacheNode {
             scope: inlined,
+            offset: entry.offset().0,
+            variables,
+            ranges,
+            children,
+        };
+
+        return Some(node);
+    }
+
+    None
+}
+
+pub fn extract_lexical_block<'a>(
+    cursor: &mut EntriesCursor<'a, Reader<'a>>,
+    unit: &UnitRef<'a, Reader<'a>>,
+) -> Option<ScopeCacheNode> {
+    let mut low_pc = None;
+    let mut high_pc_attr = None;
+    let mut range_list_offset = None;
+    let mut block_ranges = Vec::new();
+
+    let entry = cursor.current().unwrap().clone();
+
+    for attr in entry.attrs() {
+        match attr.name() {
+            gimli::DW_AT_low_pc => {
+                if let gimli::AttributeValue::Addr(addr) = attr.value() {
+                    low_pc = Some(addr);
+                }
+            }
+            gimli::DW_AT_high_pc => {
+                high_pc_attr = Some(attr.value());
+            }
+            gimli::DW_AT_ranges => {
+                if let gimli::AttributeValue::RangeListsRef(offset) = attr.value() {
+                    range_list_offset = Some(offset);
+                }
+            }
+            _ => continue,
+        }
+    }
+
+    let mut variables = Vec::new();
+    let mut children = Vec::new();
+
+    if entry.has_children() {
+        let parent_depth = entry.depth();
+
+        while let Some(child_entry) = cursor.next_dfs().unwrap() {
+            if child_entry.depth() <= parent_depth {
+                break;
+            }
+            match child_entry.tag() {
+                constants::DW_TAG_variable => {
+                    let variable = extract_variable(child_entry, unit);
+
+                    if let Some(var) = variable {
+                        variables.push(var);
+                    }
+                }
+                constants::DW_TAG_subprogram => {
+                    if let Some(function) = extract_subprogram(cursor, unit) {
+                        children.push(function);
+                    }
+                }
+                constants::DW_TAG_inlined_subroutine => {
+                    if let Some(inline) = extract_inline(cursor, unit) {
+                        children.push(inline);
+                    }
+                }
+                constants::DW_TAG_lexical_block => {
+                    if let Some(lexical_block) = extract_lexical_block(cursor, unit) {
+                        children.push(lexical_block);
+                    }
+                }
+                constants::DW_TAG_null => {
+                    break;
+                }
+                _ => continue,
+            }
+        }
+    }
+
+    if let Some(range_list_offset) = range_list_offset {
+        let offset = unit.ranges_offset_from_raw(range_list_offset);
+        if let Ok(mut range_iter) = unit.ranges(offset) {
+            while let Ok(Some(range)) = range_iter.next() {
+                block_ranges.push(AddressRange {
+                    low_pc: range.begin,
+                    high_pc: range.end,
+                });
+            }
+        }
+
+        let lexical_block = ExecutionScope::LexicalBlock;
+
+        let node = ScopeCacheNode {
+            scope: lexical_block,
+            offset: entry.offset().0,
+            variables,
+            ranges: block_ranges,
+            children,
+        };
+
+        return Some(node);
+    }
+
+    if low_pc.is_some_and(|pc| pc == 0) {
+        return None;
+    }
+
+    let mut high_pc = None;
+    if let (Some(low), Some(high)) = (low_pc, high_pc_attr) {
+        high_pc = match high {
+            gimli::AttributeValue::Addr(addr) => Some(addr),
+            gimli::AttributeValue::Udata(offset) => Some(low + offset),
+            _ => None,
+        };
+    }
+
+    if let (Some(low_pc), Some(high_pc)) = (low_pc, high_pc) {
+        let lexical_block = ExecutionScope::LexicalBlock;
+
+        let ranges = vec![AddressRange { low_pc, high_pc }];
+
+        let node = ScopeCacheNode {
+            scope: lexical_block,
             offset: entry.offset().0,
             variables,
             ranges,
