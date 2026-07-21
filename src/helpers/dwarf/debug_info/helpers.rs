@@ -192,12 +192,8 @@ pub fn extract_inline<'a>(
         };
     }
 
-    if let (Some(low_pc), Some(high_pc), Some(abstract_origin_offset)) =
-        (low_pc, high_pc, abstract_origin_offset)
-    {
-        let inlined = ExecutionScope::Inlined {
-            abstract_origin_offset,
-        };
+    if let (Some(low_pc), Some(high_pc)) = (low_pc, high_pc) {
+        let inlined = ExecutionScope::Inlined;
 
         let ranges = vec![AddressRange { low_pc, high_pc }];
 

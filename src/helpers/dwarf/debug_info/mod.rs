@@ -611,9 +611,7 @@ pub enum ExecutionScope {
         bytes: Option<Vec<u8>>,
     },
 
-    Inlined {
-        abstract_origin_offset: usize,
-    },
+    Inlined,
 
     LexicalBlock,
 }
@@ -625,7 +623,7 @@ impl ExecutionScope {
             ExecutionScope::Function { bytes, .. } => {
                 bytes.as_ref().map_or(None, |bytes| Some(bytes))
             }
-            ExecutionScope::Inlined { .. } | ExecutionScope::LexicalBlock => None,
+            ExecutionScope::Inlined | ExecutionScope::LexicalBlock => None,
         }
     }
 }
