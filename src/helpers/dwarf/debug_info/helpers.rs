@@ -101,44 +101,7 @@ pub fn extract_subprogram<'a>(
     let mut children = Vec::new();
 
     if entry.has_children() {
-        let parent_depth = entry.depth();
-
-        while let Some(child_entry) = cursor.next_dfs().unwrap() {
-            if child_entry.depth() <= parent_depth {
-                break;
-            }
-            match child_entry.tag() {
-                constants::DW_TAG_variable => {
-                    let variable = extract_variable(child_entry, &unit);
-
-                    if let Some(var) = variable {
-                        variables.push(var);
-                    }
-                }
-                constants::DW_TAG_subprogram => {
-                    let function = extract_subprogram(cursor, unit);
-
-                    if let Some(func) = function {
-                        children.push(func);
-                    }
-                }
-                constants::DW_TAG_inlined_subroutine => {
-                    if let Some(inline) = extract_inline(cursor, unit) {
-                        children.push(inline);
-                    }
-                }
-
-                constants::DW_TAG_lexical_block => {
-                    if let Some(lexical_block) = extract_lexical_block(cursor, unit) {
-                        children.push(lexical_block);
-                    }
-                }
-                constants::DW_TAG_null => {
-                    break;
-                }
-                _ => continue,
-            }
-        }
+        populate_children(cursor, unit, &mut children, &mut variables);
     }
 
     // Ignore entries where the low_pc is 0
@@ -212,41 +175,7 @@ pub fn extract_inline<'a>(
     let mut children = Vec::new();
 
     if entry.has_children() {
-        let parent_depth = entry.depth();
-
-        while let Some(child_entry) = cursor.next_dfs().unwrap() {
-            if child_entry.depth() <= parent_depth {
-                break;
-            }
-            match child_entry.tag() {
-                constants::DW_TAG_variable => {
-                    let variable = extract_variable(child_entry, unit);
-
-                    if let Some(var) = variable {
-                        variables.push(var);
-                    }
-                }
-                constants::DW_TAG_subprogram => {
-                    if let Some(function) = extract_subprogram(cursor, unit) {
-                        children.push(function);
-                    }
-                }
-                constants::DW_TAG_inlined_subroutine => {
-                    if let Some(inline) = extract_inline(cursor, unit) {
-                        children.push(inline);
-                    }
-                }
-                constants::DW_TAG_lexical_block => {
-                    if let Some(lexical_block) = extract_lexical_block(cursor, unit) {
-                        children.push(lexical_block);
-                    }
-                }
-                constants::DW_TAG_null => {
-                    break;
-                }
-                _ => continue,
-            }
-        }
+        populate_children(cursor, unit, &mut children, &mut variables);
     }
 
     // Ignore entries where the low_pc is 0
@@ -320,41 +249,7 @@ pub fn extract_lexical_block<'a>(
     let mut children = Vec::new();
 
     if entry.has_children() {
-        let parent_depth = entry.depth();
-
-        while let Some(child_entry) = cursor.next_dfs().unwrap() {
-            if child_entry.depth() <= parent_depth {
-                break;
-            }
-            match child_entry.tag() {
-                constants::DW_TAG_variable => {
-                    let variable = extract_variable(child_entry, unit);
-
-                    if let Some(var) = variable {
-                        variables.push(var);
-                    }
-                }
-                constants::DW_TAG_subprogram => {
-                    if let Some(function) = extract_subprogram(cursor, unit) {
-                        children.push(function);
-                    }
-                }
-                constants::DW_TAG_inlined_subroutine => {
-                    if let Some(inline) = extract_inline(cursor, unit) {
-                        children.push(inline);
-                    }
-                }
-                constants::DW_TAG_lexical_block => {
-                    if let Some(lexical_block) = extract_lexical_block(cursor, unit) {
-                        children.push(lexical_block);
-                    }
-                }
-                constants::DW_TAG_null => {
-                    break;
-                }
-                _ => continue,
-            }
-        }
+        populate_children(cursor, unit, &mut children, &mut variables);
     }
 
     if let Some(range_list_offset) = range_list_offset {
@@ -411,4 +306,48 @@ pub fn extract_lexical_block<'a>(
     }
 
     None
+}
+
+fn populate_children<'a>(
+    cursor: &mut EntriesCursor<'a, Reader<'a>>,
+    unit: &UnitRef<'a, Reader<'a>>,
+    children: &mut Vec<ScopeCacheNode>,
+    variables: &mut Vec<DebugVariable>,
+) {
+    // let parent_depth = entry.depth();
+    let parent_depth = cursor.current().map(|e| e.depth()).unwrap();
+
+    while let Some(child_entry) = cursor.next_dfs().unwrap() {
+        if child_entry.depth() <= parent_depth {
+            break;
+        }
+        match child_entry.tag() {
+            constants::DW_TAG_variable => {
+                let variable = extract_variable(child_entry, unit);
+
+                if let Some(var) = variable {
+                    variables.push(var);
+                }
+            }
+            constants::DW_TAG_subprogram => {
+                if let Some(function) = extract_subprogram(cursor, unit) {
+                    children.push(function);
+                }
+            }
+            constants::DW_TAG_inlined_subroutine => {
+                if let Some(inline) = extract_inline(cursor, unit) {
+                    children.push(inline);
+                }
+            }
+            constants::DW_TAG_lexical_block => {
+                if let Some(lexical_block) = extract_lexical_block(cursor, unit) {
+                    children.push(lexical_block);
+                }
+            }
+            constants::DW_TAG_null => {
+                break;
+            }
+            _ => continue,
+        }
+    }
 }
