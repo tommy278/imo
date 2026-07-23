@@ -56,6 +56,13 @@ fn main() {
         println!("Hello World");
     }
 
+    {
+        let foo = [1, 2, 6, 24];
+        let bar = vec![1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144];
+        let baz = Box::new(15);
+        let test = Box::new(19);
+    }
+
     // NOTE: Debugger does not recognize these types yet
     let vec = vec![1, 2, 3, 4, 5];
     let mut g: HashMap<u8, &str> = HashMap::new();

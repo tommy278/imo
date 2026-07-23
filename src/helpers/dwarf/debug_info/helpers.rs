@@ -39,7 +39,6 @@ pub fn extract_variable<'a>(
             _ => continue,
         }
     }
-
     if let (Some(name), Some(target_type_offset), Some(location), Some(decl_line)) =
         (name, target_type_offset, location, line)
     {
@@ -97,16 +96,16 @@ pub fn extract_subprogram<'a>(
         }
     }
 
+    // Ignore entries where the low_pc is 0
+    if low_pc.is_some_and(|pc| pc == 0) {
+        return None;
+    }
+
     let mut variables = Vec::new();
     let mut children = Vec::new();
 
     if entry.has_children() {
         populate_children(cursor, unit, &mut children, &mut variables);
-    }
-
-    // Ignore entries where the low_pc is 0
-    if low_pc.is_some_and(|pc| pc == 0) {
-        return None;
     }
 
     let mut high_pc = None;
@@ -171,16 +170,16 @@ pub fn extract_inline<'a>(
         }
     }
 
+    // Ignore entries where the low_pc is 0
+    if low_pc.is_some_and(|pc| pc == 0) {
+        return None;
+    }
+
     let mut variables = Vec::new();
     let mut children = Vec::new();
 
     if entry.has_children() {
         populate_children(cursor, unit, &mut children, &mut variables);
-    }
-
-    // Ignore entries where the low_pc is 0
-    if low_pc.is_some_and(|pc| pc == 0) {
-        return None;
     }
 
     let mut high_pc = None;
@@ -241,6 +240,10 @@ pub fn extract_lexical_block<'a>(
         }
     }
 
+    if low_pc.is_some_and(|pc| pc == 0) {
+        return None;
+    }
+
     let mut variables = Vec::new();
     let mut children = Vec::new();
 
@@ -270,10 +273,6 @@ pub fn extract_lexical_block<'a>(
         };
 
         return Some(node);
-    }
-
-    if low_pc.is_some_and(|pc| pc == 0) {
-        return None;
     }
 
     let mut high_pc = None;
@@ -310,18 +309,14 @@ fn populate_children<'a>(
     children: &mut Vec<ScopeCacheNode>,
     variables: &mut Vec<DebugVariable>,
 ) {
-    // let parent_depth = entry.depth();
     let parent_depth = cursor.current().map(|e| e.depth()).unwrap();
-
     while let Some(child_entry) = cursor.next_dfs().unwrap() {
         if child_entry.depth() <= parent_depth {
             break;
         }
         match child_entry.tag() {
             constants::DW_TAG_variable => {
-                let variable = extract_variable(child_entry, unit);
-
-                if let Some(var) = variable {
+                if let Some(var) = extract_variable(child_entry, unit) {
                     variables.push(var);
                 }
             }

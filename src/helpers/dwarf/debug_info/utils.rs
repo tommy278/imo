@@ -5,7 +5,9 @@
  * and integrated into the project's native debugger architecture.
  */
 
-use gimli::{EndianSlice, Range, Reader as _, RelocateReader, RunTimeEndian, UnitRef, constants};
+use gimli::{
+    EndianSlice, Range, Reader as _, RelocateReader, RunTimeEndian, UnitRef, constants, leb128,
+};
 use nix::libc::execl;
 use object::{Object, ObjectSection};
 use std::{borrow, error, fs};
@@ -682,19 +684,21 @@ fn dump_unit<'a>(
                 if let Some(function) = extract_subprogram(&mut entries, &unit) {
                     info_cache.execution_scopes.push(function);
                 }
-                entries.next_dfs()?;
+
+                entries.next_dfs().unwrap();
             }
             constants::DW_TAG_inlined_subroutine => {
                 if let Some(inline) = extract_inline(&mut entries, &unit) {
                     info_cache.execution_scopes.push(inline);
                 }
-                entries.next_dfs()?;
+
+                entries.next_dfs().unwrap();
             }
             constants::DW_TAG_lexical_block => {
                 if let Some(lexical_block) = extract_lexical_block(&mut entries, &unit) {
                     info_cache.execution_scopes.push(lexical_block);
                 }
-                entries.next_dfs()?;
+                entries.next_dfs().unwrap();
             }
             _ => {
                 entries.next_dfs()?;
