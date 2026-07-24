@@ -108,7 +108,7 @@ fn dump_unit<'a>(
     // NOTE: For some reason first entry is always none, so skip it to loop safely
     entries.next_dfs()?;
 
-    while let Some(entry) = entries.current() {
+    while let Some(entry) = entries.next_dfs()? {
         let offset = entry.offset().0;
 
         // Parse each entries for the needed values while skipping redundant values
@@ -151,8 +151,6 @@ fn dump_unit<'a>(
                     };
                     info_cache.type_index.insert(offset, cache_node);
                 }
-
-                entries.next_dfs()?;
             }
             constants::DW_TAG_pointer_type => {
                 let mut target_type_offset = None;
@@ -185,8 +183,6 @@ fn dump_unit<'a>(
                     };
                     info_cache.type_index.insert(offset, cache_node);
                 }
-
-                entries.next_dfs()?;
             }
             constants::DW_TAG_const_type => {
                 let mut target_type_offset = None;
@@ -212,8 +208,6 @@ fn dump_unit<'a>(
                     };
                     info_cache.type_index.insert(offset, cache_node);
                 }
-
-                entries.next_dfs()?;
             }
             constants::DW_TAG_enumeration_type => {
                 let mut name = None;
@@ -296,8 +290,6 @@ fn dump_unit<'a>(
 
                     info_cache.type_index.insert(offset, cache_node);
                 }
-
-                entries.next_dfs()?;
             }
             constants::DW_TAG_array_type => {
                 let mut target_type_offset = None;
@@ -353,8 +345,6 @@ fn dump_unit<'a>(
                         info_cache.type_index.insert(offset, cache_node);
                     }
                 }
-
-                entries.next_dfs()?;
             }
             constants::DW_TAG_structure_type => {
                 let mut name = None;
@@ -497,16 +487,15 @@ fn dump_unit<'a>(
                                 }
 
                                 // Further iterate through the children
-                                let mut entries =
-                                    unit.entries_at_offset(child_entry.offset()).unwrap();
-                                entries.next_dfs().unwrap();
+                                let mut entries = unit.entries_at_offset(child_entry.offset())?;
+                                entries.next_dfs()?;
 
                                 let variant_part_depth = entries.current().unwrap().depth();
 
                                 // Keep track of the current variant
                                 let mut variant: Option<EnumVariant> = None;
 
-                                while let Some(sub_entry) = entries.next_dfs().unwrap() {
+                                while let Some(sub_entry) = entries.next_dfs()? {
                                     if sub_entry.depth() <= variant_part_depth {
                                         break;
                                     }
@@ -678,18 +667,13 @@ fn dump_unit<'a>(
                         info_cache.type_index.insert(offset, cache_node);
                     }
                 }
-                entries.next_dfs()?;
             }
             constants::DW_TAG_subprogram => {
                 if let Some(function) = extract_subprogram(&mut entries, &unit) {
                     info_cache.execution_scopes.push(function);
                 }
-
-                entries.next_dfs().unwrap();
             }
-            _ => {
-                entries.next_dfs()?;
-            }
+            _ => continue,
         }
     }
     Ok(())
