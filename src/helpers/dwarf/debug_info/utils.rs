@@ -687,19 +687,6 @@ fn dump_unit<'a>(
 
                 entries.next_dfs().unwrap();
             }
-            constants::DW_TAG_inlined_subroutine => {
-                if let Some(inline) = extract_inline(&mut entries, &unit) {
-                    info_cache.execution_scopes.push(inline);
-                }
-
-                entries.next_dfs().unwrap();
-            }
-            constants::DW_TAG_lexical_block => {
-                if let Some(lexical_block) = extract_lexical_block(&mut entries, &unit) {
-                    info_cache.execution_scopes.push(lexical_block);
-                }
-                entries.next_dfs().unwrap();
-            }
             _ => {
                 entries.next_dfs()?;
             }
