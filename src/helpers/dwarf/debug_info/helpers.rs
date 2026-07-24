@@ -1,4 +1,4 @@
-use gimli::{DebuggingInformationEntry, EntriesCursor, Reader as _, UnitRef, constants};
+use gimli::{DebuggingInformationEntry, Reader as _, UnitRef};
 
 use crate::helpers::dwarf::debug_info::{
     AddressRange, DebugVariable, ExecutionScope, Reader, ScopeCacheNode,
@@ -54,8 +54,8 @@ pub fn extract_variable<'a>(
     None
 }
 
-pub fn extract_subprogram<'a>(
-    cursor: &mut EntriesCursor<'a, Reader<'a>>,
+pub fn extract_subprogram_node<'a>(
+    entry: &DebuggingInformationEntry<Reader<'a>, usize>,
     unit: &UnitRef<'a, Reader<'a>>,
 ) -> Option<ScopeCacheNode> {
     let mut low_pc = None;
@@ -64,8 +64,6 @@ pub fn extract_subprogram<'a>(
     let mut linkage_name = None;
 
     let mut bytes = None;
-
-    let entry = cursor.current().unwrap().clone();
 
     for attr in entry.attrs() {
         match attr.name() {
@@ -101,13 +99,6 @@ pub fn extract_subprogram<'a>(
         return None;
     }
 
-    let mut variables = Vec::new();
-    let mut children = Vec::new();
-
-    if entry.has_children() {
-        populate_children(cursor, unit, &mut children, &mut variables);
-    }
-
     let mut high_pc = None;
     if let (Some(low), Some(high)) = (low_pc, high_pc_attr) {
         high_pc = match high {
@@ -131,9 +122,9 @@ pub fn extract_subprogram<'a>(
         let node = ScopeCacheNode {
             scope: inlined,
             offset: entry.offset().0,
-            variables,
+            variables: Vec::new(),
             ranges,
-            children,
+            children: Vec::new(),
         };
 
         return Some(node);
@@ -141,15 +132,13 @@ pub fn extract_subprogram<'a>(
     None
 }
 
-pub fn extract_inline<'a>(
-    cursor: &mut EntriesCursor<'a, Reader<'a>>,
+pub fn extract_inline_node<'a>(
+    entry: &DebuggingInformationEntry<Reader<'a>, usize>,
     unit: &UnitRef<'a, Reader<'a>>,
 ) -> Option<ScopeCacheNode> {
     let mut low_pc = None;
     let mut high_pc_attr = None;
     let mut abstract_origin_offset = None;
-
-    let entry = cursor.current().unwrap().clone();
 
     for attr in entry.attrs() {
         match attr.name() {
@@ -175,13 +164,6 @@ pub fn extract_inline<'a>(
         return None;
     }
 
-    let mut variables = Vec::new();
-    let mut children = Vec::new();
-
-    if entry.has_children() {
-        populate_children(cursor, unit, &mut children, &mut variables);
-    }
-
     let mut high_pc = None;
     if let (Some(low), Some(high)) = (low_pc, high_pc_attr) {
         high_pc = match high {
@@ -199,9 +181,9 @@ pub fn extract_inline<'a>(
         let node = ScopeCacheNode {
             scope: inlined,
             offset: entry.offset().0,
-            variables,
+            variables: Vec::new(),
             ranges,
-            children,
+            children: Vec::new(),
         };
 
         return Some(node);
@@ -210,16 +192,14 @@ pub fn extract_inline<'a>(
     None
 }
 
-pub fn extract_lexical_block<'a>(
-    cursor: &mut EntriesCursor<'a, Reader<'a>>,
+pub fn extract_lexical_block_node<'a>(
+    entry: &DebuggingInformationEntry<Reader<'a>, usize>,
     unit: &UnitRef<'a, Reader<'a>>,
 ) -> Option<ScopeCacheNode> {
     let mut low_pc = None;
     let mut high_pc_attr = None;
     let mut range_list_offset = None;
     let mut block_ranges = Vec::new();
-
-    let entry = cursor.current().unwrap().clone();
 
     for attr in entry.attrs() {
         match attr.name() {
@@ -244,13 +224,6 @@ pub fn extract_lexical_block<'a>(
         return None;
     }
 
-    let mut variables = Vec::new();
-    let mut children = Vec::new();
-
-    if entry.has_children() {
-        populate_children(cursor, unit, &mut children, &mut variables);
-    }
-
     if let Some(range_list_offset) = range_list_offset {
         let offset = unit.ranges_offset_from_raw(range_list_offset);
         if let Ok(mut range_iter) = unit.ranges(offset) {
@@ -267,9 +240,9 @@ pub fn extract_lexical_block<'a>(
         let node = ScopeCacheNode {
             scope: lexical_block,
             offset: entry.offset().0,
-            variables,
+            variables: Vec::new(),
             ranges: block_ranges,
-            children,
+            children: Vec::new(),
         };
 
         return Some(node);
@@ -292,53 +265,13 @@ pub fn extract_lexical_block<'a>(
         let node = ScopeCacheNode {
             scope: lexical_block,
             offset: entry.offset().0,
-            variables,
+            variables: Vec::new(),
             ranges,
-            children,
+            children: Vec::new(),
         };
 
         return Some(node);
     }
 
     None
-}
-
-fn populate_children<'a>(
-    cursor: &mut EntriesCursor<'a, Reader<'a>>,
-    unit: &UnitRef<'a, Reader<'a>>,
-    children: &mut Vec<ScopeCacheNode>,
-    variables: &mut Vec<DebugVariable>,
-) {
-    let parent_depth = cursor.current().map(|e| e.depth()).unwrap();
-    while let Some(child_entry) = cursor.next_dfs().unwrap() {
-        if child_entry.depth() <= parent_depth {
-            break;
-        }
-        match child_entry.tag() {
-            constants::DW_TAG_variable => {
-                if let Some(var) = extract_variable(child_entry, unit) {
-                    variables.push(var);
-                }
-            }
-            constants::DW_TAG_subprogram => {
-                if let Some(function) = extract_subprogram(cursor, unit) {
-                    children.push(function);
-                }
-            }
-            constants::DW_TAG_inlined_subroutine => {
-                if let Some(inline) = extract_inline(cursor, unit) {
-                    children.push(inline);
-                }
-            }
-            constants::DW_TAG_lexical_block => {
-                if let Some(lexical_block) = extract_lexical_block(cursor, unit) {
-                    children.push(lexical_block);
-                }
-            }
-            constants::DW_TAG_null => {
-                break;
-            }
-            _ => continue,
-        }
-    }
 }

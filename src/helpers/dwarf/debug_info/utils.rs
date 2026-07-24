@@ -5,17 +5,16 @@
  * and integrated into the project's native debugger architecture.
  */
 
-use gimli::{
-    EndianSlice, Range, Reader as _, RelocateReader, RunTimeEndian, UnitRef, constants, leb128,
-};
-use nix::libc::execl;
+use gimli::{EndianSlice, Reader as _, RelocateReader, RunTimeEndian, UnitRef, constants};
 use object::{Object, ObjectSection};
 use std::{borrow, error, fs};
 
 use crate::helpers::dwarf::debug_info::{
-    Abi, AddressRange, DebuggerMetadataCache, DwarfType, EnumVariant, Enumerator, ExecutionScope,
-    GenericField, Reader, RelocationMap, ScopeCacheNode, StructField, TypeCacheNode,
-    helpers::{extract_inline, extract_lexical_block, extract_subprogram, extract_variable},
+    Abi, DebuggerMetadataCache, DwarfType, EnumVariant, Enumerator, GenericField, Reader,
+    RelocationMap, ScopeCacheNode, StructField, TypeCacheNode,
+    helpers::{
+        extract_inline_node, extract_lexical_block_node, extract_subprogram_node, extract_variable,
+    },
 };
 
 // The section data that will be stored in `DwarfSections` and `DwarfPackageSections`.
@@ -93,6 +92,12 @@ fn dump_file(
     Ok(())
 }
 
+#[derive(Debug, Clone)]
+struct ActiveScope {
+    depth: isize,
+    node: ScopeCacheNode,
+}
+
 fn dump_unit<'a>(
     unit: UnitRef<'a, RelocateReader<EndianSlice<'a, RunTimeEndian>, &'a RelocationMap>>,
     info_cache: &mut DebuggerMetadataCache,
@@ -105,10 +110,35 @@ fn dump_unit<'a>(
     // Iterate over the Debugging Information Entries (DIEs) in the unit.
     let mut entries = unit.entries();
 
+    let mut scope_stack: Vec<ActiveScope> = Vec::new();
+    let mut root_children = Vec::new();
+    let mut root_variables = Vec::new();
+
     // NOTE: For some reason first entry is always none, so skip it to loop safely
     entries.next_dfs()?;
 
     while let Some(entry) = entries.next_dfs()? {
+        let current_depth = entry.depth();
+
+        while let Some(active) = scope_stack.last() {
+            if current_depth <= active.depth {
+                // The scope is finished and can be popped
+                let completed = scope_stack.pop().unwrap();
+
+                // Save completed node to the cache
+                info_cache.execution_scopes.push(completed.node.clone());
+
+                // Maintian tree hierachy
+                if let Some(parent) = scope_stack.last_mut() {
+                    parent.node.children.push(completed.node);
+                } else {
+                    root_children.push(completed.node);
+                }
+            } else {
+                break;
+            }
+        }
+
         let offset = entry.offset().0;
 
         // Parse each entries for the needed values while skipping redundant values
@@ -668,12 +698,50 @@ fn dump_unit<'a>(
                     }
                 }
             }
+            constants::DW_TAG_variable => {
+                if let Some(var) = extract_variable(entry, &unit) {
+                    if let Some(current_scope) = scope_stack.last_mut() {
+                        current_scope.node.variables.push(var);
+                    } else {
+                        root_variables.push(var);
+                    }
+                }
+            }
             constants::DW_TAG_subprogram => {
-                if let Some(function) = extract_subprogram(&mut entries, &unit) {
-                    info_cache.execution_scopes.push(function);
+                if let Some(function_node) = extract_subprogram_node(entry, &unit) {
+                    scope_stack.push(ActiveScope {
+                        depth: current_depth,
+                        node: function_node,
+                    });
+                }
+            }
+            constants::DW_TAG_inlined_subroutine => {
+                if let Some(inlined_node) = extract_inline_node(entry, &unit) {
+                    scope_stack.push(ActiveScope {
+                        depth: current_depth,
+                        node: inlined_node,
+                    })
+                }
+            }
+            constants::DW_TAG_lexical_block => {
+                if let Some(lexical_block_node) = extract_lexical_block_node(entry, &unit) {
+                    scope_stack.push(ActiveScope {
+                        depth: current_depth,
+                        node: lexical_block_node,
+                    })
                 }
             }
             _ => continue,
+        }
+    }
+
+    while let Some(completed) = scope_stack.pop() {
+        info_cache.execution_scopes.push(completed.node.clone());
+
+        if let Some(parent) = scope_stack.last_mut() {
+            parent.node.children.push(completed.node);
+        } else {
+            root_children.push(completed.node)
         }
     }
     Ok(())

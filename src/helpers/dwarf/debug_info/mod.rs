@@ -601,7 +601,7 @@ impl DwarfType {
 }
 
 /// Store values within the current scope whether within a function or inlined
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ExecutionScope {
     /// Store values within a function
     Function {
@@ -628,7 +628,7 @@ impl ExecutionScope {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DebugVariable {
     pub name: String,
     pub target_type_offset: usize,
@@ -679,14 +679,14 @@ impl DebugVariable {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AddressRange {
     low_pc: u64,
     high_pc: u64,
 }
 
 /// Current scope of event being executed
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ScopeCacheNode {
     pub scope: ExecutionScope,
     pub offset: usize,
