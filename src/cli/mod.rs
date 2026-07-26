@@ -141,7 +141,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 let arg = parts.next().expect("No args");
 
                 if let Some(scope) = session.find_current_scope() {
-                    if let Some(val) = session.get_var_value(scope, arg) {
+                    if let Some(val) = session.get_var_value(&scope, arg) {
                         println!("{} = {}", arg, val);
                     } else {
                         println!("Var '{}' not in scope at current breakpoint", arg);

@@ -764,6 +764,18 @@ pub struct DebuggerMetadataCache {
     pub abi: Abi,
 }
 
+#[derive(Debug, Default)]
+pub struct ActiveVariablesContext<'a> {
+    pub variables: Vec<DebugVariable>,
+    pub frame_base: Option<&'a Vec<u8>>,
+}
+
+impl ActiveVariablesContext<'_> {
+    pub fn get_variable_with_name(&self, name: &str) -> Option<&DebugVariable> {
+        self.variables.iter().find(|n| n.name == name)
+    }
+}
+
 impl DebuggerMetadataCache {
     /// Populate the cache with the debug_info
     pub fn new(binary_path: &str) -> Self {
@@ -775,10 +787,16 @@ impl DebuggerMetadataCache {
         default_cache
     }
 
-    pub fn find_scope_by_pc(&self, pc: u64) -> Option<&ScopeCacheNode> {
+    pub fn find_scope_by_pc(&self, pc: u64) -> Option<ActiveVariablesContext<'_>> {
+        let mut context = ActiveVariablesContext::default();
+
         for scope in self.execution_scopes.iter() {
-            if let Some(deepest_match) = scope.find_active_scope(pc) {
-                return Some(deepest_match);
+            context.variables.extend_from_slice(&scope.variables);
+            if let Some(bytes) = scope.scope.get_bytes() {
+                context.frame_base = Some(bytes);
+            }
+            if let Some(_deepest_match) = scope.find_active_scope(pc) {
+                return Some(context);
             }
         }
         None

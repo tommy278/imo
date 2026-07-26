@@ -6,7 +6,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use crate::helpers::dwarf::debug_info::{self, DebuggerMetadataCache};
+use crate::helpers::dwarf::debug_info::{self, ActiveVariablesContext, DebuggerMetadataCache};
 use crate::helpers::dwarf::{self, debug_info::ScopeCacheNode};
 use crate::interface::{DebugValue, RegisterViewer};
 use crate::session::interface::{BreakpointData, BreakpointMutationResult, BreakpointTarget};
@@ -217,14 +217,14 @@ impl DebugSession {
         });
     }
 
-    pub fn find_current_scope(&self) -> Option<&ScopeCacheNode> {
+    pub fn find_current_scope(&self) -> Option<ActiveVariablesContext> {
         let current_pc = self.get_regs().regs.rip - self.base_address;
         println!("Current PC: {}", current_pc);
         self.metadata.find_scope_by_pc(current_pc)
     }
 
     /// Get the value of a variable with the given name
-    pub fn get_var_value(&self, node: &ScopeCacheNode, name: &str) -> Option<DebugValue> {
+    pub fn get_var_value(&self, node: &ActiveVariablesContext, name: &str) -> Option<DebugValue> {
         let regs = self.get_regs();
 
         let endian = self.metadata.endian;
@@ -260,9 +260,8 @@ impl DebugSession {
                 return None;
             }
 
-            let bytes = node.scope.get_bytes().unwrap();
             let address = variable
-                .parse_value(&regs, encoding, endian, abi, bytes)
+                .parse_value(&regs, encoding, endian, abi, node.frame_base?)
                 .unwrap();
 
             if let Some(ty) = self.metadata.type_index.get(&variable.target_type_offset) {
