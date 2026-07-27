@@ -204,21 +204,6 @@ impl DebugSession {
         absolute_address - self.base_address
     }
 
-    // pub fn debug(&self, node: &debug_info::ScopeCacheNode) {
-    //     let regs = self.get_regs();
-
-    //     let endian = &self.metadata.endian;
-    //     let encoding = self.metadata.encoding.unwrap();
-    //     let abi = &self.metadata.abi;
-
-    //     let addresses = node.get_addresses(&regs, encoding, *endian, abi);
-
-    //     addresses.iter().for_each(|add| {
-    //         let data = os::peek_data(self.pid, *add);
-    //         println!("{}", data);
-    //     });
-    // }
-
     pub fn find_current_scope(&self) -> Option<ActiveVariablesContext<'_>> {
         let current_pc = self.get_regs().regs.rip - self.base_address;
         self.metadata.find_scope_by_pc(current_pc)
@@ -229,7 +214,7 @@ impl DebugSession {
         let regs = self.get_regs();
 
         let endian = self.metadata.endian;
-        let encoding = self.metadata.encoding.unwrap();
+        let encoding = self.metadata.encoding?;
         let abi = &self.metadata.abi;
 
         // Since rust does not declare variables in sequential order
@@ -261,17 +246,15 @@ impl DebugSession {
                 return None;
             }
 
-            let address = variable
-                .parse_value(
-                    &regs,
-                    encoding,
-                    endian,
-                    abi,
-                    node.frame_base?,
-                    &self.metadata.type_index,
-                    self.pid,
-                )
-                .unwrap();
+            let address = variable.parse_value(
+                &regs,
+                encoding,
+                endian,
+                abi,
+                node.frame_base?,
+                &self.metadata.type_index,
+                self.pid,
+            )?;
 
             if let Some(ty) = self.metadata.type_index.get(&variable.target_type_offset) {
                 return ty
@@ -281,18 +264,6 @@ impl DebugSession {
         }
         None
     }
-
-    // pub fn get_scope_info(&self) -> Option<&ScopeCacheNode> {
-    //     let regs = self.get_regs().regs;
-
-    //     let current_pc = regs.rip - self.base_address;
-
-    //     if let Some(scope_idx) = self.metadata.find_scope_by_pc(current_pc) {
-    //         let active_node = &self.metadata.execution_scopes[scope_idx];
-    //         return Some(active_node);
-    //     }
-    //     None
-    // }
 
     /// Clear all breakpoint for line_number by default
     /// Only clear specified breakpoints if file name is provided

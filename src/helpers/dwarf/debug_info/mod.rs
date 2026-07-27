@@ -729,32 +729,6 @@ pub struct ScopeCacheNode {
 }
 
 impl ScopeCacheNode {
-    // pub fn get_addresses(
-    //     &self,
-    //     regs: &RegisterViewer,
-    //     encoding: Encoding,
-    //     endian: RunTimeEndian,
-    //     abi: &Abi,
-    // ) -> Vec<u64> {
-    //     let mut values = Vec::new();
-
-    //     let bytes = self.scope.get_bytes();
-
-    //     if bytes.is_none() {
-    //         unimplemented!()
-    //     }
-
-    //     let bytes = bytes.unwrap();
-
-    //     self.variables.iter().for_each(|var| {
-    //         if let Some(value) = var.parse_value(regs, encoding, endian, abi, bytes) {
-    //             values.push(value);
-    //         }
-    //     });
-
-    //     values
-    // }
-
     /// Get value of a specific variable in the current scope
     pub fn get_variable_with_name(&self, name: &str) -> Option<&DebugVariable> {
         self.variables.iter().find(|var| var.name == name)
@@ -807,7 +781,7 @@ pub struct ActiveVariablesContext<'a> {
 
 impl ActiveVariablesContext<'_> {
     pub fn get_variable_with_name(&self, name: &str) -> Option<&DebugVariable> {
-        self.variables.iter().find(|n| n.name == name).map(|v| &**v)
+        self.variables.iter().find(|n| n.name == name).map(|&v| v)
     }
 }
 
