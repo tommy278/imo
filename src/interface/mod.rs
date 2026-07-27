@@ -188,7 +188,7 @@ impl fmt::Display for DebugValue {
             DebugValue::String(s) => write!(f, "\"{s}\""),
             DebugValue::StringSlice(slice) => write!(f, "\"{slice}\""),
             DebugValue::Boolean(bool) => write!(f, "{bool}"),
-            DebugValue::Pointer(ptr) => write!(f, "{ptr}"),
+            DebugValue::Pointer(ptr) => write!(f, "0x{:016x}", ptr),
             DebugValue::Array(arr) => {
                 if arr.is_empty() {
                     write!(f, "[]")?;

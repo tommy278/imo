@@ -1,7 +1,6 @@
 // NOTE: Compile with rustc -g rust_with_vars.rs
 use std::collections::HashMap;
 fn main() {
-    // Skip char support for now
     let c: char = 'l';
     let f: f32 = 3.141;
     let mut x: i64 = 10000000;
