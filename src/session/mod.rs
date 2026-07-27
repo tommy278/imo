@@ -141,11 +141,13 @@ impl DebugSession {
         session
     }
 
+    /// Get the live register of the current process
     pub fn get_regs(&self) -> RegisterViewer {
         let regs = os::get_regs(self.pid);
         RegisterViewer::new(regs)
     }
 
+    /// Create a specific breakpoint at a given address
     pub fn create_specific_breakpoint(&mut self, relative_address: u64) {
         let absolute_address = self.get_absolute_address(relative_address);
 
@@ -192,24 +194,30 @@ impl DebugSession {
     // Other Methods
     // =================================================================
 
+    /// Obtain the location that an address belongs to within the program
     pub fn get_location_with_address(&self, relative_address: u64) -> Option<&SourceLocation> {
         self.address_to_location.get(&relative_address)
     }
 
+    /// Get the exact order in which the compiler actually initialized the variables
+    /// Rust does not always initialize variables sequentially
     pub fn get_file_decl_order(&self, file: PathBuf) -> Option<&Vec<u64>> {
         self.file_declaration_order.get(&file)
     }
 
+    /// Get the relative address from absolute address
     pub fn get_relative_address(&self, absolute_address: u64) -> u64 {
         absolute_address - self.base_address
     }
 
+    /// Find current scope with internal pc
     pub fn find_current_scope(&self) -> Option<ActiveVariablesContext<'_>> {
         let current_pc = self.get_regs().regs.rip - self.base_address;
         self.metadata.find_scope_by_pc(current_pc)
     }
 
     /// Get the value of a variable with the given name
+    /// Requires current scope to evaluate the value
     pub fn get_var_value(&self, node: &ActiveVariablesContext, name: &str) -> Option<DebugValue> {
         let regs = self.get_regs();
 
@@ -246,6 +254,7 @@ impl DebugSession {
                 return None;
             }
 
+            // Get the variable's address
             let address = variable.parse_value(
                 &regs,
                 encoding,
@@ -256,6 +265,7 @@ impl DebugSession {
                 self.pid,
             )?;
 
+            // Resolve the variable's live value with address and current pid
             if let Some(ty) = self.metadata.type_index.get(&variable.target_type_offset) {
                 return ty
                     .dwarf_type
@@ -308,6 +318,7 @@ impl DebugSession {
         bp_idx
     }
 
+    /// Enable breakpoint at a specific index in the tracker
     pub fn enable_breakpoint(&mut self, index: usize) -> BreakpointMutationResult {
         // NOTE: Safe index, bounds are checked by the cli
         let target = self.breakpoint_index_tracker[index].clone();
@@ -372,6 +383,8 @@ impl DebugSession {
         BreakpointMutationResult::NotFound
     }
 
+    /// Create breakpoint(s) at a file on a given line number
+    /// Returns the number of breakpoint targets that were found on the given line alongside the address/first target if multiple addresses exist
     pub fn create_breakpoint(&mut self, line_number: u64, file: &Path) -> (u64, BreakpointTarget) {
         let line_index = self.get_breakpoint_target(line_number).unwrap();
 
@@ -396,10 +409,13 @@ impl DebugSession {
         (bp_for_line, line_index[0].clone())
     }
 
+    /// Get the current index of the breakpoint the user is currently on
     pub fn current_index(&self) -> usize {
+        // Index is one based for the user
         self.breakpoint_index_tracker.len()
     }
 
+    /// Clear breakpoint at specfic breakpoint address
     pub fn clear_specific_breakpoint(&mut self, relative_address: u64) {
         let absolute_address = self.get_absolute_address(relative_address);
         let mut should_remove = false;
