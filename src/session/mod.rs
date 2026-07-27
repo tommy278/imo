@@ -96,7 +96,6 @@ pub struct DebugSession {
     pub breakpoint_index_tracker: Vec<Option<BreakpointData>>,
     pub address_to_location: FxHashMap<u64, SourceLocation>,
 
-    // Rust does not delcare variables in sequential order
     // Used to find out the actual order in while files were declared
     pub file_declaration_order: FxHashMap<PathBuf, Vec<u64>>,
 

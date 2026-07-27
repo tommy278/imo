@@ -166,14 +166,6 @@ impl DebugValue {
             _ => false,
         }
     }
-
-    fn inner_vec(&self) -> Vec<DebugValue> {
-        match self {
-            DebugValue::Array(arr) => arr.to_vec(),
-            DebugValue::Vec(vec) => vec.to_vec(),
-            _ => Vec::new(),
-        }
-    }
 }
 
 impl fmt::Display for DebugValue {
