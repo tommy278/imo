@@ -2,12 +2,14 @@ pub mod interface;
 #[cfg(target_os = "linux")]
 pub mod linux;
 
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use crate::helpers::dwarf::debug_info::{self, ActiveVariablesContext, DebuggerMetadataCache};
-use crate::helpers::dwarf::{self, debug_info::ScopeCacheNode};
+use crate::helpers::dwarf::{
+    self,
+    debug_info::{ActiveVariablesContext, DebuggerMetadataCache},
+};
 use crate::interface::{DebugValue, RegisterViewer};
 use crate::session::interface::{BreakpointData, BreakpointMutationResult, BreakpointTarget};
 
@@ -219,7 +221,6 @@ impl DebugSession {
 
     pub fn find_current_scope(&self) -> Option<ActiveVariablesContext<'_>> {
         let current_pc = self.get_regs().regs.rip - self.base_address;
-        println!("Current PC: {}", current_pc);
         self.metadata.find_scope_by_pc(current_pc)
     }
 

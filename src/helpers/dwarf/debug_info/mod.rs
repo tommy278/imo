@@ -801,13 +801,13 @@ pub struct DebuggerMetadataCache {
 
 #[derive(Debug, Default)]
 pub struct ActiveVariablesContext<'a> {
-    pub variables: Vec<DebugVariable>,
+    pub variables: Vec<&'a DebugVariable>,
     pub frame_base: Option<&'a Vec<u8>>,
 }
 
 impl ActiveVariablesContext<'_> {
     pub fn get_variable_with_name(&self, name: &str) -> Option<&DebugVariable> {
-        self.variables.iter().find(|n| n.name == name)
+        self.variables.iter().find(|n| n.name == name).map(|v| &**v)
     }
 }
 
@@ -831,7 +831,8 @@ impl DebuggerMetadataCache {
                     context.frame_base = Some(bytes);
                 }
                 if scope.find_active_scope(pc).is_some() {
-                    context.variables.extend_from_slice(&scope.variables);
+                    let refs = scope.variables.iter();
+                    context.variables.extend(refs);
                 }
             }
         }
