@@ -211,7 +211,7 @@ impl DebugSession {
     }
 
     /// Find current scope with internal pc
-    pub fn find_current_scope(&self) -> Option<ActiveVariablesContext<'_>> {
+    pub fn find_current_scope(&self) -> ActiveVariablesContext<'_> {
         let current_pc = self.get_regs().regs.rip - self.base_address;
         self.metadata.find_scope_by_pc(current_pc)
     }

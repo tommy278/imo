@@ -140,14 +140,12 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
             "p" | "print" => {
                 let arg = parts.next().expect("No args");
 
-                if let Some(scope) = session.find_current_scope() {
-                    if let Some(val) = session.get_var_value(&scope, arg) {
-                        println!("{} = {}", arg, val);
-                    } else {
-                        println!("Var '{}' not in scope at current breakpoint", arg);
-                    }
+                let scope = session.find_current_scope();
+
+                if let Some(val) = session.get_var_value(&scope, arg) {
+                    println!("{} = {}", arg, val);
                 } else {
-                    println!("Could not get scope info")
+                    println!("Var '{}' not in scope at current breakpoint", arg);
                 }
             }
             "debug" => {
@@ -160,12 +158,11 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 }
             }
             "scope" => {
-                if let Some(scope) = session.find_current_scope() {
-                    println!("{:?}", scope);
-                }
+                let scope = session.find_current_scope();
+                println!("{:?}", scope);
             }
             // Another debug
-            "deb" => {
+            "offset" | "off" => {
                 let arg = parts.next().unwrap();
 
                 let arg = arg.parse::<usize>().unwrap();

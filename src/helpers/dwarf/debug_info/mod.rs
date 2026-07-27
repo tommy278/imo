@@ -791,7 +791,7 @@ impl DebuggerMetadataCache {
     }
 
     /// Find current variables and frame base with the current pc
-    pub fn find_scope_by_pc(&self, pc: u64) -> Option<ActiveVariablesContext<'_>> {
+    pub fn find_scope_by_pc(&self, pc: u64) -> ActiveVariablesContext<'_> {
         let mut context = ActiveVariablesContext::default();
 
         for scope in self.execution_scopes.iter() {
@@ -805,6 +805,6 @@ impl DebuggerMetadataCache {
                 }
             }
         }
-        Some(context)
+        context
     }
 }
