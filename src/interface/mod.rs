@@ -1,7 +1,9 @@
+pub mod color;
 #[cfg(target_os = "linux")]
 pub mod linux;
 
 use crate::session::PlatformRegStruct;
+use color::{Color, print_color};
 use std::fmt;
 
 pub struct RegisterViewer {
@@ -171,7 +173,7 @@ impl DebugValue {
 impl fmt::Display for DebugValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DebugValue::Integer(int) => write!(f, "{int}"),
+            DebugValue::Integer(int) => print_color(f, int, Color::Red),
             DebugValue::Unsigned(u) => write!(f, "{u}"),
             DebugValue::Usize(usize) => write!(f, "{usize}"),
             DebugValue::Isize(isize) => write!(f, "{isize}"),
