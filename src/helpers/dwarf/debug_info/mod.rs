@@ -644,6 +644,8 @@ impl DebugVariable {
         endian: RunTimeEndian,
         abi: &Abi,
         bytes: &[u8],
+        type_index: &FxHashMap<usize, TypeCacheNode>,
+        pid: ProcessId,
     ) -> Option<u64> {
         let expression = Expression(EndianSlice::new(&self.location, endian));
 
@@ -666,13 +668,43 @@ impl DebugVariable {
                     }
                     break;
                 }
+                gimli::EvaluationResult::RequiresMemory {
+                    address, base_type, ..
+                } => {
+                    let offset = base_type.0;
+
+                    // If offset if 0 then it is a generic and gimli can handle that case
+                    if offset == 0 {
+                        let raw_data = crate::session::linux::peek_data(pid, address) as u64;
+                        let value = gimli::Value::U64(raw_data);
+                        result = evaluation.resume_with_memory(value).unwrap();
+                    } else {
+                        // NOTE: not sure how effectively this works because I cannot produce the case where the value does not have offset 0
+                        let ty = type_index.get(&offset).unwrap();
+                        let raw_debug_value =
+                            ty.dwarf_type.to_debug_value(type_index, address, pid);
+
+                        let Some(raw_value) = raw_debug_value else {
+                            println!("Could not parse value");
+                            return None;
+                        };
+
+                        let value = match raw_value {
+                            DebugValue::Integer(int) => gimli::Value::I64(int),
+                            DebugValue::Unsigned(unsigned) => gimli::Value::U64(unsigned),
+                            _ => unreachable!(),
+                        };
+
+                        result = evaluation.resume_with_memory(value).unwrap();
+                    }
+                }
                 gimli::EvaluationResult::RequiresRegister {
                     register,
                     base_type,
                 } => {
                     todo!()
                 }
-                _ => todo!("Other results"),
+                _ => todo!("Other result : {:?}", result),
             }
         }
         None
@@ -697,31 +729,31 @@ pub struct ScopeCacheNode {
 }
 
 impl ScopeCacheNode {
-    pub fn get_addresses(
-        &self,
-        regs: &RegisterViewer,
-        encoding: Encoding,
-        endian: RunTimeEndian,
-        abi: &Abi,
-    ) -> Vec<u64> {
-        let mut values = Vec::new();
+    // pub fn get_addresses(
+    //     &self,
+    //     regs: &RegisterViewer,
+    //     encoding: Encoding,
+    //     endian: RunTimeEndian,
+    //     abi: &Abi,
+    // ) -> Vec<u64> {
+    //     let mut values = Vec::new();
 
-        let bytes = self.scope.get_bytes();
+    //     let bytes = self.scope.get_bytes();
 
-        if bytes.is_none() {
-            unimplemented!()
-        }
+    //     if bytes.is_none() {
+    //         unimplemented!()
+    //     }
 
-        let bytes = bytes.unwrap();
+    //     let bytes = bytes.unwrap();
 
-        self.variables.iter().for_each(|var| {
-            if let Some(value) = var.parse_value(regs, encoding, endian, abi, bytes) {
-                values.push(value);
-            }
-        });
+    //     self.variables.iter().for_each(|var| {
+    //         if let Some(value) = var.parse_value(regs, encoding, endian, abi, bytes) {
+    //             values.push(value);
+    //         }
+    //     });
 
-        values
-    }
+    //     values
+    // }
 
     /// Get value of a specific variable in the current scope
     pub fn get_variable_with_name(&self, name: &str) -> Option<&DebugVariable> {

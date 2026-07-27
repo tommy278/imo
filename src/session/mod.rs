@@ -202,20 +202,20 @@ impl DebugSession {
         absolute_address - self.base_address
     }
 
-    pub fn debug(&self, node: &debug_info::ScopeCacheNode) {
-        let regs = self.get_regs();
+    // pub fn debug(&self, node: &debug_info::ScopeCacheNode) {
+    //     let regs = self.get_regs();
 
-        let endian = &self.metadata.endian;
-        let encoding = self.metadata.encoding.unwrap();
-        let abi = &self.metadata.abi;
+    //     let endian = &self.metadata.endian;
+    //     let encoding = self.metadata.encoding.unwrap();
+    //     let abi = &self.metadata.abi;
 
-        let addresses = node.get_addresses(&regs, encoding, *endian, abi);
+    //     let addresses = node.get_addresses(&regs, encoding, *endian, abi);
 
-        addresses.iter().for_each(|add| {
-            let data = os::peek_data(self.pid, *add);
-            println!("{}", data);
-        });
-    }
+    //     addresses.iter().for_each(|add| {
+    //         let data = os::peek_data(self.pid, *add);
+    //         println!("{}", data);
+    //     });
+    // }
 
     pub fn find_current_scope(&self) -> Option<ActiveVariablesContext> {
         let current_pc = self.get_regs().regs.rip - self.base_address;
@@ -261,7 +261,15 @@ impl DebugSession {
             }
 
             let address = variable
-                .parse_value(&regs, encoding, endian, abi, node.frame_base?)
+                .parse_value(
+                    &regs,
+                    encoding,
+                    endian,
+                    abi,
+                    node.frame_base?,
+                    &self.metadata.type_index,
+                    self.pid,
+                )
                 .unwrap();
 
             if let Some(ty) = self.metadata.type_index.get(&variable.target_type_offset) {

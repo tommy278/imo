@@ -4,18 +4,19 @@ fn main() {
     // Skip char support for now
     let c: char = 'l';
     let f: f32 = 3.141;
-    let x: i64 = 10000000;
+    let mut x: i64 = 10000000;
     let y: i64 = -15;
     let z: u16 = 256;
+    let q = 5;
 
     let u8_some: Option<u8> = Some(8);
     let u16_some: Option<u16> = Some(16);
     let u32_some: Option<u32> = Some(32);
     let u64_some: Option<u64> = Some(64);
-    let non: Option<i32> = None;
+    let mut non: Option<i32> = None;
 
     let b = false;
-    let t = true;
+    let mut t = true;
     let arr: [i32; 6] = [120, -1, 26, 34, -5000, 720];
     let small_arr: [u8; 4] = [10, 18, 19, 20];
     let matrix = [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]];
@@ -48,12 +49,13 @@ fn main() {
     let status_a = StackedStatus::Active(true);
     let status_b = StackedStatus::Suspended;
 
-    {
+    let mut named = || {
         let foo = [1, 2, 6, 24];
         let bar = vec![1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144];
         let baz = Box::new(15);
         let test = Box::new(19);
-    }
+    };
+    named();
 
     if x > 12 {
         let mut names = Vec::new();
@@ -63,6 +65,8 @@ fn main() {
         println!("Hello World");
     }
 
+    add(arr[2], arr[3]);
+
     // NOTE: Debugger does not recognize these types yet
     let vec = vec![1, 2, 3, 4, 5];
     let mut g: HashMap<u8, &str> = HashMap::new();
@@ -71,6 +75,10 @@ fn main() {
     let static_str = "Hello World";
     let string = String::from(static_str);
     let slice = &string[1..];
+}
+
+fn add(x: i32, y: i32) -> i32 {
+    x + y
 }
 
 pub enum StackedStatus {
