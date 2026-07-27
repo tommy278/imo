@@ -728,9 +728,12 @@ impl ScopeCacheNode {
         self.variables.iter().find(|var| var.name == name)
     }
 
+    pub fn is_in_scope(&self, pc: u64) -> bool {
+        self.ranges.iter().any(|r| r.low_pc <= pc && pc < r.high_pc)
+    }
+
     pub fn find_active_scope(&self, pc: u64) -> Option<&ScopeCacheNode> {
-        let pc_in_scope = self.ranges.iter().any(|r| r.low_pc <= pc && pc < r.high_pc);
-        if !pc_in_scope {
+        if !self.is_in_scope(pc) {
             return None;
         }
 
@@ -791,14 +794,15 @@ impl DebuggerMetadataCache {
         let mut context = ActiveVariablesContext::default();
 
         for scope in self.execution_scopes.iter() {
-            context.variables.extend_from_slice(&scope.variables);
-            if let Some(bytes) = scope.scope.get_bytes() {
-                context.frame_base = Some(bytes);
-            }
-            if let Some(_deepest_match) = scope.find_active_scope(pc) {
-                return Some(context);
+            if scope.is_in_scope(pc) {
+                if let Some(bytes) = scope.scope.get_bytes() {
+                    context.frame_base = Some(bytes);
+                }
+                if scope.find_active_scope(pc).is_some() {
+                    context.variables.extend_from_slice(&scope.variables);
+                }
             }
         }
-        None
+        Some(context)
     }
 }

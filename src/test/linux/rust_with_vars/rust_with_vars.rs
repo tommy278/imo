@@ -48,19 +48,19 @@ fn main() {
     let status_a = StackedStatus::Active(true);
     let status_b = StackedStatus::Suspended;
 
+    {
+        let foo = [1, 2, 6, 24];
+        let bar = vec![1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144];
+        let baz = Box::new(15);
+        let test = Box::new(19);
+    }
+
     if x > 12 {
         let mut names = Vec::new();
         names.push("Halland");
         names.push("Dave");
         names.push("Cleo");
         println!("Hello World");
-    }
-
-    {
-        let foo = [1, 2, 6, 24];
-        let bar = vec![1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144];
-        let baz = Box::new(15);
-        let test = Box::new(19);
     }
 
     // NOTE: Debugger does not recognize these types yet
@@ -71,7 +71,6 @@ fn main() {
     let static_str = "Hello World";
     let string = String::from(static_str);
     let slice = &string[1..];
-    let x = 2;
 }
 
 pub enum StackedStatus {
