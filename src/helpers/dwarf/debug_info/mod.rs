@@ -160,6 +160,7 @@ impl DwarfType {
             DwarfType::Base { byte_size, .. } => *byte_size,
 
             // Pointer has a fixed size
+            // TODO: this changes on different systems
             DwarfType::Pointer { .. } => 8,
 
             // TODO: this will probably change
@@ -321,12 +322,7 @@ impl DwarfType {
                     8 | _ => data as u64,
                 };
 
-                let inner_name = fields
-                    .iter()
-                    .find(|f| f.value == const_value)
-                    .expect("Could not find target")
-                    .name
-                    .clone();
+                let inner_name = fields.iter().find(|f| f.value == const_value)?.name.clone();
 
                 return Some(DebugValue::Enum {
                     name: name.to_owned(),
@@ -650,13 +646,13 @@ impl DebugVariable {
         let expression = Expression(EndianSlice::new(&self.location, endian));
 
         let mut evaluation = expression.evaluation(encoding);
-        let mut result = evaluation.evaluate().unwrap();
+        let mut result = evaluation.evaluate().ok()?;
 
         loop {
             match result {
                 gimli::EvaluationResult::RequiresFrameBase => {
                     let frame_base = evaluate_frame_base_bytes(bytes, regs, abi);
-                    result = evaluation.resume_with_frame_base(frame_base).unwrap();
+                    result = evaluation.resume_with_frame_base(frame_base).ok()?;
                 }
                 gimli::EvaluationResult::Complete => {
                     let pieces = evaluation.result();
@@ -677,17 +673,11 @@ impl DebugVariable {
                     if offset == 0 {
                         let raw_data = crate::session::linux::peek_data(pid, address) as u64;
                         let value = gimli::Value::U64(raw_data);
-                        result = evaluation.resume_with_memory(value).unwrap();
+                        result = evaluation.resume_with_memory(value).ok()?;
                     } else {
                         // NOTE: not sure how effectively this works because I cannot produce the case where the value does not have offset 0
                         let ty = type_index.get(&offset).unwrap();
-                        let raw_debug_value =
-                            ty.dwarf_type.to_debug_value(type_index, address, pid);
-
-                        let Some(raw_value) = raw_debug_value else {
-                            println!("Could not parse value");
-                            return None;
-                        };
+                        let raw_value = ty.dwarf_type.to_debug_value(type_index, address, pid)?;
 
                         let value = match raw_value {
                             DebugValue::Integer(int) => gimli::Value::I64(int),
@@ -695,7 +685,7 @@ impl DebugVariable {
                             _ => unreachable!(),
                         };
 
-                        result = evaluation.resume_with_memory(value).unwrap();
+                        result = evaluation.resume_with_memory(value).ok()?;
                     }
                 }
                 gimli::EvaluationResult::RequiresRegister {
@@ -734,10 +724,12 @@ impl ScopeCacheNode {
         self.variables.iter().find(|var| var.name == name)
     }
 
+    /// Check if the pc is within the range of the scope
     pub fn is_in_scope(&self, pc: u64) -> bool {
         self.ranges.iter().any(|r| r.low_pc <= pc && pc < r.high_pc)
     }
 
+    /// Recursively find the scope that captures the pc best
     pub fn find_active_scope(&self, pc: u64) -> Option<&ScopeCacheNode> {
         if !self.is_in_scope(pc) {
             return None;
@@ -749,6 +741,7 @@ impl ScopeCacheNode {
             }
         }
 
+        // If no children match then the current scope is the best match
         Some(self)
     }
 }
@@ -780,6 +773,7 @@ pub struct ActiveVariablesContext<'a> {
 }
 
 impl ActiveVariablesContext<'_> {
+    /// Search for the first instance of the variable
     pub fn get_variable_with_name(&self, name: &str) -> Option<&DebugVariable> {
         self.variables.iter().find(|n| n.name == name).map(|&v| v)
     }
@@ -796,6 +790,7 @@ impl DebuggerMetadataCache {
         default_cache
     }
 
+    /// Find current variables and frame base with the current pc
     pub fn find_scope_by_pc(&self, pc: u64) -> Option<ActiveVariablesContext<'_>> {
         let mut context = ActiveVariablesContext::default();
 
