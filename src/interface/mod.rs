@@ -1,9 +1,9 @@
+use owo_colors::OwoColorize;
 pub mod color;
 #[cfg(target_os = "linux")]
 pub mod linux;
 
 use crate::session::PlatformRegStruct;
-use color::{Color, print_color};
 use std::fmt;
 
 pub struct RegisterViewer {
@@ -173,87 +173,76 @@ impl DebugValue {
 impl fmt::Display for DebugValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DebugValue::Integer(int) => print_color(f, int, Color::Blue),
-            DebugValue::Unsigned(u) => print_color(f, u, Color::Blue),
-            DebugValue::Usize(usize) => print_color(f, usize, Color::Blue),
-            DebugValue::Isize(isize) => print_color(f, isize, Color::Blue),
-            DebugValue::Float(fl) => print_color(f, fl, Color::Blue),
-            DebugValue::Char(c) => {
-                let format = format!("\'{c}\'");
-                print_color(f, format, Color::BrightBlue)
-            }
-            DebugValue::String(s) => {
-                let format = format!("\"{s}\"");
-                print_color(f, format, Color::BrightGreen)
-            }
-            DebugValue::StringSlice(slice) => {
-                let format = format!("\"{slice}\"");
-                print_color(f, format, Color::BrightGreen)
-            }
-            DebugValue::Boolean(bool) => print_color(f, bool, Color::Yellow),
+            DebugValue::Integer(int) => write!(f, "{}", int.blue()),
+            DebugValue::Unsigned(u) => write!(f, "{}", u.blue()),
+            DebugValue::Usize(usize) => write!(f, "{}", usize.blue()),
+            DebugValue::Isize(isize) => write!(f, "{}", isize.blue()),
+            DebugValue::Float(fl) => write!(f, "{}", fl.blue()),
+            DebugValue::Char(c) => write!(f, "\'{}\'", c.cyan()),
+            DebugValue::String(s) => write!(f, "\"{}\"", s.green()),
+            DebugValue::StringSlice(slice) => write!(f, "\"{}\"", slice.green()),
+            DebugValue::Boolean(bool) => write!(f, "{}", bool.yellow()),
             DebugValue::Pointer(ptr) => {
-                let format = format!("0x{:016x}", ptr);
-                print_color(f, format, Color::BrightBlue)
+                write!(f, "{}", "0x".bright_blue())?;
+                write!(f, "{:016x}", ptr.bright_blue())?;
+                Ok(())
             }
             DebugValue::Array(arr) => {
                 if arr.is_empty() {
                     write!(f, "[]")?;
                     return Ok(());
                 }
-                let mut format = format!("[");
+                write!(f, "[")?;
 
-                for val in arr {
-                    format.push_str(&format!("{},", val))
+                for (i, val) in arr.iter().enumerate() {
+                    write!(f, "{}", val)?;
+
+                    if i != arr.len() - 1 {
+                        write!(f, ",")?;
+                    }
                 }
 
-                format.pop();
-                format.push(']');
-
-                write!(f, "{format}")
+                write!(f, "]")?;
+                Ok(())
             }
             DebugValue::Vec(vec) => {
                 if vec.is_empty() {
                     write!(f, "[]")?;
                     return Ok(());
                 }
-                let mut format = format!("[");
+                write!(f, "[")?;
 
-                for val in vec {
-                    format.push_str(&format!("{},", val))
+                for (i, val) in vec.iter().enumerate() {
+                    write!(f, "{}", val)?;
+
+                    if i != vec.len() - 1 {
+                        write!(f, ",")?;
+                    }
                 }
 
-                format.pop();
-                format.push(']');
-
-                write!(f, "{format}")
-            }
-            DebugValue::Box(val) => {
-                print_color(f, "Box", Color::BrightYellow)?;
-                print_color(f, '(', Color::White)?;
-                print_color(f, val, Color::BrightMagenta)?;
-                print_color(f, ')', Color::White)?;
+                write!(f, "]")?;
                 Ok(())
             }
+            DebugValue::Box(val) => write!(f, "{}({})", "Box".cyan(), val.magenta()),
             DebugValue::Tuple(tup) => {
                 if tup.is_empty() {
                     return Ok(());
                 }
-                let mut format = String::from("(");
+                write!(f, "(")?;
 
-                for t in tup {
-                    format.push_str(&format!("{},", t));
+                for (i, t) in tup.iter().enumerate() {
+                    write!(f, "{}", t)?;
+
+                    if i != tup.len() - 1 {
+                        write!(f, ",")?;
+                    }
                 }
 
-                format.pop();
-                format.push_str(")");
-
-                write!(f, "{format}")
+                write!(f, "{}", ")".white())?;
+                Ok(())
             }
             DebugValue::Enum { name, inner_name } => {
-                print_color(f, name, Color::Cyan)?;
-                print_color(f, "::", Color::White)?;
-                print_color(f, inner_name, Color::BrightYellow)?;
-                Ok(())
+                write!(f, "{}::{}", name.cyan(), inner_name.bright_yellow())
             }
             DebugValue::RawVecInner {
                 heap_pointer_value,
@@ -276,13 +265,9 @@ impl fmt::Display for DebugValue {
                 if let Some(field) = field {
                     // Avoid double parentheses from tuple and variant
                     if field.is_tuple() {
-                        print_color(f, name, Color::BrightBlue)?;
-                        print_color(f, field, Color::BrightCyan)?;
+                        write!(f, "{}{}", name.cyan(), field)?;
                     } else {
-                        print_color(f, name, Color::BrightYellow)?;
-                        print_color(f, '(', Color::White)?;
-                        print_color(f, field, Color::BrightMagenta)?;
-                        print_color(f, ')', Color::White)?;
+                        write!(f, "{}({})", name.bright_yellow(), field)?;
                     }
                     return Ok(());
                 }
@@ -294,22 +279,18 @@ impl fmt::Display for DebugValue {
                     return Ok(());
                 }
 
-                let format = format!("{} {{", name);
-                print_color(f, format, Color::BrightBlue)?;
+                write!(f, "{} ", name.bright_blue())?;
+                write!(f, "{{")?;
 
                 for field in fields {
                     writeln!(f, "")?;
-                    write!(f, "    ")?;
-                    print_color(f, &field.name, Color::BrightRed)?;
-                    print_color(f, ":", Color::BrightWhite)?;
-                    write!(f, "  ")?;
-                    print_color(f, &field.value, Color::Blue)?;
+                    write!(f, "    {}", field.name.bright_red())?;
+                    write!(f, ":   {}", field.value)?;
                 }
-                writeln!(f, "")?;
-                print_color(f, "}", Color::BrightBlue)?;
+                write!(f, "\n}}")?;
                 Ok(())
             }
-            DebugValue::Err(err) => print_color(f, err, Color::Red),
+            DebugValue::Err(err) => write!(f, "{}", err.red()),
         }
     }
 }
