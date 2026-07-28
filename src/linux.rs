@@ -5,7 +5,7 @@ use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::{ForkResult, fork};
 
 use crate::cli::handle_user_debugger_menu;
-use crate::session::DebugSession;
+use crate::session::{CurrentStopCmd, DebugSession};
 
 /// Begin the parent and child processes
 /// Child Process executes the binary
@@ -56,7 +56,23 @@ pub fn debug(binary_path: &str) {
                         break;
                     }
                     WaitStatus::Stopped(_pid, Signal::SIGSTOP) => {
-                        session.step();
+                        match session.current_cmd {
+                            CurrentStopCmd::SingleStep => session.complete_single_step(),
+                            CurrentStopCmd::StepInto { start_line } => {
+                                session.step(start_line);
+                            }
+                            CurrentStopCmd::StepOver {
+                                ref start_file,
+                                start_line,
+                            } => {
+                                session.next(start_file.clone(), start_line);
+                            }
+                            _ => unreachable!(),
+                        }
+                        if session.current_cmd.is_completed() {
+                            println!("completed");
+                            handle_user_debugger_menu(&mut session);
+                        }
                     }
                     WaitStatus::Stopped(pid, sig) => {
                         if let Ok(mut regs) = ptrace::getregs(pid) {

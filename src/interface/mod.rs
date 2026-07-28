@@ -1,5 +1,4 @@
 use owo_colors::OwoColorize;
-pub mod color;
 #[cfg(target_os = "linux")]
 pub mod linux;
 

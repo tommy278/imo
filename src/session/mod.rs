@@ -87,6 +87,30 @@ pub struct SourceLocation {
     pub line: u64,
 }
 
+// The command to be ran when the debugger hits a sigtrap
+#[derive(Default, Debug)]
+pub enum CurrentStopCmd {
+    SingleStep,
+    StepOver {
+        start_file: Rc<Path>,
+        start_line: u64,
+    },
+    StepInto {
+        start_line: u64,
+    },
+    #[default]
+    Completed,
+}
+
+impl CurrentStopCmd {
+    pub fn is_completed(&self) -> bool {
+        match self {
+            CurrentStopCmd::Completed => true,
+            _ => false,
+        }
+    }
+}
+
 /// Cache for entire debug session
 #[derive(Debug)]
 pub struct DebugSession {
@@ -101,6 +125,8 @@ pub struct DebugSession {
 
     // Metdata
     pub metadata: DebuggerMetadataCache,
+
+    pub current_cmd: CurrentStopCmd,
 
     // Different for each os
     pub active_breakpoints: FxHashMap<u64, ManagedBreakpoint>,
@@ -117,6 +143,7 @@ impl DebugSession {
             address_to_location: FxHashMap::default(),
             file_declaration_order: FxHashMap::default(),
             metadata: DebuggerMetadataCache::default(),
+            current_cmd: CurrentStopCmd::default(),
             active_breakpoints: FxHashMap::default(),
             pid,
         }
@@ -170,13 +197,69 @@ impl DebugSession {
         os::continue_session(self.pid);
     }
 
-    pub fn begin_step_process(&self) {
+    pub fn send_stop_cmd(&self) {
         os::begin_step_process(self.pid);
     }
 
+    pub fn begin_single_step_process(&mut self) {
+        self.current_cmd = CurrentStopCmd::SingleStep;
+        self.send_stop_cmd();
+    }
+
+    pub fn begin_step_process(&mut self) {
+        let current_location = self.current_location().unwrap();
+        self.current_cmd = CurrentStopCmd::StepInto {
+            start_line: current_location.line,
+        };
+        self.send_stop_cmd();
+    }
+
+    pub fn begin_next_process(&mut self) {
+        let current_location = self.current_location().unwrap();
+        self.current_cmd = CurrentStopCmd::StepOver {
+            start_file: current_location.file.clone(),
+            start_line: current_location.line,
+        };
+        self.send_stop_cmd();
+    }
+
+    pub fn current_location(&self) -> Option<&SourceLocation> {
+        let abs = self.get_regs().regs.rip;
+        let rel_addr = self.get_relative_address(abs);
+        self.get_location_with_address(rel_addr)
+    }
+
     /// Move forward from the specified stop
-    pub fn step(&self) {
+    pub fn single_step(&self) {
         os::step(self.pid);
+    }
+
+    pub fn complete_single_step(&mut self) {
+        self.current_cmd = CurrentStopCmd::Completed;
+        self.single_step();
+    }
+
+    pub fn step(&mut self, start_line: u64) {
+        let Some(current_line) = self.current_location().map(|s| s.line) else {
+            return;
+        };
+
+        if start_line != current_line {
+            self.current_cmd = CurrentStopCmd::Completed;
+        }
+        self.single_step();
+    }
+
+    pub fn next(&mut self, start_file: Rc<Path>, start_line: u64) {
+        let Some(current_location) = self.current_location() else {
+            return;
+        };
+
+        if start_file == current_location.file && start_line != current_location.line {
+            self.current_cmd = CurrentStopCmd::Completed;
+        }
+
+        self.single_step();
     }
 
     /// Kill the current session
