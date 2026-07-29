@@ -210,7 +210,7 @@ impl DebugSession {
 
     pub fn begin_searching(&mut self) {
         self.current_cmd = CurrentStopCmd::SearchingForValidLocation;
-        self.send_stop_cmd();
+        self.single_step();
     }
 
     pub fn begin_step_process(&mut self) {
@@ -258,7 +258,6 @@ impl DebugSession {
                 start_line: current_location.line,
                 start_file: current_location.file.clone(),
             };
-            self.send_stop_cmd();
         }
         self.single_step();
     }

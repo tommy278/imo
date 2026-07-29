@@ -56,7 +56,7 @@ pub fn debug(binary_path: &str) {
                         break;
                     }
                     WaitStatus::Stopped(_pid, Signal::SIGSTOP) => {
-                        println!("{:?}", session.current_cmd);
+                        println!("Stopped! and cmd is {:?}", session.current_cmd);
                         // match session.current_cmd {
                         //     CurrentStopCmd::SingleStep => session.complete_single_step(),
                         //     CurrentStopCmd::StepInto {
@@ -76,7 +76,6 @@ pub fn debug(binary_path: &str) {
                         //     }
                         //     _ => println!("{:?}", session.current_cmd),
                         // }
-                        println!("Final cmd{:?}", session.current_cmd);
                         if session.current_cmd.is_completed() {
                             println!("{:?}", session.current_location());
                             handle_user_debugger_menu(&mut session);
@@ -93,6 +92,10 @@ pub fn debug(binary_path: &str) {
                                         start_line,
                                     } => {
                                         session.step(start_file.clone(), start_line);
+                                        continue;
+                                    }
+                                    CurrentStopCmd::SearchingForValidLocation => {
+                                        session.continue_searching();
                                         continue;
                                     }
                                     CurrentStopCmd::Completed => {}
