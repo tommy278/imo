@@ -96,8 +96,10 @@ pub enum CurrentStopCmd {
         start_line: u64,
     },
     StepInto {
+        start_file: Rc<Path>,
         start_line: u64,
     },
+    SearchingForValidLocation,
     #[default]
     Completed,
 }
@@ -206,12 +208,21 @@ impl DebugSession {
         self.send_stop_cmd();
     }
 
+    pub fn begin_searching(&mut self) {
+        self.current_cmd = CurrentStopCmd::SearchingForValidLocation;
+        self.send_stop_cmd();
+    }
+
     pub fn begin_step_process(&mut self) {
-        let current_location = self.current_location().unwrap();
+        let Some(current_location) = self.current_location() else {
+            self.begin_searching();
+            return;
+        };
         self.current_cmd = CurrentStopCmd::StepInto {
             start_line: current_location.line,
+            start_file: current_location.file.clone(),
         };
-        self.send_stop_cmd();
+        self.single_step();
     }
 
     pub fn begin_next_process(&mut self) {
@@ -239,16 +250,32 @@ impl DebugSession {
         self.single_step();
     }
 
-    pub fn step(&mut self, start_line: u64) {
-        let Some(current_line) = self.current_location().map(|s| s.line) else {
+    pub fn continue_searching(&mut self) {
+        // It is a valid location no need to keep searching
+        // Continue with the step process now
+        if let Some(current_location) = self.current_location() {
+            self.current_cmd = CurrentStopCmd::StepInto {
+                start_line: current_location.line,
+                start_file: current_location.file.clone(),
+            };
+            self.send_stop_cmd();
+        }
+        self.single_step();
+    }
+
+    pub fn step(&mut self, start_file: Rc<Path>, start_line: u64) {
+        // If current location is not valid then begin searching for a valid one
+        let Some(current_location) = self.current_location() else {
+            self.begin_searching();
             return;
         };
 
-        if start_line != current_line {
+        println!("{:?}", current_location);
+
+        if start_line != current_location.line || start_file != current_location.file {
             self.current_cmd = CurrentStopCmd::Completed;
-            return;
+            self.send_stop_cmd();
         }
-        self.single_step();
     }
 
     pub fn next(&mut self, start_file: Rc<Path>, start_line: u64) {

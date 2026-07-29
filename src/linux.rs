@@ -56,20 +56,29 @@ pub fn debug(binary_path: &str) {
                         break;
                     }
                     WaitStatus::Stopped(_pid, Signal::SIGSTOP) => {
-                        match session.current_cmd {
-                            CurrentStopCmd::SingleStep => session.complete_single_step(),
-                            CurrentStopCmd::StepInto { start_line } => {
-                                session.step(start_line);
-                            }
-                            CurrentStopCmd::StepOver {
-                                ref start_file,
-                                start_line,
-                            } => {
-                                session.next(start_file.clone(), start_line);
-                            }
-                            _ => unreachable!(),
-                        }
+                        println!("{:?}", session.current_cmd);
+                        // match session.current_cmd {
+                        //     CurrentStopCmd::SingleStep => session.complete_single_step(),
+                        //     CurrentStopCmd::StepInto {
+                        //         ref start_file,
+                        //         start_line,
+                        //     } => {
+                        //         session.step(start_file.clone(), start_line);
+                        //     }
+                        //     CurrentStopCmd::StepOver {
+                        //         ref start_file,
+                        //         start_line,
+                        //     } => {
+                        //         session.next(start_file.clone(), start_line);
+                        //     }
+                        //     CurrentStopCmd::SearchingForValidLocation => {
+                        //         session.continue_searching()
+                        //     }
+                        //     _ => println!("{:?}", session.current_cmd),
+                        // }
+                        println!("Final cmd{:?}", session.current_cmd);
                         if session.current_cmd.is_completed() {
+                            println!("{:?}", session.current_location());
                             handle_user_debugger_menu(&mut session);
                         }
                     }
@@ -78,6 +87,17 @@ pub fn debug(binary_path: &str) {
                             // If stop was due to SIGTRAP, do not forward it to the child.
                             // Pass None to let the child continue its execution.
                             if sig == Signal::SIGTRAP {
+                                match session.current_cmd {
+                                    CurrentStopCmd::StepInto {
+                                        ref start_file,
+                                        start_line,
+                                    } => {
+                                        session.step(start_file.clone(), start_line);
+                                        continue;
+                                    }
+                                    CurrentStopCmd::Completed => {}
+                                    _ => unreachable!("{:?}", session.current_cmd),
+                                }
                                 // On x86/x86_64 CPU the CPU has already advanced to the next instruction before handing control back
 
                                 // INT3 is exacly 1 byte long so checking the previous byte
