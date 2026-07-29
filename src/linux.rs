@@ -56,31 +56,6 @@ pub fn debug(binary_path: &str) {
                         break;
                     }
                     WaitStatus::Stopped(_pid, Signal::SIGSTOP) => {
-                        println!("Stopped! and cmd is {:?}", session.current_cmd);
-                        match session.current_cmd {
-                            CurrentStopCmd::SingleStep => session.complete_single_step(),
-                            CurrentStopCmd::StepInto {
-                                ref start_file,
-                                start_line,
-                            } => {
-                                session.current_cmd = CurrentStopCmd::StepInto {
-                                    start_file: start_file.clone(),
-                                    start_line,
-                                };
-                                session.single_step();
-                                // session.step(start_file.clone(), start_line);
-                            }
-                            CurrentStopCmd::StepOver {
-                                ref start_file,
-                                start_line,
-                            } => {
-                                session.begin_step_process();
-                            }
-                            CurrentStopCmd::SearchingForValidLocation => {
-                                session.single_step();
-                            }
-                            _ => println!("{:?}", session.current_cmd),
-                        }
                         if session.current_cmd.is_completed() {
                             println!("{:?}", session.current_location());
                             handle_user_debugger_menu(&mut session);
@@ -92,6 +67,10 @@ pub fn debug(binary_path: &str) {
                             // Pass None to let the child continue its execution.
                             if sig == Signal::SIGTRAP {
                                 match session.current_cmd {
+                                    CurrentStopCmd::SingleStep => {
+                                        session.complete_single_step();
+                                        continue;
+                                    }
                                     CurrentStopCmd::StepInto {
                                         ref start_file,
                                         start_line,

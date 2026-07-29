@@ -205,7 +205,7 @@ impl DebugSession {
 
     pub fn begin_single_step_process(&mut self) {
         self.current_cmd = CurrentStopCmd::SingleStep;
-        self.send_stop_cmd();
+        self.single_step();
     }
 
     pub fn begin_searching(&mut self) {
@@ -219,7 +219,6 @@ impl DebugSession {
             return;
         };
 
-        // let current_location = self.current_location().unwrap();
         self.current_cmd = CurrentStopCmd::StepInto {
             start_line: current_location.line,
             start_file: current_location.file.clone(),
@@ -249,7 +248,7 @@ impl DebugSession {
 
     pub fn complete_single_step(&mut self) {
         self.current_cmd = CurrentStopCmd::Completed;
-        self.single_step();
+        self.send_stop_cmd();
     }
 
     pub fn continue_searching(&mut self) {

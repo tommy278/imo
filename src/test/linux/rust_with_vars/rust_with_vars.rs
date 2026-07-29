@@ -62,7 +62,7 @@ fn main() {
         names.push("Halland");
         names.push("Dave");
         names.push("Cleo");
-        println!("Hello World");
+        // println!("Hello World");
     }
 
     add(arr[2], arr[3]);
