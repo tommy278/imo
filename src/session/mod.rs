@@ -218,6 +218,8 @@ impl DebugSession {
             self.begin_searching();
             return;
         };
+
+        // let current_location = self.current_location().unwrap();
         self.current_cmd = CurrentStopCmd::StepInto {
             start_line: current_location.line,
             start_file: current_location.file.clone(),
@@ -258,6 +260,7 @@ impl DebugSession {
                 start_line: current_location.line,
                 start_file: current_location.file.clone(),
             };
+            self.send_stop_cmd();
         }
         self.single_step();
     }
@@ -268,8 +271,6 @@ impl DebugSession {
             self.begin_searching();
             return;
         };
-
-        println!("{:?}", current_location);
 
         if start_line != current_location.line || start_file != current_location.file {
             self.current_cmd = CurrentStopCmd::Completed;
