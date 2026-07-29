@@ -246,6 +246,7 @@ impl DebugSession {
 
         if start_line != current_line {
             self.current_cmd = CurrentStopCmd::Completed;
+            return;
         }
         self.single_step();
     }
@@ -257,6 +258,7 @@ impl DebugSession {
 
         if start_file == current_location.file && start_line != current_location.line {
             self.current_cmd = CurrentStopCmd::Completed;
+            return;
         }
 
         self.single_step();

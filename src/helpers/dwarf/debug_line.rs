@@ -131,23 +131,23 @@ fn update_session_cache(
                     let is_already_registered = registered_lines.contains(&line);
                     let relative_address = row.address();
 
-                    if !is_already_registered {
+                    session.address_to_location.insert(
+                        relative_address,
+                        SourceLocation {
+                            file: file_rc.clone(),
+                            line,
+                        },
+                    );
+
+                    if !is_already_registered && !row.end_sequence() {
                         session
                             .line_index
                             .entry(line)
                             .or_insert_with(Vec::new)
                             .push(interface::BreakpointTarget {
-                                file: Rc::clone(file_rc),
+                                file: file_rc.clone(),
                                 relative_address,
                             });
-
-                        session.address_to_location.insert(
-                            relative_address,
-                            SourceLocation {
-                                file: Rc::clone(file_rc),
-                                line,
-                            },
-                        );
 
                         let declaration_history = session
                             .file_declaration_order

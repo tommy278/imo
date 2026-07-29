@@ -70,7 +70,6 @@ pub fn debug(binary_path: &str) {
                             _ => unreachable!(),
                         }
                         if session.current_cmd.is_completed() {
-                            println!("completed");
                             handle_user_debugger_menu(&mut session);
                         }
                     }
