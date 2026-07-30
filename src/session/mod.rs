@@ -90,7 +90,6 @@ pub struct SourceLocation {
 // The command to be ran when the debugger hits a sigtrap
 #[derive(Default, Debug)]
 pub enum CurrentStopCmd {
-    SingleStep,
     StepOver {
         start_file: Rc<Path>,
         start_line: u64,
@@ -101,6 +100,7 @@ pub enum CurrentStopCmd {
     },
     #[default]
     Idle,
+    Running,
     SearchingForValidLocation,
     Completed,
 }
@@ -109,6 +109,13 @@ impl CurrentStopCmd {
     pub fn is_completed(&self) -> bool {
         match self {
             CurrentStopCmd::Completed => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_idle(&self) -> bool {
+        match self {
+            CurrentStopCmd::Idle => true,
             _ => false,
         }
     }
@@ -193,6 +200,14 @@ impl DebugSession {
 
         self.active_breakpoints
             .insert(absolute_address, ManagedBreakpoint::new(breakpoint));
+    }
+
+    pub fn is_idle(&self) -> bool {
+        self.current_cmd.is_idle()
+    }
+
+    pub fn toggle_running(&mut self) {
+        self.current_cmd = CurrentStopCmd::Running;
     }
 
     /// Continue session from last interrupt

@@ -32,14 +32,22 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
             }
             // Step a single instruction
             "si" => {
-                session.complete_single_step();
-                break;
+                if !session.is_idle() {
+                    session.complete_single_step();
+                    break;
+                } else {
+                    println!("Session not started yet")
+                }
             }
             // Step into
             "s" | "step" => {
-                println!("{:?}", session.current_location());
-                session.begin_step_into();
-                break;
+                if !session.is_idle() {
+                    println!("{:?}", session.current_location());
+                    session.begin_step_into();
+                    break;
+                } else {
+                    println!("Session not started yet")
+                }
             }
             // // Step Over / Next
             // "n" | "next" => {
@@ -48,6 +56,8 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
             // }
             "b" | "break" => {
                 let arg = parts.next().expect("Did not provide a second argument");
+
+                session.toggle_running();
 
                 // Handle setting breakpoint if filename and line_number are provided
                 // eg: break running_task:6

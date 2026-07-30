@@ -60,11 +60,8 @@ pub fn debug(binary_path: &str) {
                             // If stop was due to SIGTRAP, do not forward it to the child.
                             // Pass None to let the child continue its execution.
                             if sig == Signal::SIGTRAP {
+                                assert!(!session.is_idle());
                                 match session.current_cmd {
-                                    CurrentStopCmd::SingleStep => {
-                                        session.complete_single_step();
-                                        continue;
-                                    }
                                     CurrentStopCmd::StepInto {
                                         ref start_file,
                                         start_line,
