@@ -55,17 +55,13 @@ pub fn debug(binary_path: &str) {
                         println!("Child process exited with the code {}", code);
                         break;
                     }
-                    WaitStatus::Stopped(_pid, Signal::SIGSTOP) => {
-                        if session.current_cmd.is_completed() {
-                            println!("{:?}", session.current_location());
-                            handle_user_debugger_menu(&mut session);
-                        }
-                    }
                     WaitStatus::Stopped(pid, sig) => {
                         if let Ok(mut regs) = ptrace::getregs(pid) {
                             // If stop was due to SIGTRAP, do not forward it to the child.
                             // Pass None to let the child continue its execution.
                             if sig == Signal::SIGTRAP {
+                                println!("Trapped");
+                                println!("{:?}", session.current_cmd);
                                 match session.current_cmd {
                                     CurrentStopCmd::SingleStep => {
                                         session.complete_single_step();
@@ -75,16 +71,18 @@ pub fn debug(binary_path: &str) {
                                         ref start_file,
                                         start_line,
                                     } => {
-                                        session.step(start_file.clone(), start_line);
-                                        continue;
+                                        todo!()
                                     }
                                     CurrentStopCmd::SearchingForValidLocation => {
-                                        session.current_cmd = CurrentStopCmd::Completed;
-                                        session.send_stop_cmd();
+                                        todo!()
+                                    }
+                                    CurrentStopCmd::Completed => {
+                                        handle_user_debugger_menu(&mut session);
                                         continue;
                                     }
-                                    CurrentStopCmd::Completed => {}
-                                    _ => unreachable!("{:?}", session.current_cmd),
+                                    _ => {
+                                        println!("{:?}", session.current_cmd);
+                                    }
                                 }
                                 // On x86/x86_64 CPU the CPU has already advanced to the next instruction before handing control back
 

@@ -1,4 +1,5 @@
 use nix::sys::ptrace::AddressType;
+use nix::sys::signal;
 use nix::sys::uio::{RemoteIoVec, process_vm_readv};
 use nix::{libc::user_regs_struct, sys::ptrace};
 use std::fs::read_to_string;
@@ -38,6 +39,10 @@ pub fn begin_step_process(pid: ProcessId) {
     // Detach and re-attach to the send a SIGSTOP signal
     ptrace::detach(pid, None).unwrap();
     ptrace::attach(pid).unwrap();
+}
+
+pub fn send_trap_signal(pid: ProcessId) {
+    signal::kill(pid, signal::Signal::SIGTRAP).unwrap();
 }
 
 /// Proceed forward when the process is stopped

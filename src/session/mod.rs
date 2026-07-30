@@ -99,8 +99,9 @@ pub enum CurrentStopCmd {
         start_file: Rc<Path>,
         start_line: u64,
     },
-    SearchingForValidLocation,
     #[default]
+    Idle,
+    SearchingForValidLocation,
     Completed,
 }
 
@@ -203,8 +204,12 @@ impl DebugSession {
         os::begin_step_process(self.pid);
     }
 
-    pub fn begin_single_step_process(&mut self) {
-        self.current_cmd = CurrentStopCmd::SingleStep;
+    pub fn send_trap_signal(&self) {
+        os::send_trap_signal(self.pid);
+    }
+
+    pub fn complete_single_step(&mut self) {
+        self.current_cmd = CurrentStopCmd::Completed;
         self.single_step();
     }
 
@@ -244,11 +249,6 @@ impl DebugSession {
     /// Move forward from the specified stop
     pub fn single_step(&self) {
         os::step(self.pid);
-    }
-
-    pub fn complete_single_step(&mut self) {
-        self.current_cmd = CurrentStopCmd::Completed;
-        self.send_stop_cmd();
     }
 
     pub fn continue_searching(&mut self) {

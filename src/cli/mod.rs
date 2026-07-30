@@ -32,19 +32,19 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
             }
             // Step a single instruction
             "si" => {
-                session.begin_single_step_process();
+                session.complete_single_step();
                 break;
             }
             // Step into
-            "s" | "step" => {
-                session.begin_step_process();
-                break;
-            }
-            // Step Over / Next
-            "n" | "next" => {
-                session.begin_next_process();
-                break;
-            }
+            // "s" | "step" => {
+            //     session.begin_step_process();
+            //     break;
+            // }
+            // // Step Over / Next
+            // "n" | "next" => {
+            //     session.begin_next_process();
+            //     break;
+            // }
             "b" | "break" => {
                 let arg = parts.next().expect("Did not provide a second argument");
 
