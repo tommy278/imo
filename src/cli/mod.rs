@@ -49,11 +49,16 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                     println!("Session not started yet")
                 }
             }
-            // // Step Over / Next
-            // "n" | "next" => {
-            //     session.begin_next_process();
-            //     break;
-            // }
+            // Step Over / Next
+            "n" | "next" => {
+                if !session.is_idle() {
+                    println!("{:?}", session.current_location());
+                    session.begin_step_over();
+                    break;
+                } else {
+                    println!("Session not started yet")
+                }
+            }
             "b" | "break" => {
                 let arg = parts.next().expect("Did not provide a second argument");
 

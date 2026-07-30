@@ -85,6 +85,34 @@ pub fn debug(binary_path: &str) {
                                             continue;
                                         }
                                     }
+                                    CurrentStopCmd::StepOver { start_rbp } => {
+                                        let current_rbp = session.current_rbp();
+
+                                        if current_rbp.0 > start_rbp.0 {
+                                            session.current_cmd = CurrentStopCmd::Completed;
+                                            session.send_trap_signal();
+                                        } else {
+                                            let address = start_rbp.0 + 8;
+                                            let return_address =
+                                                crate::session::linux::peek_data(pid, address)
+                                                    as u64;
+                                            let mut breakpoint =
+                                                crate::interface::linux::BreakPoint::new(
+                                                    return_address,
+                                                );
+                                            breakpoint.enable(pid);
+                                            session.current_cmd =
+                                                CurrentStopCmd::StepOut { breakpoint };
+                                            session.continue_session();
+                                            continue;
+                                        }
+                                    }
+                                    CurrentStopCmd::StepOut { ref mut breakpoint } => {
+                                        println!("{:?}", breakpoint);
+                                        breakpoint.disable(pid);
+                                        session.current_cmd = CurrentStopCmd::Completed;
+                                        session.send_trap_signal();
+                                    }
                                     CurrentStopCmd::SearchingForValidLocation => {
                                         // If the location is valid then complete the search
                                         if session.current_location().is_some() {
