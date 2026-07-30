@@ -85,13 +85,41 @@ pub fn debug(binary_path: &str) {
                                             continue;
                                         }
                                     }
-                                    CurrentStopCmd::StepOver { start_rbp } => {
+                                    CurrentStopCmd::StepOver {
+                                        start_rbp,
+                                        start_line,
+                                    } => {
                                         let current_rbp = session.current_rbp();
 
+                                        // If current base pointer is greater, we are not in a child function
+                                        // The stepping is complete
                                         if current_rbp.0 > start_rbp.0 {
                                             session.current_cmd = CurrentStopCmd::Completed;
                                             session.send_trap_signal();
+                                        }
+                                        // If the current base pointer is the same then we're in the same function
+                                        // In that case check the start line to ensure we actually moved to a new line
+                                        else if current_rbp.0 == start_rbp.0 {
+                                            if let Some(current_line) =
+                                                session.current_location().map(|l| l.line)
+                                            {
+                                                // If we are not on the same line then we are done stepping
+                                                if current_line != start_line {
+                                                    session.current_cmd = CurrentStopCmd::Completed;
+                                                    session.send_trap_signal();
+                                                } else {
+                                                    // If we are on the same line continue stepping
+                                                    session.single_step();
+                                                    continue;
+                                                }
+                                            } else {
+                                                // If the location is not valid, keep stepping
+                                                session.single_step();
+                                                continue;
+                                            }
                                         } else {
+                                            // If current base pointer is lower than the intiaal base pointer then we are in a child function
+                                            // In that case set a breakpoint at the return address and continue till it is intercepted
                                             let address = start_rbp.0 + 8;
                                             let return_address =
                                                 crate::session::linux::peek_data(pid, address)
@@ -108,6 +136,8 @@ pub fn debug(binary_path: &str) {
                                         }
                                     }
                                     CurrentStopCmd::StepOut { ref mut breakpoint } => {
+                                        // We are at the return address of the function
+                                        // Thus we stepped out of the function and the stepping is complete
                                         println!("{:?}", breakpoint);
                                         breakpoint.disable(pid);
                                         session.current_cmd = CurrentStopCmd::Completed;

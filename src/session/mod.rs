@@ -95,6 +95,7 @@ pub struct Rbp(pub u64);
 pub enum CurrentStopCmd {
     StepOver {
         start_rbp: Rbp,
+        start_line: u64,
     },
     StepInto {
         start_file: Rc<Path>,
@@ -245,9 +246,15 @@ impl DebugSession {
 
     pub fn begin_step_over(&mut self) {
         let current_rbp = self.current_rbp();
+        let Some(current_line) = self.current_location().map(|l| l.line) else {
+            self.current_cmd = CurrentStopCmd::SearchingForValidLocation;
+            self.single_step();
+            return;
+        };
 
         self.current_cmd = CurrentStopCmd::StepOver {
             start_rbp: current_rbp,
+            start_line: current_line,
         };
         self.single_step();
     }
