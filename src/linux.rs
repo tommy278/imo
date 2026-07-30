@@ -60,8 +60,6 @@ pub fn debug(binary_path: &str) {
                             // If stop was due to SIGTRAP, do not forward it to the child.
                             // Pass None to let the child continue its execution.
                             if sig == Signal::SIGTRAP {
-                                println!("Trapped");
-                                println!("{:?}", session.current_cmd);
                                 match session.current_cmd {
                                     CurrentStopCmd::SingleStep => {
                                         session.complete_single_step();
@@ -71,10 +69,35 @@ pub fn debug(binary_path: &str) {
                                         ref start_file,
                                         start_line,
                                     } => {
-                                        todo!()
+                                        // Location is not valid so step until a valid one is found
+                                        let Some(current_location) = session.current_location()
+                                        else {
+                                            session.single_step();
+                                            continue;
+                                        };
+
+                                        // If the location changed then stop
+                                        if &current_location.file != start_file
+                                            || current_location.line != start_line
+                                        {
+                                            session.current_cmd = CurrentStopCmd::Completed;
+                                            session.send_trap_signal();
+                                        } else {
+                                            // Still on the same location keep going
+                                            session.single_step();
+                                            continue;
+                                        }
                                     }
                                     CurrentStopCmd::SearchingForValidLocation => {
-                                        todo!()
+                                        // If the location is valid then complete the search
+                                        if session.current_location().is_some() {
+                                            session.current_cmd = CurrentStopCmd::Completed;
+                                            session.send_trap_signal();
+                                        } else {
+                                            // Location is not valid continue searching
+                                            session.single_step();
+                                            continue;
+                                        }
                                     }
                                     CurrentStopCmd::Completed => {
                                         handle_user_debugger_menu(&mut session);

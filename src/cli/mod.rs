@@ -36,10 +36,11 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 break;
             }
             // Step into
-            // "s" | "step" => {
-            //     session.begin_step_process();
-            //     break;
-            // }
+            "s" | "step" => {
+                println!("{:?}", session.current_location());
+                session.begin_step_into();
+                break;
+            }
             // // Step Over / Next
             // "n" | "next" => {
             //     session.begin_next_process();

@@ -200,10 +200,6 @@ impl DebugSession {
         os::continue_session(self.pid);
     }
 
-    pub fn send_stop_cmd(&self) {
-        os::begin_step_process(self.pid);
-    }
-
     pub fn send_trap_signal(&self) {
         os::send_trap_signal(self.pid);
     }
@@ -213,31 +209,18 @@ impl DebugSession {
         self.single_step();
     }
 
-    pub fn begin_searching(&mut self) {
-        self.current_cmd = CurrentStopCmd::SearchingForValidLocation;
-        self.single_step();
-    }
-
-    pub fn begin_step_process(&mut self) {
+    pub fn begin_step_into(&mut self) {
         let Some(current_location) = self.current_location() else {
-            self.begin_searching();
+            self.current_cmd = CurrentStopCmd::SearchingForValidLocation;
+            self.single_step();
             return;
         };
 
         self.current_cmd = CurrentStopCmd::StepInto {
-            start_line: current_location.line,
             start_file: current_location.file.clone(),
+            start_line: current_location.line,
         };
         self.single_step();
-    }
-
-    pub fn begin_next_process(&mut self) {
-        let current_location = self.current_location().unwrap();
-        self.current_cmd = CurrentStopCmd::StepOver {
-            start_file: current_location.file.clone(),
-            start_line: current_location.line,
-        };
-        self.send_stop_cmd();
     }
 
     pub fn current_location(&self) -> Option<&SourceLocation> {
@@ -249,45 +232,6 @@ impl DebugSession {
     /// Move forward from the specified stop
     pub fn single_step(&self) {
         os::step(self.pid);
-    }
-
-    pub fn continue_searching(&mut self) {
-        // It is a valid location no need to keep searching
-        // Continue with the step process now
-        if let Some(current_location) = self.current_location() {
-            self.current_cmd = CurrentStopCmd::StepInto {
-                start_line: current_location.line,
-                start_file: current_location.file.clone(),
-            };
-            self.send_stop_cmd();
-        }
-        self.single_step();
-    }
-
-    pub fn step(&mut self, start_file: Rc<Path>, start_line: u64) {
-        // If current location is not valid then begin searching for a valid one
-        let Some(current_location) = self.current_location() else {
-            self.begin_searching();
-            return;
-        };
-
-        if start_line != current_location.line || start_file != current_location.file {
-            self.current_cmd = CurrentStopCmd::Completed;
-            self.send_stop_cmd();
-        }
-    }
-
-    pub fn next(&mut self, start_file: Rc<Path>, start_line: u64) {
-        let Some(current_location) = self.current_location() else {
-            return;
-        };
-
-        if start_file == current_location.file && start_line != current_location.line {
-            self.current_cmd = CurrentStopCmd::Completed;
-            return;
-        }
-
-        self.single_step();
     }
 
     /// Kill the current session
