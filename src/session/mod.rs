@@ -88,13 +88,13 @@ pub struct SourceLocation {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct Rbp(pub u64);
+pub struct Rsp(pub u64);
 
 // The command to be ran when the debugger hits a sigtrap
 #[derive(Default, Debug)]
 pub enum CurrentStopCmd {
     StepOver {
-        start_rbp: Rbp,
+        start_rsp: Rsp,
         start_line: u64,
     },
     StepInto {
@@ -245,7 +245,7 @@ impl DebugSession {
     }
 
     pub fn begin_step_over(&mut self) {
-        let current_rbp = self.current_rbp();
+        let current_rsp = self.current_rsp();
         let Some(current_line) = self.current_location().map(|l| l.line) else {
             self.current_cmd = CurrentStopCmd::SearchingForValidLocation;
             self.single_step();
@@ -253,7 +253,7 @@ impl DebugSession {
         };
 
         self.current_cmd = CurrentStopCmd::StepOver {
-            start_rbp: current_rbp,
+            start_rsp: current_rsp,
             start_line: current_line,
         };
         self.single_step();
@@ -289,9 +289,9 @@ impl DebugSession {
         self.address_to_location.get(&relative_address)
     }
 
-    pub fn current_rbp(&self) -> Rbp {
-        let rbp = self.get_regs().regs.rbp;
-        Rbp(rbp)
+    pub fn current_rsp(&self) -> Rsp {
+        let rsp = self.get_regs().regs.rsp;
+        Rsp(rsp)
     }
 
     /// Get the exact order in which the compiler actually initialized the variables

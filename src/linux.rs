@@ -61,6 +61,7 @@ pub fn debug(binary_path: &str) {
                             // Pass None to let the child continue its execution.
                             if sig == Signal::SIGTRAP {
                                 assert!(!session.is_idle());
+                                println!("{:?}", session.current_cmd);
                                 match session.current_cmd {
                                     CurrentStopCmd::StepInto {
                                         ref start_file,
@@ -86,20 +87,21 @@ pub fn debug(binary_path: &str) {
                                         }
                                     }
                                     CurrentStopCmd::StepOver {
-                                        start_rbp,
+                                        start_rsp,
                                         start_line,
                                     } => {
-                                        let current_rbp = session.current_rbp();
+                                        let current_rsp = regs.rsp;
+                                        println!("{}", current_rsp < start_rsp.0);
 
                                         // If current base pointer is greater, we are not in a child function
                                         // The stepping is complete
-                                        if current_rbp.0 > start_rbp.0 {
+                                        if current_rsp > start_rsp.0 {
                                             session.current_cmd = CurrentStopCmd::Completed;
                                             session.send_trap_signal();
                                         }
                                         // If the current base pointer is the same then we're in the same function
                                         // In that case check the start line to ensure we actually moved to a new line
-                                        else if current_rbp.0 == start_rbp.0 {
+                                        else if current_rsp == start_rsp.0 {
                                             if let Some(current_line) =
                                                 session.current_location().map(|l| l.line)
                                             {
@@ -118,9 +120,9 @@ pub fn debug(binary_path: &str) {
                                                 continue;
                                             }
                                         } else {
-                                            // If current base pointer is lower than the intiaal base pointer then we are in a child function
+                                            // If current base pointer is lower than the intial base pointer then we are in a child function
                                             // In that case set a breakpoint at the return address and continue till it is intercepted
-                                            let address = start_rbp.0 + 8;
+                                            let address = current_rsp - 8;
                                             let return_address =
                                                 crate::session::linux::peek_data(pid, address)
                                                     as u64;
@@ -138,7 +140,6 @@ pub fn debug(binary_path: &str) {
                                     CurrentStopCmd::StepOut { ref mut breakpoint } => {
                                         // We are at the return address of the function
                                         // Thus we stepped out of the function and the stepping is complete
-                                        println!("{:?}", breakpoint);
                                         breakpoint.disable(pid);
                                         session.current_cmd = CurrentStopCmd::Completed;
                                         session.send_trap_signal();
