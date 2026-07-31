@@ -37,6 +37,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
             }
             "c" | "continue" => {
                 if !session.is_idle() {
+                    session.toggle_continue();
                     session.continue_session();
                     break;
                 } else {

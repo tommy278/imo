@@ -66,7 +66,6 @@ pub fn debug(binary_path: &str) {
                                 match session.current_cmd {
                                     CurrentStopCmd::SingleStep => {
                                         session.current_cmd = CurrentStopCmd::Completed;
-                                        session.send_trap_signal();
                                     }
                                     CurrentStopCmd::StepInto {
                                         ref start_file,
@@ -84,25 +83,25 @@ pub fn debug(binary_path: &str) {
                                             || current_location.line != start_line
                                         {
                                             session.current_cmd = CurrentStopCmd::Completed;
-                                            session.send_trap_signal();
                                         } else {
                                             // Still on the same location keep going
                                             session.single_step();
-                                            continue;
                                         }
                                     }
                                     CurrentStopCmd::StepOver {
                                         start_cfa,
                                         start_line,
+                                        ref start_file,
                                     } => {
                                         let (current_cfa, return_address) =
                                             session.get_cfa_and_ret_addr().unwrap();
+
+                                        let file = start_file.clone();
 
                                         // If current base pointer is greater, we are not in a child function
                                         // The stepping is complete
                                         if current_cfa > start_cfa {
                                             session.current_cmd = CurrentStopCmd::Completed;
-                                            session.send_trap_signal();
                                         }
                                         // If the current base pointer is the same then we're in the same function
                                         // In that case check the start line to ensure we actually moved to a new line
@@ -117,10 +116,8 @@ pub fn debug(binary_path: &str) {
                                             // If we are not on the same line then we are done stepping
                                             if start_line != current_line {
                                                 session.current_cmd = CurrentStopCmd::Completed;
-                                                session.send_trap_signal();
                                             } else {
                                                 session.single_step();
-                                                continue;
                                             }
                                         } else {
                                             // If current base pointer is lower than the intial base pointer then we are in a child function
@@ -132,14 +129,20 @@ pub fn debug(binary_path: &str) {
 
                                             session.current_cmd = CurrentStopCmd::StepOut {
                                                 resume_cfa: start_cfa,
+                                                start_line,
+                                                start_file: file,
                                             };
                                             session.continue_session();
-                                            continue;
                                         }
                                     }
-                                    CurrentStopCmd::StepOut { resume_cfa } => {
+                                    CurrentStopCmd::StepOut {
+                                        resume_cfa,
+                                        start_line,
+                                        ref start_file,
+                                    } => {
                                         let current_cfa =
                                             session.get_cfa_and_ret_addr().map(|c| c.0).unwrap();
+                                        let file = start_file.clone();
 
                                         if current_cfa == resume_cfa {
                                             let breakpoint_addr = regs.rip - 1;
@@ -152,65 +155,88 @@ pub fn debug(binary_path: &str) {
                                             ptrace::setregs(pid, regs).unwrap();
 
                                             session.current_cmd =
-                                                CurrentStopCmd::SearchingForValidLocation;
+                                                CurrentStopCmd::SearchingForNextValidLocation {
+                                                    start_line,
+                                                    start_file: file,
+                                                };
                                             session.single_step();
-                                            continue;
                                         } else {
                                             session.continue_session();
-                                            continue;
                                         }
+                                    }
+                                    CurrentStopCmd::SearchingForNextValidLocation {
+                                        start_line,
+                                        ref start_file,
+                                    } => {
+                                        if let Some(l) = session.current_location() {
+                                            let current_file = l.file.to_path_buf();
+
+                                            if &current_file != start_file {
+                                                session.single_step();
+                                            }
+
+                                            if l.line != start_line {
+                                                session.current_cmd = CurrentStopCmd::Completed;
+                                            }
+                                        }
+
+                                        session.single_step();
                                     }
                                     CurrentStopCmd::SearchingForValidLocation => {
                                         // If the location is valid then complete the search
                                         if session.current_location().is_some() {
                                             session.current_cmd = CurrentStopCmd::Completed;
-                                            session.send_trap_signal();
                                         } else {
                                             // Location is not valid continue searching
                                             session.single_step();
-                                            continue;
                                         }
                                     }
                                     CurrentStopCmd::Completed => {
-                                        session.continue_session();
-                                        continue;
+                                        break;
                                     }
-                                    _ => {
-                                        println!("{:?}", session.current_cmd);
-                                    }
-                                }
-                                // On x86/x86_64 CPU the CPU has already advanced to the next instruction before handing control back
+                                    CurrentStopCmd::Running | CurrentStopCmd::Continuing => {
+                                        // On x86/x86_64 CPU the CPU has already advanced to the next instruction before handing control back
 
-                                // INT3 is exacly 1 byte long so checking the previous byte
-                                // signifies whether there was a breakpoint instruction
-                                let breakpoint_addr = regs.rip - 1;
+                                        // INT3 is exacly 1 byte long so checking the previous byte
+                                        // signifies whether there was a breakpoint instruction
+                                        let breakpoint_addr = regs.rip - 1;
 
-                                // Read a word from the child's memory
-                                match ptrace::read(pid, breakpoint_addr as ptrace::AddressType) {
-                                    Ok(_word) => {
-                                        if let Some(bp) =
-                                            session.active_breakpoints.get_mut(&breakpoint_addr)
-                                        {
-                                            // Rollback the instruction pointer by 1 byte
-                                            regs.rip = breakpoint_addr;
+                                        // Read a word from the child's memory
+                                        match ptrace::read(
+                                            pid,
+                                            breakpoint_addr as ptrace::AddressType,
+                                        ) {
+                                            Ok(_word) => {
+                                                if let Some(bp) = session
+                                                    .active_breakpoints
+                                                    .get_mut(&breakpoint_addr)
+                                                {
+                                                    // Rollback the instruction pointer by 1 byte
+                                                    regs.rip = breakpoint_addr;
 
-                                            // Update pid register for future instruction continuation
-                                            ptrace::setregs(pid, regs).unwrap();
+                                                    // Update pid register for future instruction continuation
+                                                    ptrace::setregs(pid, regs).unwrap();
 
-                                            // Replace the 0xCC (INT3) back with the previous instruction
-                                            bp.breakpoint.disable(pid);
+                                                    // Replace the 0xCC (INT3) back with the previous instruction
+                                                    bp.breakpoint.disable(pid);
 
-                                            // Open interactive menu
-                                            handle_user_debugger_menu(&mut session);
-                                        } else {
-                                            // It was probably a SIGTRAP from the step
-                                            handle_user_debugger_menu(&mut session);
+                                                    // Open interactive menu
+                                                    handle_user_debugger_menu(&mut session);
+                                                } else {
+                                                    // It was probably a SIGTRAP from the step
+                                                    handle_user_debugger_menu(&mut session);
+                                                }
+                                            }
+                                            Err(err) => {
+                                                println!(
+                                                    "Failed to read child's memory: {:?}",
+                                                    err
+                                                );
+                                                ptrace::cont(pid, None).unwrap();
+                                            }
                                         }
                                     }
-                                    Err(err) => {
-                                        println!("Failed to read child's memory: {:?}", err);
-                                        ptrace::cont(pid, None).unwrap();
-                                    }
+                                    _ => todo!(),
                                 }
                             } else {
                                 // Forward other unexpected signals (like SIGINT, SIGSEGV) to the child

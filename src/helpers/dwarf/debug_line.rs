@@ -131,13 +131,15 @@ fn update_session_cache(
                     let is_already_registered = registered_lines.contains(&line);
                     let relative_address = row.address();
 
-                    session.address_to_location.insert(
-                        relative_address,
-                        SourceLocation {
-                            file: file_rc.clone(),
-                            line,
-                        },
-                    );
+                    if row.is_stmt() {
+                        session.address_to_location.insert(
+                            relative_address,
+                            SourceLocation {
+                                file: file_rc.clone(),
+                                line,
+                            },
+                        );
+                    }
 
                     if !is_already_registered && !row.end_sequence() {
                         session

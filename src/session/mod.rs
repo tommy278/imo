@@ -96,6 +96,7 @@ pub enum CurrentStopCmd {
     StepOver {
         start_cfa: u64,
         start_line: u64,
+        start_file: PathBuf,
     },
     StepInto {
         start_file: Rc<Path>,
@@ -103,11 +104,18 @@ pub enum CurrentStopCmd {
     },
     StepOut {
         resume_cfa: u64,
+        start_line: u64,
+        start_file: PathBuf,
     },
     #[default]
     Idle,
     Running,
+    Continuing,
     SearchingForValidLocation,
+    SearchingForNextValidLocation {
+        start_line: u64,
+        start_file: PathBuf,
+    },
     Completed,
 }
 
@@ -299,6 +307,10 @@ impl DebugSession {
         os::send_trap_signal(self.pid);
     }
 
+    pub fn toggle_continue(&mut self) {
+        self.current_cmd = CurrentStopCmd::Continuing;
+    }
+
     pub fn complete_single_step(&mut self) {
         self.current_cmd = CurrentStopCmd::SingleStep;
         self.single_step();
@@ -319,7 +331,7 @@ impl DebugSession {
     }
 
     pub fn begin_step_over(&mut self) {
-        let Some(current_line) = self.current_location().map(|l| l.line) else {
+        let Some(current_location) = self.current_location() else {
             self.current_cmd = CurrentStopCmd::SearchingForValidLocation;
             self.single_step();
             return;
@@ -328,7 +340,8 @@ impl DebugSession {
 
         self.current_cmd = CurrentStopCmd::StepOver {
             start_cfa: current_cfa,
-            start_line: current_line,
+            start_line: current_location.line,
+            start_file: current_location.file.to_path_buf(),
         };
         self.single_step();
     }
