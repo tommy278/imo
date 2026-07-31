@@ -92,9 +92,10 @@ pub struct SourceLocation {
 // The command to be ran when the debugger hits a sigtrap
 #[derive(Default, Debug)]
 pub enum CurrentStopCmd {
+    SingleStep,
     StepOver {
         start_cfa: u64,
-        start_line: Option<u64>,
+        start_line: u64,
     },
     StepInto {
         start_file: Rc<Path>,
@@ -285,7 +286,7 @@ impl DebugSession {
     }
 
     pub fn complete_single_step(&mut self) {
-        self.current_cmd = CurrentStopCmd::Completed;
+        self.current_cmd = CurrentStopCmd::SingleStep;
         self.single_step();
     }
 
@@ -304,8 +305,12 @@ impl DebugSession {
     }
 
     pub fn begin_step_over(&mut self) {
+        let Some(current_line) = self.current_location().map(|l| l.line) else {
+            self.current_cmd = CurrentStopCmd::SearchingForValidLocation;
+            self.single_step();
+            return;
+        };
         let current_cfa = self.get_cfa().unwrap();
-        let current_line = self.current_location().map(|l| l.line);
 
         self.current_cmd = CurrentStopCmd::StepOver {
             start_cfa: current_cfa,

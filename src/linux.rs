@@ -64,6 +64,10 @@ pub fn debug(binary_path: &str) {
                                 assert!(!session.is_idle());
                                 println!("{:?}", session.current_cmd);
                                 match session.current_cmd {
+                                    CurrentStopCmd::SingleStep => {
+                                        session.current_cmd = CurrentStopCmd::Completed;
+                                        session.send_trap_signal();
+                                    }
                                     CurrentStopCmd::StepInto {
                                         ref start_file,
                                         start_line,
@@ -102,12 +106,15 @@ pub fn debug(binary_path: &str) {
                                         // If the current base pointer is the same then we're in the same function
                                         // In that case check the start line to ensure we actually moved to a new line
                                         else if current_cfa == start_cfa {
-                                            let current_line =
-                                                session.current_location().map(|l| l.line);
+                                            let Some(current_line) =
+                                                session.current_location().map(|l| l.line)
+                                            else {
+                                                session.single_step();
+                                                continue;
+                                            };
+
                                             // If we are not on the same line then we are done stepping
-                                            if start_line.is_some_and(|s| {
-                                                current_line.is_some_and(|c| s != c)
-                                            }) {
+                                            if start_line != current_line {
                                                 session.current_cmd = CurrentStopCmd::Completed;
                                                 session.send_trap_signal();
                                             } else {
