@@ -1,3 +1,4 @@
+pub mod debug_frame;
 pub mod debug_info;
 pub mod debug_line;
 

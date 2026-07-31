@@ -8,6 +8,7 @@ use std::rc::Rc;
 
 use crate::helpers::dwarf::{
     self,
+    debug_frame::{RawDebugFrame, setup_session_debug_frame},
     debug_info::{ActiveVariablesContext, DebuggerMetadataCache},
 };
 use crate::interface::{DebugValue, RegisterViewer};
@@ -142,7 +143,11 @@ pub struct DebugSession {
     // Metdata
     pub metadata: DebuggerMetadataCache,
 
+    // Tracking the current state the debugger is in
     pub current_cmd: CurrentStopCmd,
+
+    // Debug frame for finding CFA
+    pub raw_debug_frame: RawDebugFrame,
 
     // Different for each os
     pub active_breakpoints: FxHashMap<u64, ManagedBreakpoint>,
@@ -159,6 +164,7 @@ impl DebugSession {
             address_to_location: FxHashMap::default(),
             file_declaration_order: FxHashMap::default(),
             metadata: DebuggerMetadataCache::default(),
+            raw_debug_frame: RawDebugFrame::default(),
             current_cmd: CurrentStopCmd::default(),
             active_breakpoints: FxHashMap::default(),
             pid,
@@ -179,6 +185,8 @@ impl DebugSession {
 
         // Update line index and address to location
         dwarf::debug_line::setup_session_cache(binary_path, &mut session);
+
+        session.raw_debug_frame = setup_session_debug_frame(binary_path);
 
         session
     }
@@ -206,6 +214,13 @@ impl DebugSession {
 
         self.active_breakpoints
             .insert(absolute_address, ManagedBreakpoint::new(breakpoint));
+    }
+
+    pub fn get_unwind_table(
+        &self,
+    ) -> gimli::DebugFrame<gimli::EndianSlice<'_, gimli::RunTimeEndian>> {
+        self.raw_debug_frame
+            .get_unwind_table_with_endian(self.metadata.endian)
     }
 
     pub fn is_idle(&self) -> bool {
