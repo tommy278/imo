@@ -26,9 +26,22 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
         let mut parts = input.split_whitespace();
 
         match parts.next().unwrap() {
-            "run" | "c" | "continue" => {
-                session.continue_session();
-                break;
+            "run" => {
+                if session.is_idle() {
+                    session.toggle_running();
+                    session.continue_session();
+                    break;
+                } else {
+                    println!("Session is already running")
+                }
+            }
+            "c" | "continue" => {
+                if !session.is_idle() {
+                    session.continue_session();
+                    break;
+                } else {
+                    println!("Session not started yet")
+                }
             }
             // Step a single instruction
             "si" => {
@@ -61,8 +74,6 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
             }
             "b" | "break" => {
                 let arg = parts.next().expect("Did not provide a second argument");
-
-                session.toggle_running();
 
                 // Handle setting breakpoint if filename and line_number are provided
                 // eg: break running_task:6
@@ -188,7 +199,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 println!("{:?}", line);
             }
             "cfa" => {
-                session.get_cfa();
+                println!("{:?}", session.get_cfa())
             }
             "scope" => {
                 let scope = session.find_current_scope();
