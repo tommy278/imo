@@ -102,7 +102,7 @@ pub enum CurrentStopCmd {
         start_line: u64,
     },
     StepOut {
-        breakpoint: os::PlatformBreakpoint,
+        resume_cfa: u64,
     },
     #[default]
     Idle,
@@ -231,7 +231,7 @@ impl DebugSession {
         }
     }
 
-    pub fn get_cfa(&self) -> Option<u64> {
+    pub fn get_cfa_and_ret_addr(&self) -> Option<(u64, u64)> {
         let eh_frame = self.get_unwind_table();
         let base_addresses = self.metadata.base_addresses.clone();
 
@@ -245,17 +245,31 @@ impl DebugSession {
             let mut ctx = gimli::UnwindContext::new();
             let mut table = fde.rows(&eh_frame, &base_addresses, &mut ctx).unwrap();
 
+            let ra_register = fde.cie().return_address_register();
             while let Some(row) = table.next_row().unwrap() {
+                let cfa_address = match row.cfa() {
+                    gimli::CfaRule::RegisterAndOffset { register, offset } => {
+                        let reg_value = self.get_register_value(*register);
+                        (reg_value as i64 + offset) as u64
+                    }
+                    gimli::CfaRule::Expression(_) => todo!(),
+                };
+
                 if row.contains(current_pc) {
-                    match row.cfa() {
-                        gimli::CfaRule::RegisterAndOffset { register, offset } => {
-                            let reg_value = self.get_register_value(*register);
-                            let cfa_address = (reg_value as i64 + offset) as u64;
-                            return Some(cfa_address);
-                        }
-                        gimli::CfaRule::Expression(_) => {
-                            eprintln!("Expression not handled yet");
-                            return None;
+                    if let Some(ra_rule) = row.register(ra_register) {
+                        match ra_rule {
+                            gimli::RegisterRule::Offset(offset) => {
+                                let ra_storage_address = (cfa_address as i64 + offset) as u64;
+                                let return_address =
+                                    crate::session::linux::peek_data(self.pid, ra_storage_address)
+                                        as u64;
+                                return Some((cfa_address, return_address));
+                            }
+                            gimli::RegisterRule::Register(saved_reg) => {
+                                let return_address = self.get_register_value(saved_reg);
+                                return Some((cfa_address, return_address));
+                            }
+                            _ => todo!(),
                         }
                     }
                 }
@@ -310,7 +324,7 @@ impl DebugSession {
             self.single_step();
             return;
         };
-        let current_cfa = self.get_cfa().unwrap();
+        let (current_cfa, _) = self.get_cfa_and_ret_addr().unwrap();
 
         self.current_cmd = CurrentStopCmd::StepOver {
             start_cfa: current_cfa,

@@ -199,7 +199,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 println!("{:?}", line);
             }
             "cfa" => {
-                println!("{:?}", session.get_cfa())
+                println!("{:?}", session.get_cfa_and_ret_addr())
             }
             "scope" => {
                 let scope = session.find_current_scope();

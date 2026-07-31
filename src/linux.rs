@@ -95,7 +95,8 @@ pub fn debug(binary_path: &str) {
                                         start_cfa,
                                         start_line,
                                     } => {
-                                        let current_cfa = session.get_cfa().unwrap();
+                                        let (current_cfa, return_address) =
+                                            session.get_cfa_and_ret_addr().unwrap();
 
                                         // If current base pointer is greater, we are not in a child function
                                         // The stepping is complete
@@ -124,26 +125,40 @@ pub fn debug(binary_path: &str) {
                                         } else {
                                             // If current base pointer is lower than the intial base pointer then we are in a child function
                                             // In that case set a breakpoint at the return address and continue till it is intercepted
-                                            let address = current_cfa - 8;
-                                            let return_address = peek_data(pid, address) as u64;
+                                            let relative_address =
+                                                session.get_relative_address(return_address);
 
-                                            let mut breakpoint =
-                                                PlatformBreakpoint::new(return_address);
-                                            breakpoint.enable(pid);
-                                            session.current_cmd =
-                                                CurrentStopCmd::StepOut { breakpoint };
+                                            session.create_specific_breakpoint(relative_address);
+
+                                            session.current_cmd = CurrentStopCmd::StepOut {
+                                                resume_cfa: start_cfa,
+                                            };
                                             session.continue_session();
                                             continue;
                                         }
                                     }
-                                    CurrentStopCmd::StepOut { ref mut breakpoint } => {
-                                        let breakpoint_addr = regs.rip - 1;
-                                        regs.rip = breakpoint_addr;
-                                        ptrace::setregs(pid, regs).unwrap();
-                                        breakpoint.disable(pid);
+                                    CurrentStopCmd::StepOut { resume_cfa } => {
+                                        let current_cfa =
+                                            session.get_cfa_and_ret_addr().map(|c| c.0).unwrap();
 
-                                        session.current_cmd = CurrentStopCmd::Completed;
-                                        session.send_trap_signal();
+                                        if current_cfa == resume_cfa {
+                                            let breakpoint_addr = regs.rip - 1;
+
+                                            let relative_address =
+                                                session.get_relative_address(breakpoint_addr);
+                                            session.clear_specific_breakpoint(relative_address);
+
+                                            regs.rip = breakpoint_addr;
+                                            ptrace::setregs(pid, regs).unwrap();
+
+                                            session.current_cmd =
+                                                CurrentStopCmd::SearchingForValidLocation;
+                                            session.single_step();
+                                            continue;
+                                        } else {
+                                            session.continue_session();
+                                            continue;
+                                        }
                                     }
                                     CurrentStopCmd::SearchingForValidLocation => {
                                         // If the location is valid then complete the search
