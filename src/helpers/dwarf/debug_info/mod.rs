@@ -760,6 +760,8 @@ pub struct DebuggerMetadataCache {
     /// Global offset for all type layouts
     pub type_index: FxHashMap<usize, TypeCacheNode>,
 
+    pub base_addresses: gimli::BaseAddresses,
+
     // Store additional data
     pub encoding: Option<Encoding>,
     pub endian: RunTimeEndian,

@@ -18,8 +18,8 @@ impl RawDebugFrame {
     pub fn get_unwind_table_with_endian(
         &self,
         endian: gimli::RunTimeEndian,
-    ) -> gimli::DebugFrame<gimli::EndianSlice<'_, gimli::RunTimeEndian>> {
-        gimli::DebugFrame::new(&self.0, endian)
+    ) -> gimli::EhFrame<gimli::EndianSlice<'_, gimli::RunTimeEndian>> {
+        gimli::EhFrame::new(&self.0, endian)
     }
 }
 
@@ -45,7 +45,7 @@ fn update_session_cache(object: &object::File) -> Result<RawDebugFrame, Box<dyn 
     // Borrow a `Cow<[u8]>` to create an `EndianSlice`.
     // let borrow_section = |section| gimli::EndianSlice::new(borrow::Cow::as_ref(section), endian);
 
-    let debug_frame_raw = load_section(gimli::SectionId::DebugFrame)?;
+    let debug_frame_raw = load_section(gimli::SectionId::EhFrame)?;
     // let debug_frame = gimli::DebugFrame::new(&debug_frame_raw, endian);
 
     // let base_addresses = gimli::BaseAddresses::default();

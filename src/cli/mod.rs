@@ -187,6 +187,9 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 let line = session.current_location();
                 println!("{:?}", line);
             }
+            "cfa" => {
+                session.get_cfa();
+            }
             "scope" => {
                 let scope = session.find_current_scope();
                 println!("{:?}", scope);

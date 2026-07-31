@@ -7,7 +7,7 @@
 
 use gimli::{EndianSlice, Reader as _, RelocateReader, RunTimeEndian, UnitRef, constants};
 use object::{Object, ObjectSection};
-use std::{borrow, error, fs};
+use std::{borrow, error, fs, rc::Rc};
 
 use crate::helpers::dwarf::debug_info::{
     Abi, DebuggerMetadataCache, DwarfType, EnumVariant, Enumerator, GenericField, Reader,
@@ -28,12 +28,32 @@ struct Section<'data> {
 // If you don't need relocations, you can use `gimli::EndianSlice` directly.
 pub fn lookup_vars(binary_path: &str, info_cache: &mut DebuggerMetadataCache) {
     let file = fs::File::open(binary_path).unwrap();
+
     // SAFETY: This is not safe. `gimli` does not mitigate against modifications to the
     // file while it is being read. See the `memmap2` documentation and take your own
     // precautions. `fs::read` could be used instead if you don't mind loading the entire
     // file into memory.
     let mmap = unsafe { memmap2::Mmap::map(&file).unwrap() };
     let object = object::File::parse(&*mmap).unwrap();
+
+    let text_address = object
+        .section_by_name(".text")
+        .map(|s| s.address())
+        .unwrap();
+
+    let got_address = object.section_by_name(".got").map(|s| s.address()).unwrap();
+
+    let eh_frame_address = object
+        .section_by_name(".eh_frame")
+        .map(|s| s.address())
+        .unwrap();
+
+    println!("Text: {}, Got: {}", text_address, got_address);
+
+    info_cache.base_addresses = gimli::BaseAddresses::default()
+        .set_text(text_address)
+        .set_got(got_address)
+        .set_eh_frame(eh_frame_address);
 
     info_cache.abi = Abi::new(object.format());
 

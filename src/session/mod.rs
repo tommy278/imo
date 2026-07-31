@@ -2,6 +2,7 @@ pub mod interface;
 #[cfg(target_os = "linux")]
 pub mod linux;
 
+use gimli::UnwindSection;
 use rustc_hash::FxHashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -216,11 +217,58 @@ impl DebugSession {
             .insert(absolute_address, ManagedBreakpoint::new(breakpoint));
     }
 
-    pub fn get_unwind_table(
-        &self,
-    ) -> gimli::DebugFrame<gimli::EndianSlice<'_, gimli::RunTimeEndian>> {
+    pub fn get_unwind_table(&self) -> gimli::EhFrame<gimli::EndianSlice<'_, gimli::RunTimeEndian>> {
         self.raw_debug_frame
             .get_unwind_table_with_endian(self.metadata.endian)
+    }
+
+    pub fn get_register_value(&self, register: gimli::Register) -> u64 {
+        let regs = self.get_regs().regs;
+
+        match register.0 {
+            6 => regs.rbp,
+            7 => regs.rsp,
+            16 => regs.rip,
+            _ => todo!("Not implemented yet {}", register.0),
+        }
+    }
+
+    pub fn get_cfa(&self) {
+        let eh_frame = self.get_unwind_table();
+        let base_addresses = self.metadata.base_addresses.clone();
+
+        let current_pc = self.current_rip() - self.base_address;
+
+        if let Ok(fde) =
+            eh_frame.fde_for_address(&base_addresses, current_pc, |sections, bases, offset| {
+                sections.cie_from_offset(bases, offset)
+            })
+        {
+            let mut ctx = gimli::UnwindContext::new();
+            let mut table = fde.rows(&eh_frame, &base_addresses, &mut ctx).unwrap();
+
+            println!("{:?}", table);
+
+            while let Some(row) = table.next_row().unwrap() {
+                if row.contains(current_pc) {
+                    match row.cfa() {
+                        gimli::CfaRule::RegisterAndOffset { register, offset } => {
+                            let reg_value = self.get_register_value(*register);
+                            let cfa_address = (reg_value as i64 + offset) as u64;
+                            println!("CFA: 0x{:016x}", cfa_address);
+                        }
+                        gimli::CfaRule::Expression(_) => {
+                            eprintln!("Expression not handled yet");
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    pub fn current_rip(&self) -> u64 {
+        self.get_regs().regs.rip
     }
 
     pub fn is_idle(&self) -> bool {
