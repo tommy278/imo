@@ -50,6 +50,10 @@ pub fn debug(binary_path: &str) {
 
             // Enter the event execution loop
             loop {
+                if session.current_cmd.is_completed() {
+                    handle_user_debugger_menu(&mut session);
+                }
+
                 let status = waitpid(child, None).unwrap();
                 match status {
                     WaitStatus::Exited(_, code) => {
@@ -62,7 +66,6 @@ pub fn debug(binary_path: &str) {
                             // Pass None to let the child continue its execution.
                             if sig == Signal::SIGTRAP {
                                 assert!(!session.is_idle());
-                                println!("{:?}", session.current_cmd);
                                 match session.current_cmd {
                                     CurrentStopCmd::SingleStep => {
                                         session.current_cmd = CurrentStopCmd::Completed;
@@ -106,15 +109,19 @@ pub fn debug(binary_path: &str) {
                                         // If the current base pointer is the same then we're in the same function
                                         // In that case check the start line to ensure we actually moved to a new line
                                         else if current_cfa == start_cfa {
-                                            let Some(current_line) =
-                                                session.current_location().map(|l| l.line)
+                                            let Some(current_location) = session.current_location()
                                             else {
                                                 session.single_step();
                                                 continue;
                                             };
 
+                                            if file != current_location.file.to_path_buf() {
+                                                session.single_step();
+                                                continue;
+                                            }
+
                                             // If we are not on the same line then we are done stepping
-                                            if start_line != current_line {
+                                            if start_line != current_location.line {
                                                 session.current_cmd = CurrentStopCmd::Completed;
                                             } else {
                                                 session.single_step();
@@ -173,10 +180,12 @@ pub fn debug(binary_path: &str) {
 
                                             if &current_file != start_file {
                                                 session.single_step();
+                                                continue;
                                             }
 
                                             if l.line != start_line {
                                                 session.current_cmd = CurrentStopCmd::Completed;
+                                                continue;
                                             }
                                         }
 
@@ -190,9 +199,6 @@ pub fn debug(binary_path: &str) {
                                             // Location is not valid continue searching
                                             session.single_step();
                                         }
-                                    }
-                                    CurrentStopCmd::Completed => {
-                                        break;
                                     }
                                     CurrentStopCmd::Running | CurrentStopCmd::Continuing => {
                                         // On x86/x86_64 CPU the CPU has already advanced to the next instruction before handing control back
