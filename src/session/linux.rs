@@ -59,6 +59,12 @@ pub fn peek_data(pid: ProcessId, address: u64) -> i64 {
     ptrace::read(pid, address as AddressType).expect("Could not read address")
 }
 
+pub fn opt_peek_data(pid: ProcessId, address: u64) -> Option<u64> {
+    ptrace::read(pid, address as AddressType)
+        .ok()
+        .map(|v| v as u64)
+}
+
 pub fn read_bytes(pid: ProcessId, remote_address: usize, len: usize) -> Option<Vec<u8>> {
     let mut buffer = vec![0u8; len];
     let local_iov = IoSliceMut::new(&mut buffer);

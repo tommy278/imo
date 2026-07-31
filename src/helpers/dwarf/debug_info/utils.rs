@@ -48,8 +48,6 @@ pub fn lookup_vars(binary_path: &str, info_cache: &mut DebuggerMetadataCache) {
         .map(|s| s.address())
         .unwrap();
 
-    println!("Text: {}, Got: {}", text_address, got_address);
-
     info_cache.base_addresses = gimli::BaseAddresses::default()
         .set_text(text_address)
         .set_got(got_address)

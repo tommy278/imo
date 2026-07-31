@@ -5,6 +5,7 @@ use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::{ForkResult, fork};
 
 use crate::cli::handle_user_debugger_menu;
+use crate::session::linux::{PlatformBreakpoint, peek_data};
 use crate::session::{CurrentStopCmd, DebugSession};
 
 /// Begin the parent and child processes
@@ -87,49 +88,40 @@ pub fn debug(binary_path: &str) {
                                         }
                                     }
                                     CurrentStopCmd::StepOver {
-                                        start_rsp,
+                                        start_cfa,
                                         start_line,
                                     } => {
-                                        let current_rsp = regs.rsp;
-                                        println!("{}", current_rsp < start_rsp.0);
+                                        let current_cfa = session.get_cfa().unwrap();
 
                                         // If current base pointer is greater, we are not in a child function
                                         // The stepping is complete
-                                        if current_rsp > start_rsp.0 {
+                                        if current_cfa > start_cfa {
                                             session.current_cmd = CurrentStopCmd::Completed;
                                             session.send_trap_signal();
                                         }
                                         // If the current base pointer is the same then we're in the same function
                                         // In that case check the start line to ensure we actually moved to a new line
-                                        else if current_rsp == start_rsp.0 {
-                                            if let Some(current_line) =
-                                                session.current_location().map(|l| l.line)
-                                            {
-                                                // If we are not on the same line then we are done stepping
-                                                if current_line != start_line {
-                                                    session.current_cmd = CurrentStopCmd::Completed;
-                                                    session.send_trap_signal();
-                                                } else {
-                                                    // If we are on the same line continue stepping
-                                                    session.single_step();
-                                                    continue;
-                                                }
+                                        else if current_cfa == start_cfa {
+                                            let current_line =
+                                                session.current_location().map(|l| l.line);
+                                            // If we are not on the same line then we are done stepping
+                                            if start_line.is_some_and(|s| {
+                                                current_line.is_some_and(|c| s != c)
+                                            }) {
+                                                session.current_cmd = CurrentStopCmd::Completed;
+                                                session.send_trap_signal();
                                             } else {
-                                                // If the location is not valid, keep stepping
                                                 session.single_step();
                                                 continue;
                                             }
                                         } else {
                                             // If current base pointer is lower than the intial base pointer then we are in a child function
                                             // In that case set a breakpoint at the return address and continue till it is intercepted
-                                            let address = current_rsp - 8;
-                                            let return_address =
-                                                crate::session::linux::peek_data(pid, address)
-                                                    as u64;
+                                            let address = current_cfa - 8;
+                                            let return_address = peek_data(pid, address) as u64;
+
                                             let mut breakpoint =
-                                                crate::interface::linux::BreakPoint::new(
-                                                    return_address,
-                                                );
+                                                PlatformBreakpoint::new(return_address);
                                             breakpoint.enable(pid);
                                             session.current_cmd =
                                                 CurrentStopCmd::StepOut { breakpoint };
@@ -138,9 +130,11 @@ pub fn debug(binary_path: &str) {
                                         }
                                     }
                                     CurrentStopCmd::StepOut { ref mut breakpoint } => {
-                                        // We are at the return address of the function
-                                        // Thus we stepped out of the function and the stepping is complete
+                                        let breakpoint_addr = regs.rip - 1;
+                                        regs.rip = breakpoint_addr;
+                                        ptrace::setregs(pid, regs).unwrap();
                                         breakpoint.disable(pid);
+
                                         session.current_cmd = CurrentStopCmd::Completed;
                                         session.send_trap_signal();
                                     }
@@ -156,7 +150,7 @@ pub fn debug(binary_path: &str) {
                                         }
                                     }
                                     CurrentStopCmd::Completed => {
-                                        handle_user_debugger_menu(&mut session);
+                                        session.continue_session();
                                         continue;
                                     }
                                     _ => {

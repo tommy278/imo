@@ -89,15 +89,12 @@ pub struct SourceLocation {
     pub line: u64,
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct Rsp(pub u64);
-
 // The command to be ran when the debugger hits a sigtrap
 #[derive(Default, Debug)]
 pub enum CurrentStopCmd {
     StepOver {
-        start_rsp: Rsp,
-        start_line: u64,
+        start_cfa: u64,
+        start_line: Option<u64>,
     },
     StepInto {
         start_file: Rc<Path>,
@@ -233,7 +230,7 @@ impl DebugSession {
         }
     }
 
-    pub fn get_cfa(&self) {
+    pub fn get_cfa(&self) -> Option<u64> {
         let eh_frame = self.get_unwind_table();
         let base_addresses = self.metadata.base_addresses.clone();
 
@@ -247,24 +244,23 @@ impl DebugSession {
             let mut ctx = gimli::UnwindContext::new();
             let mut table = fde.rows(&eh_frame, &base_addresses, &mut ctx).unwrap();
 
-            println!("{:?}", table);
-
             while let Some(row) = table.next_row().unwrap() {
                 if row.contains(current_pc) {
                     match row.cfa() {
                         gimli::CfaRule::RegisterAndOffset { register, offset } => {
                             let reg_value = self.get_register_value(*register);
                             let cfa_address = (reg_value as i64 + offset) as u64;
-                            println!("CFA: 0x{:016x}", cfa_address);
+                            return Some(cfa_address);
                         }
                         gimli::CfaRule::Expression(_) => {
                             eprintln!("Expression not handled yet");
+                            return None;
                         }
                     }
-                    break;
                 }
             }
         }
+        None
     }
 
     pub fn current_rip(&self) -> u64 {
@@ -308,15 +304,11 @@ impl DebugSession {
     }
 
     pub fn begin_step_over(&mut self) {
-        let current_rsp = self.current_rsp();
-        let Some(current_line) = self.current_location().map(|l| l.line) else {
-            self.current_cmd = CurrentStopCmd::SearchingForValidLocation;
-            self.single_step();
-            return;
-        };
+        let current_cfa = self.get_cfa().unwrap();
+        let current_line = self.current_location().map(|l| l.line);
 
         self.current_cmd = CurrentStopCmd::StepOver {
-            start_rsp: current_rsp,
+            start_cfa: current_cfa,
             start_line: current_line,
         };
         self.single_step();
@@ -350,11 +342,6 @@ impl DebugSession {
     /// Obtain the location that an address belongs to within the program
     pub fn get_location_with_address(&self, relative_address: u64) -> Option<&SourceLocation> {
         self.address_to_location.get(&relative_address)
-    }
-
-    pub fn current_rsp(&self) -> Rsp {
-        let rsp = self.get_regs().regs.rsp;
-        Rsp(rsp)
     }
 
     /// Get the exact order in which the compiler actually initialized the variables
