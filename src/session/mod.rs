@@ -112,6 +112,7 @@ pub enum CurrentStopCmd {
     Running,
     Continuing,
     SearchingForValidLocation,
+    SearchingForValidStartLocation,
     SearchingForNextValidLocation {
         start_line: u64,
         start_file: PathBuf,
@@ -332,7 +333,7 @@ impl DebugSession {
 
     pub fn begin_step_over(&mut self) {
         let Some(current_location) = self.current_location() else {
-            self.current_cmd = CurrentStopCmd::SearchingForValidLocation;
+            self.current_cmd = CurrentStopCmd::SearchingForValidStartLocation;
             self.single_step();
             return;
         };

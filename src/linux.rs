@@ -65,6 +65,7 @@ pub fn debug(binary_path: &str) {
                             // If stop was due to SIGTRAP, do not forward it to the child.
                             // Pass None to let the child continue its execution.
                             if sig == Signal::SIGTRAP {
+                                println!("{:?}", session.current_cmd);
                                 assert!(!session.is_idle());
                                 match session.current_cmd {
                                     CurrentStopCmd::SingleStep => {
@@ -96,31 +97,40 @@ pub fn debug(binary_path: &str) {
                                         start_line,
                                         ref start_file,
                                     } => {
-                                        let (current_cfa, return_address) =
-                                            session.get_cfa_and_ret_addr().unwrap();
+                                        let Some((current_cfa, return_address)) =
+                                            session.get_cfa_and_ret_addr()
+                                        else {
+                                            session.single_step();
+                                            continue;
+                                        };
 
                                         let file = start_file.clone();
 
-                                        // If current base pointer is greater, we are not in a child function
-                                        // The stepping is complete
+                                        // If the current cfa is greater than the start then we are not in a child function
                                         if current_cfa > start_cfa {
-                                            session.current_cmd = CurrentStopCmd::Completed;
-                                        }
-                                        // If the current base pointer is the same then we're in the same function
-                                        // In that case check the start line to ensure we actually moved to a new line
-                                        else if current_cfa == start_cfa {
+                                            if session.current_location().is_some() {
+                                                session.current_cmd = CurrentStopCmd::Completed;
+                                            } else {
+                                                session.single_step();
+                                            }
+                                        } else if current_cfa == start_cfa {
+                                            // If the cfa are the same then we are in the same function'
+
+                                            // Find a valid location to step from
                                             let Some(current_location) = session.current_location()
                                             else {
                                                 session.single_step();
                                                 continue;
                                             };
 
+                                            // If we are not back in the same file then keep stepping
+                                            // Safe guard because cfa is not always reliable
                                             if file != current_location.file.to_path_buf() {
                                                 session.single_step();
                                                 continue;
                                             }
 
-                                            // If we are not on the same line then we are done stepping
+                                            // If we are not on the same line but in the same file then we are done stepping
                                             if start_line != current_location.line {
                                                 session.current_cmd = CurrentStopCmd::Completed;
                                             } else {
@@ -151,7 +161,9 @@ pub fn debug(binary_path: &str) {
                                             session.get_cfa_and_ret_addr().map(|c| c.0).unwrap();
                                         let file = start_file.clone();
 
+                                        // CFA has to be the same to ensure we are back in the right position
                                         if current_cfa == resume_cfa {
+                                            // Clear the breakpoint we set previously and cleanup the state
                                             let breakpoint_addr = regs.rip - 1;
 
                                             let relative_address =
@@ -161,6 +173,8 @@ pub fn debug(binary_path: &str) {
                                             regs.rip = breakpoint_addr;
                                             ptrace::setregs(pid, regs).unwrap();
 
+                                            // Search for a valid location to stop on
+                                            // Avoid stoppiing on assembly
                                             session.current_cmd =
                                                 CurrentStopCmd::SearchingForNextValidLocation {
                                                     start_line,
@@ -178,17 +192,20 @@ pub fn debug(binary_path: &str) {
                                         if let Some(l) = session.current_location() {
                                             let current_file = l.file.to_path_buf();
 
+                                            // We are not back in the start file so keep stepping
                                             if &current_file != start_file {
                                                 session.single_step();
                                                 continue;
                                             }
 
+                                            // We are back in the main file so check to ensure we are not on the same line
                                             if l.line != start_line {
                                                 session.current_cmd = CurrentStopCmd::Completed;
                                                 continue;
                                             }
                                         }
 
+                                        // If no valid location continue stepping
                                         session.single_step();
                                     }
                                     CurrentStopCmd::SearchingForValidLocation => {
@@ -197,6 +214,15 @@ pub fn debug(binary_path: &str) {
                                             session.current_cmd = CurrentStopCmd::Completed;
                                         } else {
                                             // Location is not valid continue searching
+                                            session.single_step();
+                                        }
+                                    }
+                                    CurrentStopCmd::SearchingForValidStartLocation => {
+                                        // If the current location is now valid then begin step over
+                                        if session.current_location().is_some() {
+                                            session.begin_step_over();
+                                        } else {
+                                            // Continue stepping
                                             session.single_step();
                                         }
                                     }
@@ -242,7 +268,9 @@ pub fn debug(binary_path: &str) {
                                             }
                                         }
                                     }
-                                    _ => todo!(),
+                                    // At this state the session should not be Idle or completed
+                                    // Completion occurs on the next iteration which is intercepted by the debugger menu to avoid waiting for the child
+                                    _ => unreachable!(),
                                 }
                             } else {
                                 // Forward other unexpected signals (like SIGINT, SIGSEGV) to the child
