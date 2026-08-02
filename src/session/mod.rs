@@ -136,6 +136,27 @@ impl CurrentStopCmd {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct StringId(u16);
+
+#[derive(Debug, Clone, Default)]
+pub struct StringInterner {
+    buffer: Vec<String>,
+    map: FxHashMap<String, StringId>,
+}
+
+impl StringInterner {
+    pub fn get_or_intern(&mut self, str: String) -> StringId {
+        if let Some(id) = self.map.get(&str) {
+            return *id;
+        }
+
+        let new_id = self.buffer.len();
+        self.buffer.push(str);
+        StringId(new_id as u16)
+    }
+}
+
 /// Cache for entire debug session
 #[derive(Debug)]
 pub struct DebugSession {
@@ -147,6 +168,9 @@ pub struct DebugSession {
 
     // Used to find out the actual order in while files were declared
     pub file_declaration_order: FxHashMap<PathBuf, Vec<u64>>,
+
+    // A global arena to consolidate repetitive string allocations into one location
+    interner: StringInterner,
 
     // Metdata
     pub metadata: DebuggerMetadataCache,
@@ -175,6 +199,7 @@ impl DebugSession {
             raw_debug_frame: RawDebugFrame::default(),
             current_cmd: CurrentStopCmd::default(),
             active_breakpoints: FxHashMap::default(),
+            interner: StringInterner::default(),
             pid,
         }
     }
@@ -289,6 +314,10 @@ impl DebugSession {
 
     pub fn current_rip(&self) -> u64 {
         self.get_regs().regs.rip
+    }
+
+    pub fn id_to_string(&self, id: StringId) -> &str {
+        &self.interner.buffer[id.0 as usize]
     }
 
     pub fn is_idle(&self) -> bool {

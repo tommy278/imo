@@ -123,6 +123,8 @@ pub fn debug(binary_path: &str) {
                                                 continue;
                                             };
 
+                                            // Add new condition to check for the stack file change
+
                                             // If we are not back in the same file then keep stepping
                                             // Safe guard because cfa is not always reliable
                                             if file != current_location.file.to_path_buf() {
