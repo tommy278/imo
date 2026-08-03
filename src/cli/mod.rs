@@ -191,7 +191,11 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                     "/Users/tommy/Projects/imo/src/test/linux/rust_with_vars/rust_with_vars.rs",
                 );
 
-                if let Some(val) = session.get_file_decl_order(path) {
+                let id = session
+                    .interner
+                    .get_or_intern(path.to_string_lossy().into());
+
+                if let Some(val) = session.get_file_decl_order(id) {
                     println!("{:?}", val);
                 }
             }

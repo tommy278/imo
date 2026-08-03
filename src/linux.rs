@@ -5,7 +5,6 @@ use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::{ForkResult, fork};
 
 use crate::cli::handle_user_debugger_menu;
-use crate::session::linux::{PlatformBreakpoint, peek_data};
 use crate::session::{CurrentStopCmd, DebugSession};
 
 /// Begin the parent and child processes
@@ -95,7 +94,7 @@ pub fn debug(binary_path: &str) {
                                     CurrentStopCmd::StepOver {
                                         start_cfa,
                                         start_line,
-                                        ref start_file,
+                                        start_file,
                                     } => {
                                         let Some((current_cfa, return_address)) =
                                             session.get_cfa_and_ret_addr()
@@ -103,8 +102,6 @@ pub fn debug(binary_path: &str) {
                                             session.single_step();
                                             continue;
                                         };
-
-                                        let file = start_file.clone();
 
                                         // If the current cfa is greater than the start then we are not in a child function
                                         if current_cfa > start_cfa {
@@ -127,7 +124,7 @@ pub fn debug(binary_path: &str) {
 
                                             // If we are not back in the same file then keep stepping
                                             // Safe guard because cfa is not always reliable
-                                            if file != current_location.file.to_path_buf() {
+                                            if start_file != current_location.file {
                                                 session.single_step();
                                                 continue;
                                             }
@@ -149,7 +146,7 @@ pub fn debug(binary_path: &str) {
                                             session.current_cmd = CurrentStopCmd::StepOut {
                                                 resume_cfa: start_cfa,
                                                 start_line,
-                                                start_file: file,
+                                                start_file,
                                             };
                                             session.continue_session();
                                         }
@@ -157,11 +154,10 @@ pub fn debug(binary_path: &str) {
                                     CurrentStopCmd::StepOut {
                                         resume_cfa,
                                         start_line,
-                                        ref start_file,
+                                        start_file,
                                     } => {
                                         let current_cfa =
                                             session.get_cfa_and_ret_addr().map(|c| c.0).unwrap();
-                                        let file = start_file.clone();
 
                                         // CFA has to be the same to ensure we are back in the right position
                                         if current_cfa == resume_cfa {
@@ -180,7 +176,7 @@ pub fn debug(binary_path: &str) {
                                             session.current_cmd =
                                                 CurrentStopCmd::SearchingForNextValidLocation {
                                                     start_line,
-                                                    start_file: file,
+                                                    start_file,
                                                 };
                                             session.single_step();
                                         } else {
@@ -189,13 +185,13 @@ pub fn debug(binary_path: &str) {
                                     }
                                     CurrentStopCmd::SearchingForNextValidLocation {
                                         start_line,
-                                        ref start_file,
+                                        start_file,
                                     } => {
                                         if let Some(l) = session.current_location() {
-                                            let current_file = l.file.to_path_buf();
+                                            let current_file = l.file;
 
                                             // We are not back in the start file so keep stepping
-                                            if &current_file != start_file {
+                                            if current_file != start_file {
                                                 session.single_step();
                                                 continue;
                                             }

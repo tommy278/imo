@@ -131,11 +131,15 @@ fn update_session_cache(
                     let is_already_registered = registered_lines.contains(&line);
                     let relative_address = row.address();
 
+                    let current_file_id = session
+                        .interner
+                        .get_or_intern(file_rc.to_string_lossy().into());
+
                     if row.is_stmt() {
                         session.address_to_location.insert(
                             relative_address,
                             SourceLocation {
-                                file: file_rc.clone(),
+                                file: current_file_id,
                                 line,
                             },
                         );
@@ -153,7 +157,7 @@ fn update_session_cache(
 
                         let declaration_history = session
                             .file_declaration_order
-                            .entry(file_rc.to_path_buf())
+                            .entry(current_file_id)
                             .or_insert_with(Vec::new);
 
                         // Only push if not on the same line

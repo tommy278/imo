@@ -5,7 +5,6 @@ pub mod linux;
 use gimli::UnwindSection;
 use rustc_hash::FxHashMap;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 
 use crate::helpers::dwarf::{
     self,
@@ -85,7 +84,7 @@ impl ManagedBreakpoint {
 
 #[derive(Debug)]
 pub struct SourceLocation {
-    pub file: Rc<Path>,
+    pub file: StringId,
     pub line: u64,
 }
 
@@ -96,16 +95,16 @@ pub enum CurrentStopCmd {
     StepOver {
         start_cfa: u64,
         start_line: u64,
-        start_file: PathBuf,
+        start_file: StringId,
     },
     StepInto {
-        start_file: Rc<Path>,
+        start_file: StringId,
         start_line: u64,
     },
     StepOut {
         resume_cfa: u64,
         start_line: u64,
-        start_file: PathBuf,
+        start_file: StringId,
     },
     #[default]
     Idle,
@@ -115,7 +114,7 @@ pub enum CurrentStopCmd {
     SearchingForValidStartLocation,
     SearchingForNextValidLocation {
         start_line: u64,
-        start_file: PathBuf,
+        start_file: StringId,
     },
     Completed,
 }
@@ -136,7 +135,7 @@ impl CurrentStopCmd {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash)]
 pub struct StringId(u16);
 
 #[derive(Debug, Clone, Default)]
@@ -167,10 +166,10 @@ pub struct DebugSession {
     pub address_to_location: FxHashMap<u64, SourceLocation>,
 
     // Used to find out the actual order in while files were declared
-    pub file_declaration_order: FxHashMap<PathBuf, Vec<u64>>,
+    pub file_declaration_order: FxHashMap<StringId, Vec<u64>>,
 
     // A global arena to consolidate repetitive string allocations into one location
-    interner: StringInterner,
+    pub interner: StringInterner,
 
     // Metdata
     pub metadata: DebuggerMetadataCache,
@@ -371,7 +370,7 @@ impl DebugSession {
         self.current_cmd = CurrentStopCmd::StepOver {
             start_cfa: current_cfa,
             start_line: current_location.line,
-            start_file: current_location.file.to_path_buf(),
+            start_file: current_location.file,
         };
         self.single_step();
     }
@@ -408,7 +407,7 @@ impl DebugSession {
 
     /// Get the exact order in which the compiler actually initialized the variables
     /// Rust does not always initialize variables sequentially
-    pub fn get_file_decl_order(&self, file: PathBuf) -> Option<&Vec<u64>> {
+    pub fn get_file_decl_order(&self, file: StringId) -> Option<&Vec<u64>> {
         self.file_declaration_order.get(&file)
     }
 
@@ -442,9 +441,8 @@ impl DebugSession {
 
             if let Some(info) = self.address_to_location.get(&current_pc) {
                 let SourceLocation { file, line } = info;
-                let file = file.to_path_buf();
 
-                if let Some(line_order) = self.get_file_decl_order(file) {
+                if let Some(line_order) = self.get_file_decl_order(*file) {
                     if let Some(current_idx) = line_order.iter().position(|&l| l == *line) {
                         if let Some(var_decl_idx) =
                             line_order.iter().position(|&l| l == variable.decl_line)
