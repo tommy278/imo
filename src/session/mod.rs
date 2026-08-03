@@ -150,9 +150,11 @@ impl StringInterner {
             return *id;
         }
 
-        let new_id = self.buffer.len();
-        self.buffer.push(str);
-        StringId(new_id as u16)
+        let new_id = StringId(self.buffer.len() as u16);
+        self.buffer.push(str.clone());
+        self.map.insert(str, new_id);
+
+        new_id
     }
 }
 
