@@ -4,7 +4,7 @@ pub mod linux;
 
 use gimli::UnwindSection;
 use rustc_hash::FxHashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::helpers::dwarf::{
     self,
@@ -614,6 +614,18 @@ impl DebugSession {
             )));
 
         (bp_for_line, line_index[0].clone())
+    }
+
+    /// Get a breakpoint target at the address
+    pub fn find_line_ranges(&self, line_number: u64, file: StringId) -> Vec<u64> {
+        let line_index = self.get_breakpoint_target(line_number).unwrap();
+        let resolved_file_name = self.id_to_string(file);
+
+        line_index
+            .into_iter()
+            .filter(|bp| bp.file.to_str().unwrap() == resolved_file_name)
+            .map(|t| t.relative_address)
+            .collect()
     }
 
     /// Get the current index of the breakpoint the user is currently on

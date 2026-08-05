@@ -5,7 +5,7 @@ use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::{ForkResult, fork};
 
 use crate::cli::handle_user_debugger_menu;
-use crate::session::linux::peek_data;
+use crate::session::linux::{peek_data, read_bytes};
 use crate::session::{CurrentStopCmd, DebugSession};
 
 /// Begin the parent and child processes
@@ -100,13 +100,30 @@ pub fn debug(binary_path: &str) {
                                         let rip = session.current_rip();
                                         let op_code = peek_data(pid, rip) as u8;
 
-                                        if op_code == 0x9A || op_code == 0xE8 {
-                                            let instruction_size = match op_code {
-                                                0xE8 => 5,
-                                                0x9A => 7,
-                                                _ => unimplemented!("Add parsing for 0xFF"),
-                                            };
+                                        let instruction_size = match op_code {
+                                            0xE8 => 5,
+                                            0x9A => 7,
+                                            0xEB => 2,
+                                            0xE9 => 5,
+                                            0x70..=0x7F => 2,
+                                            0x0F => {
+                                                let next_byte = peek_data(pid, rip + 1);
+                                                if (0x80..=0x8F).contains(&next_byte) {
+                                                    6
+                                                } else {
+                                                    1
+                                                }
+                                            }
+                                            // TODO: add the 0xFF /2 and 0xFF /3
+                                            _ => 1,
+                                        };
 
+                                        if instruction_size == 1 {
+                                            println!("Size: {instruction_size}");
+                                            panic!("0x{:x}", op_code);
+                                        }
+
+                                        if op_code == 0x9A || op_code == 0xE8 {
                                             let return_address = rip + instruction_size;
 
                                             println!("Here: 0x{:x}, {}", op_code, return_address);
@@ -122,6 +139,66 @@ pub fn debug(binary_path: &str) {
                                                 start_file,
                                             };
                                             session.continue_session();
+                                            continue;
+                                        }
+
+                                        let current_line_ranges =
+                                            session.find_line_ranges(start_line, start_file);
+                                        let is_at_final_address = rip
+                                            == *current_line_ranges
+                                                .last()
+                                                .expect("Range not found");
+
+                                        if is_at_final_address {
+                                            // Condional and unconditional jump
+                                            let fallthrough_address = rip + instruction_size;
+
+                                            let jump_target_address = match instruction_size {
+                                                2 => {
+                                                    let offset_byte = peek_data(pid, rip + 1) as i8;
+                                                    let target = (fallthrough_address as i64)
+                                                        + (offset_byte as i64);
+                                                    target as u64
+                                                }
+                                                5 => {
+                                                    let offset_bytes =
+                                                        read_bytes(pid, (rip + 1) as usize, 4)
+                                                            .unwrap();
+                                                    let offset_val = i32::from_le_bytes(
+                                                        offset_bytes.try_into().unwrap(),
+                                                    );
+                                                    let target = (fallthrough_address as i64)
+                                                        + (offset_val as i64);
+                                                    target as u64
+                                                }
+                                                6 => {
+                                                    let offset_bytes =
+                                                        read_bytes(pid, (rip + 2) as usize, 4)
+                                                            .unwrap();
+                                                    let offset_val = i32::from_le_bytes(
+                                                        offset_bytes.try_into().unwrap(),
+                                                    );
+                                                    let target = (fallthrough_address as i64)
+                                                        + (offset_val as i64);
+                                                    target as u64
+                                                }
+
+                                                _ => unreachable!(),
+                                            };
+
+                                            let relative_address =
+                                                session.get_relative_address(fallthrough_address);
+                                            session.create_specific_breakpoint(relative_address);
+
+                                            let relative_address =
+                                                session.get_relative_address(jump_target_address);
+                                            session.clear_specific_breakpoint(relative_address);
+
+                                            session.current_cmd = CurrentStopCmd::StepOut {
+                                                resume_cfa: start_cfa,
+                                                start_line,
+                                                start_file,
+                                            };
                                             continue;
                                         }
 
