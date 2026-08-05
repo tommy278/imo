@@ -792,6 +792,15 @@ impl DebuggerMetadataCache {
         default_cache
     }
 
+    pub fn get_range_boundaries(&self, pc: u64) -> Option<&Vec<AddressRange>> {
+        for scope in self.execution_scopes.iter() {
+            if let Some(deepest_match) = scope.find_active_scope(pc) {
+                return Some(&deepest_match.ranges);
+            }
+        }
+        None
+    }
+
     /// Find current variables and frame base with the current pc
     pub fn find_scope_by_pc(&self, pc: u64) -> ActiveVariablesContext<'_> {
         let mut context = ActiveVariablesContext::default();
@@ -799,6 +808,7 @@ impl DebuggerMetadataCache {
         for scope in self.execution_scopes.iter() {
             if scope.is_in_scope(pc) {
                 if let Some(bytes) = scope.scope.get_bytes() {
+                    println!("{:?}", scope);
                     context.frame_base = Some(bytes);
                 }
                 if scope.find_active_scope(pc).is_some() {

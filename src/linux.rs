@@ -97,8 +97,25 @@ pub fn debug(binary_path: &str) {
                                         start_line,
                                         start_file,
                                     } => {
-                                        let rip = session.current_rip();
+                                        let rip = regs.rip;
+
+                                        let pc = rip - session.base_address;
+                                        let ranges =
+                                            session.metadata.get_range_boundaries(pc).unwrap();
+
                                         let op_code = peek_data(pid, rip) as u8;
+
+                                        let mut prefix_bytes_skipped = 0;
+                                        {
+                                            let mut current_rip = rip;
+                                            let mut op_code = peek_data(pid, current_rip);
+
+                                            while (0x40..=0x4F).contains(&op_code) {
+                                                prefix_bytes_skipped += 1;
+                                                current_rip += 1;
+                                                op_code = peek_data(pid, current_rip);
+                                            }
+                                        }
 
                                         let instruction_size = match op_code {
                                             0xE8 => 5,
@@ -118,11 +135,6 @@ pub fn debug(binary_path: &str) {
                                             _ => 1,
                                         };
 
-                                        if instruction_size == 1 {
-                                            println!("Size: {instruction_size}");
-                                            panic!("0x{:x}", op_code);
-                                        }
-
                                         if op_code == 0x9A || op_code == 0xE8 {
                                             let return_address = rip + instruction_size;
 
@@ -140,82 +152,75 @@ pub fn debug(binary_path: &str) {
                                             };
                                             session.continue_session();
                                             continue;
+                                        } else {
+                                            let current_line_ranges =
+                                                session.find_line_ranges(start_line, start_file);
+
+                                            let is_at_final_address = rip
+                                                == *current_line_ranges
+                                                    .last()
+                                                    .expect("Range not found");
+
+                                            if is_at_final_address {
+                                                // Condional and unconditional jump
+                                                let fallthrough_address =
+                                                    rip + instruction_size + prefix_bytes_skipped;
+
+                                                let jump_target_address = match instruction_size {
+                                                    2 => {
+                                                        let offset_byte =
+                                                            peek_data(pid, rip + 1) as i8;
+                                                        let target = (fallthrough_address as i64)
+                                                            + (offset_byte as i64);
+                                                        target as u64
+                                                    }
+                                                    5 => {
+                                                        let offset_bytes =
+                                                            read_bytes(pid, (rip + 1) as usize, 4)
+                                                                .unwrap();
+                                                        let offset_val = i32::from_le_bytes(
+                                                            offset_bytes.try_into().unwrap(),
+                                                        );
+                                                        let target = (fallthrough_address as i64)
+                                                            + (offset_val as i64);
+                                                        target as u64
+                                                    }
+                                                    6 => {
+                                                        let offset_bytes =
+                                                            read_bytes(pid, (rip + 2) as usize, 4)
+                                                                .unwrap();
+                                                        let offset_val = i32::from_le_bytes(
+                                                            offset_bytes.try_into().unwrap(),
+                                                        );
+                                                        let target = (fallthrough_address as i64)
+                                                            + (offset_val as i64);
+                                                        target as u64
+                                                    }
+
+                                                    _ => unreachable!(),
+                                                };
+
+                                                let relative_address = session
+                                                    .get_relative_address(fallthrough_address);
+                                                session
+                                                    .create_specific_breakpoint(relative_address);
+
+                                                let relative_address = session
+                                                    .get_relative_address(jump_target_address);
+                                                session.clear_specific_breakpoint(relative_address);
+
+                                                session.current_cmd = CurrentStopCmd::StepOut {
+                                                    resume_cfa: start_cfa,
+                                                    start_line,
+                                                    start_file,
+                                                };
+                                                continue;
+                                            } else {
+                                                // TODO: handle this properly
+                                                session.single_step();
+                                                session.current_cmd = CurrentStopCmd::Completed;
+                                            }
                                         }
-
-                                        let current_line_ranges =
-                                            session.find_line_ranges(start_line, start_file);
-                                        let is_at_final_address = rip
-                                            == *current_line_ranges
-                                                .last()
-                                                .expect("Range not found");
-
-                                        if is_at_final_address {
-                                            // Condional and unconditional jump
-                                            let fallthrough_address = rip + instruction_size;
-
-                                            let jump_target_address = match instruction_size {
-                                                2 => {
-                                                    let offset_byte = peek_data(pid, rip + 1) as i8;
-                                                    let target = (fallthrough_address as i64)
-                                                        + (offset_byte as i64);
-                                                    target as u64
-                                                }
-                                                5 => {
-                                                    let offset_bytes =
-                                                        read_bytes(pid, (rip + 1) as usize, 4)
-                                                            .unwrap();
-                                                    let offset_val = i32::from_le_bytes(
-                                                        offset_bytes.try_into().unwrap(),
-                                                    );
-                                                    let target = (fallthrough_address as i64)
-                                                        + (offset_val as i64);
-                                                    target as u64
-                                                }
-                                                6 => {
-                                                    let offset_bytes =
-                                                        read_bytes(pid, (rip + 2) as usize, 4)
-                                                            .unwrap();
-                                                    let offset_val = i32::from_le_bytes(
-                                                        offset_bytes.try_into().unwrap(),
-                                                    );
-                                                    let target = (fallthrough_address as i64)
-                                                        + (offset_val as i64);
-                                                    target as u64
-                                                }
-
-                                                _ => unreachable!(),
-                                            };
-
-                                            let relative_address =
-                                                session.get_relative_address(fallthrough_address);
-                                            session.create_specific_breakpoint(relative_address);
-
-                                            let relative_address =
-                                                session.get_relative_address(jump_target_address);
-                                            session.clear_specific_breakpoint(relative_address);
-
-                                            session.current_cmd = CurrentStopCmd::StepOut {
-                                                resume_cfa: start_cfa,
-                                                start_line,
-                                                start_file,
-                                            };
-                                            continue;
-                                        }
-
-                                        // NOTE: Currently a placeholder not the most reliable fallback
-                                        let Some(current_location) = session.current_location()
-                                        else {
-                                            session.single_step();
-                                            continue;
-                                        };
-
-                                        if start_file == current_location.file
-                                            && start_line != current_location.line
-                                        {
-                                            session.current_cmd = CurrentStopCmd::Completed;
-                                            continue;
-                                        }
-
                                         session.single_step();
                                     }
                                     CurrentStopCmd::StepOut {
