@@ -100,8 +100,6 @@ pub fn debug(binary_path: &str) {
                                         let rip = regs.rip;
 
                                         let pc = rip - session.base_address;
-                                        let ranges =
-                                            session.metadata.get_range_boundaries(pc).unwrap();
 
                                         let op_code = peek_data(pid, rip) as u8;
 
@@ -151,7 +149,6 @@ pub fn debug(binary_path: &str) {
                                                 start_file,
                                             };
                                             session.continue_session();
-                                            continue;
                                         } else {
                                             let current_line_ranges =
                                                 session.find_line_ranges(start_line, start_file);
@@ -214,14 +211,12 @@ pub fn debug(binary_path: &str) {
                                                     start_line,
                                                     start_file,
                                                 };
-                                                continue;
+                                                session.continue_session();
                                             } else {
                                                 // TODO: handle this properly
                                                 session.single_step();
-                                                session.current_cmd = CurrentStopCmd::Completed;
                                             }
                                         }
-                                        session.single_step();
                                     }
                                     CurrentStopCmd::StepOut {
                                         resume_cfa,
