@@ -5,6 +5,7 @@ use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::{ForkResult, fork};
 
 use crate::cli::handle_user_debugger_menu;
+use crate::session::linux::peek_data;
 use crate::session::{CurrentStopCmd, DebugSession};
 
 /// Begin the parent and child processes
@@ -96,48 +97,20 @@ pub fn debug(binary_path: &str) {
                                         start_line,
                                         start_file,
                                     } => {
-                                        let Some((current_cfa, return_address)) =
-                                            session.get_cfa_and_ret_addr()
-                                        else {
-                                            session.single_step();
-                                            continue;
-                                        };
+                                        let rip = session.current_rip();
+                                        let op_code = peek_data(pid, rip) as u8;
 
-                                        // If the current cfa is greater than the start then we are not in a child function
-                                        if current_cfa > start_cfa {
-                                            if session.current_location().is_some() {
-                                                session.current_cmd = CurrentStopCmd::Completed;
-                                            } else {
-                                                session.single_step();
-                                            }
-                                        } else if current_cfa == start_cfa {
-                                            // If the cfa are the same then we are in the same function'
-
-                                            // Find a valid location to step from
-                                            let Some(current_location) = session.current_location()
-                                            else {
-                                                session.single_step();
-                                                continue;
+                                        if op_code == 0x9A || op_code == 0xE8 {
+                                            let instruction_size = match op_code {
+                                                0xE8 => 5,
+                                                0x9A => 7,
+                                                _ => unimplemented!("Add parsing for 0xFF"),
                                             };
 
-                                            // Add new condition to check for the stack file change
+                                            let return_address = rip + instruction_size;
 
-                                            // If we are not back in the same file then keep stepping
-                                            // Safe guard because cfa is not always reliable
-                                            if start_file != current_location.file {
-                                                session.single_step();
-                                                continue;
-                                            }
+                                            println!("Here: 0x{:x}, {}", op_code, return_address);
 
-                                            // If we are not on the same line but in the same file then we are done stepping
-                                            if start_line != current_location.line {
-                                                session.current_cmd = CurrentStopCmd::Completed;
-                                            } else {
-                                                session.single_step();
-                                            }
-                                        } else {
-                                            // If current base pointer is lower than the intial base pointer then we are in a child function
-                                            // In that case set a breakpoint at the return address and continue till it is intercepted
                                             let relative_address =
                                                 session.get_relative_address(return_address);
 
@@ -149,39 +122,47 @@ pub fn debug(binary_path: &str) {
                                                 start_file,
                                             };
                                             session.continue_session();
+                                            continue;
                                         }
+
+                                        // NOTE: Currently a placeholder not the most reliable fallback
+                                        let Some(current_location) = session.current_location()
+                                        else {
+                                            session.single_step();
+                                            continue;
+                                        };
+
+                                        if start_file == current_location.file
+                                            && start_line != current_location.line
+                                        {
+                                            session.current_cmd = CurrentStopCmd::Completed;
+                                            continue;
+                                        }
+
+                                        session.single_step();
                                     }
                                     CurrentStopCmd::StepOut {
                                         resume_cfa,
                                         start_line,
                                         start_file,
                                     } => {
-                                        let current_cfa =
-                                            session.get_cfa_and_ret_addr().map(|c| c.0).unwrap();
+                                        let breakpoint_addr = regs.rip - 1;
 
-                                        // CFA has to be the same to ensure we are back in the right position
-                                        if current_cfa == resume_cfa {
-                                            // Clear the breakpoint we set previously and cleanup the state
-                                            let breakpoint_addr = regs.rip - 1;
+                                        let relative_address =
+                                            session.get_relative_address(breakpoint_addr);
+                                        session.clear_specific_breakpoint(relative_address);
 
-                                            let relative_address =
-                                                session.get_relative_address(breakpoint_addr);
-                                            session.clear_specific_breakpoint(relative_address);
+                                        regs.rip = breakpoint_addr;
+                                        ptrace::setregs(pid, regs).unwrap();
 
-                                            regs.rip = breakpoint_addr;
-                                            ptrace::setregs(pid, regs).unwrap();
-
-                                            // Search for a valid location to stop on
-                                            // Avoid stoppiing on assembly
-                                            session.current_cmd =
-                                                CurrentStopCmd::SearchingForNextValidLocation {
-                                                    start_line,
-                                                    start_file,
-                                                };
-                                            session.single_step();
-                                        } else {
-                                            session.continue_session();
-                                        }
+                                        // Search for a valid location to stop on
+                                        // Avoid stoppiing on assembly
+                                        session.current_cmd =
+                                            CurrentStopCmd::SearchingForNextValidLocation {
+                                                start_line,
+                                                start_file,
+                                            };
+                                        session.single_step();
                                     }
                                     CurrentStopCmd::SearchingForNextValidLocation {
                                         start_line,
