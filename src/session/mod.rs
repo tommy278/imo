@@ -93,7 +93,7 @@ pub struct SourceLocation {
 pub enum CurrentStopCmd {
     SingleStep,
     StepOver {
-        start_cfa: u64,
+        start_rsp: u64,
         start_line: u64,
         start_file: StringId,
     },
@@ -102,7 +102,7 @@ pub enum CurrentStopCmd {
         start_line: u64,
     },
     StepOut {
-        resume_cfa: u64,
+        start_rsp: u64,
         start_line: u64,
         start_file: StringId,
     },
@@ -113,8 +113,8 @@ pub enum CurrentStopCmd {
     SearchingForValidLocation,
     SearchingForValidStartLocation,
     SearchingForNextValidLocation {
+        start_rsp: u64,
         start_line: u64,
-        start_file: StringId,
     },
     Completed,
 }
@@ -367,10 +367,9 @@ impl DebugSession {
             self.single_step();
             return;
         };
-        let (current_cfa, _) = self.get_cfa_and_ret_addr().unwrap();
 
         self.current_cmd = CurrentStopCmd::StepOver {
-            start_cfa: current_cfa,
+            start_rsp: self.get_regs().regs.rsp,
             start_line: current_location.line,
             start_file: current_location.file,
         };

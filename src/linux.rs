@@ -93,7 +93,7 @@ pub fn debug(binary_path: &str) {
                                         }
                                     }
                                     CurrentStopCmd::StepOver {
-                                        start_cfa,
+                                        start_rsp,
                                         start_line,
                                         start_file,
                                     } => {
@@ -102,6 +102,19 @@ pub fn debug(binary_path: &str) {
                                         let pc = rip - session.base_address;
 
                                         let op_code = peek_data(pid, rip) as u8;
+
+                                        if start_rsp == regs.rsp {
+                                            session.single_step();
+                                            continue;
+                                        } else if start_rsp < regs.rsp {
+                                            session.current_cmd =
+                                                CurrentStopCmd::SearchingForNextValidLocation {
+                                                    start_rsp,
+                                                    start_line,
+                                                };
+                                            session.single_step();
+                                            continue;
+                                        }
 
                                         let mut prefix_bytes_skipped = 0;
                                         {
@@ -144,7 +157,7 @@ pub fn debug(binary_path: &str) {
                                             session.create_specific_breakpoint(relative_address);
 
                                             session.current_cmd = CurrentStopCmd::StepOut {
-                                                resume_cfa: start_cfa,
+                                                start_rsp,
                                                 start_line,
                                                 start_file,
                                             };
@@ -207,7 +220,7 @@ pub fn debug(binary_path: &str) {
                                                 session.clear_specific_breakpoint(relative_address);
 
                                                 session.current_cmd = CurrentStopCmd::StepOut {
-                                                    resume_cfa: start_cfa,
+                                                    start_rsp,
                                                     start_line,
                                                     start_file,
                                                 };
@@ -219,7 +232,7 @@ pub fn debug(binary_path: &str) {
                                         }
                                     }
                                     CurrentStopCmd::StepOut {
-                                        resume_cfa,
+                                        start_rsp,
                                         start_line,
                                         start_file,
                                     } => {
@@ -237,20 +250,22 @@ pub fn debug(binary_path: &str) {
                                         session.current_cmd =
                                             CurrentStopCmd::SearchingForNextValidLocation {
                                                 start_line,
-                                                start_file,
+                                                start_rsp,
                                             };
                                         session.single_step();
                                     }
                                     CurrentStopCmd::SearchingForNextValidLocation {
                                         start_line,
-                                        start_file,
+                                        start_rsp,
                                     } => {
                                         if let Some(l) = session.current_location() {
                                             let current_file = l.file;
 
-                                            // We are not back in the start file so keep stepping
-                                            if current_file != start_file {
+                                            if start_rsp == regs.rsp {
                                                 session.single_step();
+                                                continue;
+                                            } else if start_rsp < regs.rsp {
+                                                session.current_cmd = CurrentStopCmd::Completed;
                                                 continue;
                                             }
 
