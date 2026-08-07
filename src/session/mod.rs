@@ -93,29 +93,18 @@ pub struct SourceLocation {
 pub enum CurrentStopCmd {
     SingleStep,
     StepOver {
-        start_rsp: u64,
-        start_line: u64,
-        start_file: StringId,
+        start_boundary_index: u32,
     },
     StepInto {
         start_file: StringId,
         start_line: u64,
     },
-    StepOut {
-        start_rsp: u64,
-        start_line: u64,
-        start_file: StringId,
-    },
+    StepOut,
     #[default]
     Idle,
     Running,
     Continuing,
     SearchingForValidLocation,
-    SearchingForValidStartLocation,
-    SearchingForNextValidLocation {
-        start_rsp: u64,
-        start_line: u64,
-    },
     Completed,
 }
 
@@ -233,13 +222,27 @@ impl DebugSession {
 
     /// Filter and sort line ranges
     pub fn set_up_line_ranges(&mut self) {
-        // NOTE: Base address is already set up
+        // Ignore entries that arent within scope for this current process
         self.line_ranges
-            .retain(|range| range.low_pc > self.metadata.text_address);
+            .retain(|range| range.low_pc >= self.metadata.text_address);
 
         self.line_ranges.sort_by_key(|r| r.low_pc);
+    }
 
-        println!("{:?}", self.line_ranges[0]);
+    pub fn find_range_index(&self, current_rip: u64) -> Option<u32> {
+        let current_pc = current_rip - self.base_address;
+        match self.line_ranges.binary_search_by(|p| {
+            if current_pc < p.low_pc {
+                std::cmp::Ordering::Greater
+            } else if current_pc >= p.high_pc {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        }) {
+            Ok(index) => Some(index as u32),
+            Err(_) => None,
+        }
     }
 
     /// Get the live register of the current process
@@ -379,16 +382,9 @@ impl DebugSession {
     }
 
     pub fn begin_step_over(&mut self) {
-        let Some(current_location) = self.current_location() else {
-            self.current_cmd = CurrentStopCmd::SearchingForValidStartLocation;
-            self.single_step();
-            return;
-        };
-
+        let start_boundary_index = self.find_range_index(self.current_rip()).unwrap();
         self.current_cmd = CurrentStopCmd::StepOver {
-            start_rsp: self.get_regs().regs.rsp,
-            start_line: current_location.line,
-            start_file: current_location.file,
+            start_boundary_index,
         };
         self.single_step();
     }
