@@ -9,7 +9,7 @@ use std::path::Path;
 use crate::helpers::dwarf::{
     self,
     debug_frame::{RawDebugFrame, setup_session_debug_frame},
-    debug_info::{ActiveVariablesContext, DebuggerMetadataCache},
+    debug_info::{ActiveVariablesContext, AddressRange, DebuggerMetadataCache},
 };
 use crate::interface::{DebugValue, RegisterViewer};
 use crate::session::interface::{BreakpointData, BreakpointMutationResult, BreakpointTarget};
@@ -167,6 +167,9 @@ pub struct DebugSession {
     pub breakpoint_index_tracker: Vec<Option<BreakpointData>>,
     pub address_to_location: FxHashMap<u64, SourceLocation>,
 
+    // Line ranges to track next command location
+    pub line_ranges: Vec<AddressRange>,
+
     // Used to find out the actual order in while files were declared
     pub file_declaration_order: FxHashMap<StringId, Vec<u64>>,
 
@@ -201,6 +204,7 @@ impl DebugSession {
             current_cmd: CurrentStopCmd::default(),
             active_breakpoints: FxHashMap::default(),
             interner: StringInterner::default(),
+            line_ranges: Vec::with_capacity(200),
             pid,
         }
     }
@@ -222,7 +226,20 @@ impl DebugSession {
 
         session.raw_debug_frame = setup_session_debug_frame(binary_path);
 
+        session.set_up_line_ranges();
+
         session
+    }
+
+    /// Filter and sort line ranges
+    pub fn set_up_line_ranges(&mut self) {
+        // NOTE: Base address is already set up
+        self.line_ranges
+            .retain(|range| range.low_pc > self.metadata.text_address);
+
+        self.line_ranges.sort_by_key(|r| r.low_pc);
+
+        println!("{:?}", self.line_ranges[0]);
     }
 
     /// Get the live register of the current process

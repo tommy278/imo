@@ -1,4 +1,4 @@
-use crate::session::*;
+use crate::{helpers::dwarf::debug_info::AddressRange, session::*};
 use object::{Object, ObjectSection};
 use rustc_hash::FxHashSet;
 use std::{
@@ -75,101 +75,114 @@ fn update_session_cache(
             let mut last_indexed_file: Option<Rc<Path>> = None;
             let mut registered_lines: FxHashSet<u64> = FxHashSet::default();
 
+            let mut prev_row: Option<gimli::LineRow> = None;
+
             // Iterate over the line program rows.
             let mut rows = program.rows();
             while let Some((header, row)) = rows.next_row()? {
-                if !row.end_sequence() {
-                    // Determine the path. Real applications should cache this for performance.
-                    let mut path = path::PathBuf::new();
-                    if let Some(file) = row.file(header) {
-                        path.clone_from(&comp_dir);
+                if let Some(prev) = prev_row {
+                    session.line_ranges.push(AddressRange {
+                        low_pc: prev.address(),
+                        high_pc: row.address(),
+                    });
+                }
 
-                        // The directory index 0 is defined to correspond to the compilation unit directory.
-                        if file.directory_index() != 0 {
-                            if let Some(dir) = file.directory(header) {
-                                path.push(unit.attr_string(dir)?.to_string_lossy().as_ref());
-                            }
+                if row.end_sequence() {
+                    prev_row = None;
+                } else {
+                    prev_row = Some(row.clone());
+                }
+                // Determine the path. Real applications should cache this for performance.
+                let mut path = path::PathBuf::new();
+                if let Some(file) = row.file(header) {
+                    path.clone_from(&comp_dir);
+
+                    // The directory index 0 is defined to correspond to the compilation unit directory.
+                    if file.directory_index() != 0 {
+                        if let Some(dir) = file.directory(header) {
+                            path.push(unit.attr_string(dir)?.to_string_lossy().as_ref());
                         }
-
-                        path.push(
-                            unit.attr_string(file.path_name())?
-                                .to_string_lossy()
-                                .as_ref(),
-                        );
                     }
 
-                    // Only perform a heap allocation when the file path changes
-                    if current_file_rc.is_none() || path != current_raw_path {
-                        current_raw_path = path.clone();
-                        current_file_rc = Some(Rc::from(path.as_path()));
-                    }
+                    path.push(
+                        unit.attr_string(file.path_name())?
+                            .to_string_lossy()
+                            .as_ref(),
+                    );
+                }
 
-                    // Determine line/column. DWARF line/column is never 0, so we use that
-                    // but other applications may want to display this differently.
-                    let line = match row.line() {
-                        Some(line) => line.get(),
-                        None => 0,
-                    };
+                // Only perform a heap allocation when the file path changes
+                if current_file_rc.is_none() || path != current_raw_path {
+                    current_raw_path = path.clone();
+                    current_file_rc = Some(Rc::from(path.as_path()));
+                }
 
-                    // This unwrap is safe because we guranteed it has a value above
-                    let file_rc = current_file_rc.as_ref().unwrap();
+                // Determine line/column. DWARF line/column is never 0, so we use that
+                // but other applications may want to display this differently.
+                let line = match row.line() {
+                    Some(line) => line.get(),
+                    None => 0,
+                };
 
-                    // DEDUPLICATION LOGIC
-                    // Only push to line index if this row starts a new line or swicthed to a
-                    // different file
+                // This unwrap is safe because we guranteed it has a value above
+                let file_rc = current_file_rc.as_ref().unwrap();
 
-                    if last_indexed_file.as_ref().map_or(true, |f| f != file_rc) {
-                        registered_lines.clear();
-                        last_indexed_file = Some(Rc::clone(file_rc));
-                    }
+                // DEDUPLICATION LOGIC
+                // Only push to line index if this row starts a new line or swicthed to a
+                // different file
 
-                    // Ignore line 0 for breakpoint indexing
-                    if line == 0 {
-                        continue;
-                    }
+                if last_indexed_file.as_ref().map_or(true, |f| f != file_rc) {
+                    registered_lines.clear();
+                    last_indexed_file = Some(Rc::clone(file_rc));
+                }
 
-                    let is_already_registered = registered_lines.contains(&line);
-                    let relative_address = row.address();
+                // Ignore line 0 for breakpoint indexing
+                if line == 0 {
+                    continue;
+                }
 
-                    let current_file_id = session
-                        .interner
-                        .get_or_intern(file_rc.to_string_lossy().into());
+                let is_already_registered = registered_lines.contains(&line);
+                let relative_address = row.address();
 
-                    if row.is_stmt() {
-                        session.address_to_location.insert(
+                let current_file_id = session
+                    .interner
+                    .get_or_intern(file_rc.to_string_lossy().into());
+
+                if row.is_stmt() {
+                    session.address_to_location.insert(
+                        relative_address,
+                        SourceLocation {
+                            file: current_file_id,
+                            line,
+                        },
+                    );
+                }
+
+                if !is_already_registered && !row.end_sequence() {
+                    session
+                        .line_index
+                        .entry(line)
+                        .or_insert_with(Vec::new)
+                        .push(interface::BreakpointTarget {
+                            file: file_rc.clone(),
                             relative_address,
-                            SourceLocation {
-                                file: current_file_id,
-                                line,
-                            },
-                        );
+                        });
+
+                    let declaration_history = session
+                        .file_declaration_order
+                        .entry(current_file_id)
+                        .or_insert_with(Vec::new);
+
+                    // Only push if not on the same line
+                    if declaration_history.last() != Some(&line) {
+                        declaration_history.push(line);
                     }
 
-                    if !is_already_registered && !row.end_sequence() {
-                        session
-                            .line_index
-                            .entry(line)
-                            .or_insert_with(Vec::new)
-                            .push(interface::BreakpointTarget {
-                                file: file_rc.clone(),
-                                relative_address,
-                            });
-
-                        let declaration_history = session
-                            .file_declaration_order
-                            .entry(current_file_id)
-                            .or_insert_with(Vec::new);
-
-                        // Only push if not on the same line
-                        if declaration_history.last() != Some(&line) {
-                            declaration_history.push(line);
-                        }
-
-                        registered_lines.insert(line);
-                    }
+                    registered_lines.insert(line);
                 }
             }
         }
     }
+
     Ok(())
 }

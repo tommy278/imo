@@ -41,6 +41,8 @@ pub fn lookup_vars(binary_path: &str, info_cache: &mut DebuggerMetadataCache) {
         .map(|s| s.address())
         .unwrap();
 
+    info_cache.text_address = text_address;
+
     let got_address = object.section_by_name(".got").map(|s| s.address()).unwrap();
 
     let eh_frame_address = object

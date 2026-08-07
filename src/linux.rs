@@ -1,3 +1,4 @@
+use iced_x86::Code;
 use nix::sys::personality::{self, Persona};
 use nix::sys::ptrace;
 use nix::sys::signal::{Signal, raise};
@@ -97,57 +98,159 @@ pub fn debug(binary_path: &str) {
                                         start_line,
                                         start_file,
                                     } => {
-                                        let instruction_detail =
-                                            get_instruction_info(pid, regs.rip as usize);
-                                        println!("{:?}", instruction_detail);
-                                        session.current_cmd = CurrentStopCmd::Completed;
+                                        let rip = regs.rip as usize;
+                                        let instr = get_instruction_info(pid, rip).unwrap();
+
+                                        let code = instr.code();
+                                        let instr_size = instr.len();
+
+                                        println!("{:?}", code);
+
+                                        match code {
+                                            Code::Call_ptr1616
+                                            | Code::Call_ptr1632
+                                            | Code::Call_rel16
+                                            | Code::Call_rel32_32
+                                            | Code::Call_rel32_64
+                                            | Code::Call_rm16
+                                            | Code::Call_rm32
+                                            | Code::Call_rm64
+                                            | Code::Call_m1616
+                                            | Code::Call_m1632
+                                            | Code::Call_m1664 => {
+                                                let return_address = rip + instr_size;
+
+                                                let relative_address = session
+                                                    .get_relative_address(return_address as u64);
+                                                session
+                                                    .create_specific_breakpoint(relative_address);
+
+                                                session.current_cmd = CurrentStopCmd::StepOut {
+                                                    start_rsp,
+                                                    start_line,
+                                                    start_file,
+                                                };
+                                                session.continue_session();
+                                                continue;
+                                            }
+                                            Code::Jmp_rel16
+                                            | Code::Jmp_rel32_32
+                                            | Code::Jmp_rel32_64
+                                            | Code::Jmp_ptr1616
+                                            | Code::Jmp_ptr1632
+                                            | Code::Jmp_rel8_16
+                                            | Code::Jmp_rel8_32
+                                            | Code::Jmp_rel8_64
+                                            | Code::Jmp_rm16
+                                            | Code::Jmp_rm32
+                                            | Code::Jmp_rm64
+                                            | Code::Jmp_m1616
+                                            | Code::Jmp_m1632
+                                            | Code::Jmp_m1664 => {
+                                                let next_ip = rip + instr_size;
+                                                let offset = instr.memory_displacement64() as i64;
+
+                                                let jump_target = (next_ip as i64 + offset) as u64;
+                                                let relative_address =
+                                                    session.get_relative_address(jump_target);
+
+                                                session
+                                                    .create_specific_breakpoint(relative_address);
+
+                                                session.current_cmd = CurrentStopCmd::StepOut {
+                                                    start_rsp,
+                                                    start_line,
+                                                    start_file,
+                                                };
+                                                session.continue_session();
+                                                continue;
+                                            }
+                                            Code::Jne_rel8_16
+                                            | Code::Jne_rel8_32
+                                            | Code::Jne_rel8_64
+                                            | Code::Jne_rel16
+                                            | Code::Jne_rel32_32
+                                            | Code::Jne_rel32_64
+                                            | Code::Je_rel8_16
+                                            | Code::Je_rel8_32
+                                            | Code::Je_rel8_64
+                                            | Code::Je_rel16
+                                            | Code::Je_rel32_32
+                                            | Code::Je_rel32_64 => {
+                                                let next_ip = rip + instr_size;
+                                                let offset = instr.memory_displacement64() as i64;
+
+                                                let jump_target = (next_ip as i64 + offset) as u64;
+                                                let relative_address =
+                                                    session.get_relative_address(jump_target);
+
+                                                session
+                                                    .create_specific_breakpoint(relative_address);
+
+                                                let fallthrough_target = rip + instr_size;
+                                                let relative_address = session
+                                                    .get_relative_address(
+                                                        fallthrough_target as u64,
+                                                    );
+
+                                                session
+                                                    .create_specific_breakpoint(relative_address);
+
+                                                session.current_cmd = CurrentStopCmd::StepOut {
+                                                    start_rsp,
+                                                    start_line,
+                                                    start_file,
+                                                };
+                                                session.continue_session();
+                                                continue;
+                                            }
+                                            Code::Retnw_imm16
+                                            | Code::Retnd_imm16
+                                            | Code::Retnq_imm16
+                                            | Code::Retfw_imm16
+                                            | Code::Retfd_imm16
+                                            | Code::Retfq_imm16 => {
+                                                session.single_step();
+                                                continue;
+                                            }
+                                            _ => {
+                                                let line_range = session
+                                                    .find_line_ranges(start_line, start_file);
+
+                                                let is_at_final_address =
+                                                    *line_range.last().unwrap() == rip as u64;
+
+                                                if is_at_final_address {
+                                                    let next_instruction = rip + instr_size;
+                                                    let relative_address = session
+                                                        .get_relative_address(
+                                                            next_instruction as u64,
+                                                        );
+                                                    session.create_specific_breakpoint(
+                                                        relative_address,
+                                                    );
+
+                                                    session.current_cmd = CurrentStopCmd::StepOut {
+                                                        start_rsp,
+                                                        start_line,
+                                                        start_file,
+                                                    };
+                                                    session.continue_session();
+                                                    continue;
+                                                }
+
+                                                session.single_step();
+                                            }
+                                        }
                                     }
-                                    CurrentStopCmd::StepOut {
-                                        start_rsp,
-                                        start_line,
-                                        start_file,
-                                    } => {
+                                    CurrentStopCmd::StepOut { .. } => {
                                         let breakpoint_addr = regs.rip - 1;
 
                                         let relative_address =
                                             session.get_relative_address(breakpoint_addr);
                                         session.clear_specific_breakpoint(relative_address);
 
-                                        regs.rip = breakpoint_addr;
-                                        ptrace::setregs(pid, regs).unwrap();
-
-                                        // Search for a valid location to stop on
-                                        // Avoid stoppiing on assembly
-                                        session.current_cmd =
-                                            CurrentStopCmd::SearchingForNextValidLocation {
-                                                start_line,
-                                                start_rsp,
-                                            };
-                                        session.single_step();
-                                    }
-                                    CurrentStopCmd::SearchingForNextValidLocation {
-                                        start_line,
-                                        start_rsp,
-                                    } => {
-                                        if let Some(l) = session.current_location() {
-                                            let current_file = l.file;
-
-                                            if start_rsp == regs.rsp {
-                                                session.single_step();
-                                                continue;
-                                            } else if start_rsp < regs.rsp {
-                                                session.current_cmd = CurrentStopCmd::Completed;
-                                                continue;
-                                            }
-
-                                            // We are back in the main file so check to ensure we are not on the same line
-                                            if l.line != start_line {
-                                                session.current_cmd = CurrentStopCmd::Completed;
-                                                continue;
-                                            }
-                                        }
-
-                                        // If no valid location continue stepping
+                                        session.current_cmd = CurrentStopCmd::Completed;
                                         session.single_step();
                                     }
                                     CurrentStopCmd::SearchingForValidLocation => {

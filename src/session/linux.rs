@@ -76,7 +76,7 @@ pub fn read_bytes(pid: ProcessId, remote_address: usize, len: usize) -> Option<V
     unimplemented!("Error reading bytes");
 }
 
-pub fn get_instruction_info(pid: ProcessId, rip: usize) -> Option<(usize, iced_x86::Code)> {
+pub fn get_instruction_info(pid: ProcessId, rip: usize) -> Option<iced_x86::Instruction> {
     let bytes = read_bytes(pid, rip, 15).unwrap();
 
     if bytes.iter().all(|&b| b == 0) {
@@ -90,5 +90,5 @@ pub fn get_instruction_info(pid: ProcessId, rip: usize) -> Option<(usize, iced_x
         return None;
     }
 
-    Some((instruction.len(), instruction.code()))
+    Some(instruction)
 }

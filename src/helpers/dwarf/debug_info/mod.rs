@@ -703,8 +703,8 @@ impl DebugVariable {
 
 #[derive(Debug, Clone)]
 pub struct AddressRange {
-    low_pc: u64,
-    high_pc: u64,
+    pub low_pc: u64,
+    pub high_pc: u64,
 }
 
 /// Current scope of event being executed
@@ -761,6 +761,8 @@ pub struct DebuggerMetadataCache {
     pub type_index: FxHashMap<usize, TypeCacheNode>,
 
     pub base_addresses: gimli::BaseAddresses,
+
+    pub text_address: u64,
 
     // Store additional data
     pub encoding: Option<Encoding>,
