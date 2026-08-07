@@ -1,3 +1,4 @@
+use iced_x86::Decoder;
 use nix::sys::ptrace::AddressType;
 use nix::sys::signal;
 use nix::sys::uio::{RemoteIoVec, process_vm_readv};
@@ -31,14 +32,6 @@ pub fn continue_session(pid: ProcessId) {
 /// Kill debug session
 pub fn kill_session(pid: ProcessId) {
     ptrace::kill(pid).unwrap()
-}
-
-/// Send a SIGSTOP signal to the main loop
-/// Main loop decides how to step ( Only notifies )
-pub fn begin_step_process(pid: ProcessId) {
-    // Detach and re-attach to the send a SIGSTOP signal
-    ptrace::detach(pid, None).unwrap();
-    ptrace::attach(pid).unwrap();
 }
 
 pub fn send_trap_signal(pid: ProcessId) {
@@ -81,4 +74,21 @@ pub fn read_bytes(pid: ProcessId, remote_address: usize, len: usize) -> Option<V
     }
 
     unimplemented!("Error reading bytes");
+}
+
+pub fn get_instruction_info(pid: ProcessId, rip: usize) -> Option<(usize, iced_x86::Code)> {
+    let bytes = read_bytes(pid, rip, 15).unwrap();
+
+    if bytes.iter().all(|&b| b == 0) {
+        return None;
+    }
+
+    let mut decoder = iced_x86::Decoder::with_ip(64, &bytes, 0, iced_x86::DecoderOptions::NONE);
+    let instruction = decoder.decode();
+
+    if instruction.is_invalid() {
+        return None;
+    }
+
+    Some((instruction.len(), instruction.code()))
 }

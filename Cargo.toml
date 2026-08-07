@@ -10,3 +10,8 @@ nix = { version = "0.31.3", features = ["process", "ptrace", "signal", "personal
 object = "0.39.1"
 owo-colors = "4.3.0"
 rustc-hash = "2.1.2"
+
+[dependencies.iced-x86]
+version = "1.21.0"
+default-features = false
+features = ["decoder", "std"]
