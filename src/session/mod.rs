@@ -99,7 +99,9 @@ pub enum CurrentStopCmd {
         start_file: StringId,
         start_line: u64,
     },
-    StepOut,
+    StepOut {
+        original_boundary_index: u32,
+    },
     #[default]
     Idle,
     Running,

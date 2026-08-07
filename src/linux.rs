@@ -129,7 +129,9 @@ pub fn debug(binary_path: &str) {
                                                 session
                                                     .create_specific_breakpoint(relative_address);
 
-                                                session.current_cmd = CurrentStopCmd::StepOut;
+                                                session.current_cmd = CurrentStopCmd::StepOut {
+                                                    original_boundary_index: start_boundary_index,
+                                                };
 
                                                 session.continue_session();
                                                 continue;
@@ -139,7 +141,9 @@ pub fn debug(binary_path: &str) {
                                             }
                                         }
                                     }
-                                    CurrentStopCmd::StepOut { .. } => {
+                                    CurrentStopCmd::StepOut {
+                                        original_boundary_index,
+                                    } => {
                                         let breakpoint_addr = regs.rip - 1;
 
                                         let relative_address =
@@ -150,8 +154,17 @@ pub fn debug(binary_path: &str) {
 
                                         ptrace::setregs(pid, regs).unwrap();
 
-                                        session.current_cmd = CurrentStopCmd::Completed;
-                                        session.single_step();
+                                        let current_boundary_index =
+                                            session.find_range_index(regs.rip).unwrap();
+
+                                        if original_boundary_index == current_boundary_index {
+                                            session.current_cmd = CurrentStopCmd::StepOver {
+                                                start_boundary_index: current_boundary_index,
+                                            };
+                                            session.single_step();
+                                        } else {
+                                            session.current_cmd = CurrentStopCmd::Completed;
+                                        }
                                     }
                                     CurrentStopCmd::SearchingForValidLocation => {
                                         // If the location is valid then complete the search
