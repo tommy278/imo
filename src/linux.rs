@@ -1,4 +1,3 @@
-use iced_x86::Code;
 use nix::sys::personality::{self, Persona};
 use nix::sys::ptrace;
 use nix::sys::signal::{Signal, raise};
@@ -6,7 +5,6 @@ use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::{ForkResult, fork};
 
 use crate::cli::handle_user_debugger_menu;
-use crate::session::linux::{get_instruction_info, peek_data, read_bytes};
 use crate::session::{CurrentStopCmd, DebugSession};
 
 /// Begin the parent and child processes
@@ -66,7 +64,6 @@ pub fn debug(binary_path: &str) {
                             // If stop was due to SIGTRAP, do not forward it to the child.
                             // Pass None to let the child continue its execution.
                             if sig == Signal::SIGTRAP {
-                                println!("{:?}", session.current_cmd);
                                 assert!(!session.is_idle());
                                 match session.current_cmd {
                                     CurrentStopCmd::SingleStep => {
@@ -101,19 +98,24 @@ pub fn debug(binary_path: &str) {
                                     } => {
                                         let current_rsp = regs.rsp;
 
+                                        // If current rsp is greater than the start rsp then we stepped out of a function and should stop there
                                         if current_rsp > start_rsp {
                                             if session.current_location().is_some() {
                                                 session.current_cmd = CurrentStopCmd::Completed;
                                             } else {
                                                 session.single_step();
                                             }
-                                        } else if current_rsp == start_rsp {
+                                        }
+                                        // If rsp are the same then we are in the same function or it was inlined
+                                        else if current_rsp == start_rsp {
+                                            // We need location so keep stepping until we find a valid one
                                             let Some(current_location) = session.current_location()
                                             else {
                                                 session.single_step();
                                                 continue;
                                             };
 
+                                            // If its not an inline function just step till we are back in same file but not same line
                                             if !started_from_inline {
                                                 if start_file == current_location.file
                                                     && start_line != current_location.line
@@ -124,8 +126,16 @@ pub fn debug(binary_path: &str) {
                                                 }
                                                 continue;
                                             } else {
-                                                if start_file != current_location.file
-                                                    || start_line != current_location.line
+                                                // If we are in an inline function, behave exactly like a
+                                                // normal stepover with the inclusion
+                                                // that it can now step out to a function that is not inlined
+                                                let pc = regs.rip - session.base_address;
+                                                if (start_file == current_location.file
+                                                    && start_line != current_location.line)
+                                                    || !session
+                                                        .metadata
+                                                        .is_in_inline(pc)
+                                                        .unwrap_or(true)
                                                 {
                                                     session.current_cmd = CurrentStopCmd::Completed;
                                                 } else {
@@ -134,6 +144,15 @@ pub fn debug(binary_path: &str) {
                                                 continue;
                                             }
                                         } else {
+                                            // NOTE: For some reason closures get really low rsp values which is unusable
+                                            if regs.rsp < session.base_address {
+                                                session.single_step();
+                                                continue;
+                                            }
+
+                                            // If current rsp is lower then we stepped into a child
+                                            // In that case get the return address and continue there
+
                                             let (_, return_address) =
                                                 session.get_cfa_and_ret_addr().unwrap();
 
@@ -155,6 +174,8 @@ pub fn debug(binary_path: &str) {
                                         original_line,
                                         started_from_inline,
                                     } => {
+                                        // A handshake from the step over
+                                        // Simply clear breakpoint and send data back to finish stepover to handle completion
                                         let breakpoint_addr = regs.rip - 1;
 
                                         let relative_address =
@@ -178,6 +199,8 @@ pub fn debug(binary_path: &str) {
                                         original_line,
                                         started_from_inline,
                                     } => {
+                                        // If we stepped out of original function or back to
+                                        // original function then complete else go back to stepping over
                                         if original_rsp >= regs.rsp {
                                             session.current_cmd = CurrentStopCmd::StepOver {
                                                 start_rsp: original_rsp,
