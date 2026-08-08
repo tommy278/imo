@@ -132,10 +132,7 @@ pub fn debug(binary_path: &str) {
                                                 let pc = regs.rip - session.base_address;
                                                 if (start_file == current_location.file
                                                     && start_line != current_location.line)
-                                                    || !session
-                                                        .metadata
-                                                        .is_in_inline(pc)
-                                                        .unwrap_or(true)
+                                                    || !session.metadata.is_in_inline(pc)
                                                 {
                                                     session.current_cmd = CurrentStopCmd::Completed;
                                                 } else {

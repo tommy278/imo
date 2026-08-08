@@ -808,24 +808,22 @@ impl DebuggerMetadataCache {
         default_cache
     }
 
-    pub fn is_in_inline(&self, pc: u64) -> Option<bool> {
-        let mut results = Vec::new();
-
+    pub fn is_in_inline(&self, pc: u64) -> bool {
         for scope in self.execution_scopes.iter() {
             if scope.is_in_scope(pc) {
                 if scope.find_active_scope(pc).is_some() {
                     // Update down the tree
                     // An inline can call a function
                     if scope.scope.is_func() {
-                        results.push(false);
+                        return false;
                     }
                     if scope.scope.is_inline() {
-                        results.push(true);
+                        return true;
                     }
                 }
             }
         }
-        results.first().copied()
+        true
     }
 
     /// Find current variables and frame base with the current pc

@@ -373,8 +373,7 @@ impl DebugSession {
 
         let is_inline = self
             .metadata
-            .is_in_inline(self.current_rip() - self.base_address)
-            .unwrap_or(true);
+            .is_in_inline(self.current_rip() - self.base_address);
 
         self.current_cmd = CurrentStopCmd::StepOver {
             start_rsp: self.get_regs().regs.rsp,
