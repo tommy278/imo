@@ -99,15 +99,28 @@ pub fn debug(binary_path: &str) {
                                         let rip = regs.rip as usize;
                                         let instr = get_instruction_info(pid, rip).unwrap();
 
+                                        let pc = rip as u64 - session.base_address;
+
+                                        let code = instr.code();
+
                                         let current_boundary_index =
                                             session.find_range_index(regs.rip).unwrap();
 
-                                        if start_boundary_index != current_boundary_index {
+                                        let is_not_inline = session
+                                            .metadata
+                                            .is_in_inline(pc)
+                                            .is_some_and(|t| t == false);
+
+                                        if start_boundary_index != current_boundary_index
+                                            && session.current_location().is_some()
+                                            && is_not_inline
+                                        {
                                             session.current_cmd = CurrentStopCmd::Completed;
                                             continue;
                                         }
 
-                                        let code = instr.code();
+                                        // println!("Instr: {:?}, Rsp: {}", code, regs.rsp);
+
                                         let instr_size = instr.len();
 
                                         match code {
@@ -163,7 +176,14 @@ pub fn debug(binary_path: &str) {
                                             };
                                             session.single_step();
                                         } else {
-                                            session.current_cmd = CurrentStopCmd::Completed;
+                                            if session.current_location().is_some() {
+                                                session.current_cmd = CurrentStopCmd::Completed;
+                                            } else {
+                                                session.current_cmd = CurrentStopCmd::StepOver {
+                                                    start_boundary_index: current_boundary_index,
+                                                };
+                                                session.single_step();
+                                            }
                                         }
                                     }
                                     CurrentStopCmd::SearchingForValidLocation => {

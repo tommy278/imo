@@ -203,11 +203,13 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 let line = session.current_location();
                 println!("{:?}", line);
             }
-            "int" => {
-                println!("{:?}", session.interner);
+            "rsp" => {
+                println!("{:?}", session.get_regs().regs.rsp);
             }
             "scope" => {
-                let scope = session.find_current_scope();
+                let scope = session
+                    .metadata
+                    .is_in_inline(session.current_rip() - session.base_address);
                 println!("{:?}", scope);
             }
             // Another debug

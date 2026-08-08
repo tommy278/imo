@@ -78,7 +78,22 @@ fn main() {
 }
 
 fn add(x: i32, y: i32) -> i32 {
+    let t = div(x, y);
     x + y
+}
+
+fn div(x: i32, y: i32) -> i32 {
+    let x = mul(x, y);
+    x / y
+}
+
+fn mul(x: i32, y: i32) -> i32 {
+    let x = sub(x, y);
+    x * y
+}
+
+fn sub(x: i32, y: i32) -> i32 {
+    x - y
 }
 
 pub enum StackedStatus {

@@ -622,6 +622,20 @@ impl ExecutionScope {
             ExecutionScope::Inlined | ExecutionScope::LexicalBlock => None,
         }
     }
+
+    pub fn is_inline(&self) -> bool {
+        match self {
+            ExecutionScope::Inlined => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_func(&self) -> bool {
+        match self {
+            ExecutionScope::Function { .. } => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -794,13 +808,24 @@ impl DebuggerMetadataCache {
         default_cache
     }
 
-    pub fn get_range_boundaries(&self, pc: u64) -> Option<&Vec<AddressRange>> {
+    pub fn is_in_inline(&self, pc: u64) -> Option<bool> {
+        let mut results = Vec::new();
+
         for scope in self.execution_scopes.iter() {
-            if let Some(deepest_match) = scope.find_active_scope(pc) {
-                return Some(&deepest_match.ranges);
+            if scope.is_in_scope(pc) {
+                if scope.find_active_scope(pc).is_some() {
+                    // Update down the tree
+                    // An inline can call a function
+                    if scope.scope.is_func() {
+                        results.push(false);
+                    }
+                    if scope.scope.is_inline() {
+                        results.push(true);
+                    }
+                }
             }
         }
-        None
+        results.first().copied()
     }
 
     /// Find current variables and frame base with the current pc
