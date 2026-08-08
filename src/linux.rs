@@ -102,7 +102,11 @@ pub fn debug(binary_path: &str) {
                                         let current_rsp = regs.rsp;
 
                                         if current_rsp > start_rsp {
-                                            session.current_cmd = CurrentStopCmd::Completed;
+                                            if session.current_location().is_some() {
+                                                session.current_cmd = CurrentStopCmd::Completed;
+                                            } else {
+                                                session.single_step();
+                                            }
                                         } else if current_rsp == start_rsp {
                                             let Some(current_location) = session.current_location()
                                             else {
@@ -111,7 +115,6 @@ pub fn debug(binary_path: &str) {
                                             };
 
                                             if !started_from_inline {
-                                                println!("Not Inline");
                                                 if start_file == current_location.file
                                                     && start_line != current_location.line
                                                 {
@@ -121,7 +124,6 @@ pub fn debug(binary_path: &str) {
                                                 }
                                                 continue;
                                             } else {
-                                                println!("Inline");
                                                 if start_file != current_location.file
                                                     || start_line != current_location.line
                                                 {
@@ -160,7 +162,6 @@ pub fn debug(binary_path: &str) {
                                         session.clear_specific_breakpoint(relative_address);
 
                                         regs.rip = breakpoint_addr;
-
                                         ptrace::setregs(pid, regs).unwrap();
 
                                         session.current_cmd = CurrentStopCmd::FinishStepOver {
@@ -186,7 +187,11 @@ pub fn debug(binary_path: &str) {
                                             };
                                             session.single_step();
                                         } else {
-                                            session.current_cmd = CurrentStopCmd::Completed;
+                                            if session.current_location().is_some() {
+                                                session.current_cmd = CurrentStopCmd::Completed;
+                                            } else {
+                                                session.single_step();
+                                            }
                                         }
                                     }
                                     CurrentStopCmd::SearchingForValidLocation => {
