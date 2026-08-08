@@ -94,68 +94,64 @@ pub fn debug(binary_path: &str) {
                                         }
                                     }
                                     CurrentStopCmd::StepOver {
-                                        start_boundary_index,
+                                        start_rsp,
+                                        start_file,
+                                        start_line,
+                                        started_from_inline,
                                     } => {
-                                        let rip = regs.rip as usize;
-                                        let instr = get_instruction_info(pid, rip).unwrap();
+                                        let current_rsp = regs.rsp;
 
-                                        let pc = rip as u64 - session.base_address;
-
-                                        let code = instr.code();
-
-                                        let current_boundary_index =
-                                            session.find_range_index(regs.rip).unwrap();
-
-                                        let is_not_inline = session
-                                            .metadata
-                                            .is_in_inline(pc)
-                                            .is_some_and(|t| t == false);
-
-                                        if start_boundary_index != current_boundary_index
-                                            && session.current_location().is_some()
-                                            && is_not_inline
-                                        {
+                                        if current_rsp > start_rsp {
                                             session.current_cmd = CurrentStopCmd::Completed;
-                                            continue;
-                                        }
+                                        } else if current_rsp == start_rsp {
+                                            let Some(current_location) = session.current_location()
+                                            else {
+                                                session.single_step();
+                                                continue;
+                                            };
 
-                                        // println!("Instr: {:?}, Rsp: {}", code, regs.rsp);
-
-                                        let instr_size = instr.len();
-
-                                        match code {
-                                            Code::Call_ptr1616
-                                            | Code::Call_ptr1632
-                                            | Code::Call_rel16
-                                            | Code::Call_rel32_32
-                                            | Code::Call_rel32_64
-                                            | Code::Call_rm16
-                                            | Code::Call_rm32
-                                            | Code::Call_rm64
-                                            | Code::Call_m1616
-                                            | Code::Call_m1632
-                                            | Code::Call_m1664 => {
-                                                let return_address = rip + instr_size;
-
-                                                let relative_address = session
-                                                    .get_relative_address(return_address as u64);
-                                                session
-                                                    .create_specific_breakpoint(relative_address);
-
-                                                session.current_cmd = CurrentStopCmd::StepOut {
-                                                    original_boundary_index: start_boundary_index,
-                                                };
-
-                                                session.continue_session();
+                                            if !started_from_inline {
+                                                println!("Not Inline");
+                                                if start_file == current_location.file
+                                                    && start_line != current_location.line
+                                                {
+                                                    session.current_cmd = CurrentStopCmd::Completed;
+                                                } else {
+                                                    session.single_step();
+                                                }
+                                                continue;
+                                            } else {
+                                                println!("Inline");
+                                                if start_file != current_location.file
+                                                    || start_line != current_location.line
+                                                {
+                                                    session.current_cmd = CurrentStopCmd::Completed;
+                                                } else {
+                                                    session.single_step();
+                                                }
                                                 continue;
                                             }
-                                            _ => {
-                                                session.single_step();
-                                            }
+                                        } else {
+                                            let (_, return_address) =
+                                                session.get_cfa_and_ret_addr().unwrap();
+
+                                            let relative_address =
+                                                session.get_relative_address(return_address);
+                                            session.create_specific_breakpoint(relative_address);
+                                            session.current_cmd = CurrentStopCmd::StepOut {
+                                                original_rsp: start_rsp,
+                                                original_file: start_file,
+                                                original_line: start_line,
+                                                started_from_inline,
+                                            };
+                                            session.continue_session();
                                         }
                                     }
                                     CurrentStopCmd::StepOut {
-                                        original_boundary_index,
+                                        original_rsp,
+                                        original_file,
+                                        original_line,
+                                        started_from_inline,
                                     } => {
                                         let breakpoint_addr = regs.rip - 1;
 
@@ -167,23 +163,30 @@ pub fn debug(binary_path: &str) {
 
                                         ptrace::setregs(pid, regs).unwrap();
 
-                                        let current_boundary_index =
-                                            session.find_range_index(regs.rip).unwrap();
-
-                                        if original_boundary_index == current_boundary_index {
+                                        session.current_cmd = CurrentStopCmd::FinishStepOver {
+                                            original_rsp,
+                                            original_file,
+                                            original_line,
+                                            started_from_inline,
+                                        };
+                                        session.single_step();
+                                    }
+                                    CurrentStopCmd::FinishStepOver {
+                                        original_rsp,
+                                        original_file,
+                                        original_line,
+                                        started_from_inline,
+                                    } => {
+                                        if original_rsp >= regs.rsp {
                                             session.current_cmd = CurrentStopCmd::StepOver {
-                                                start_boundary_index: current_boundary_index,
+                                                start_rsp: original_rsp,
+                                                start_file: original_file,
+                                                start_line: original_line,
+                                                started_from_inline,
                                             };
                                             session.single_step();
                                         } else {
-                                            if session.current_location().is_some() {
-                                                session.current_cmd = CurrentStopCmd::Completed;
-                                            } else {
-                                                session.current_cmd = CurrentStopCmd::StepOver {
-                                                    start_boundary_index: current_boundary_index,
-                                                };
-                                                session.single_step();
-                                            }
+                                            session.current_cmd = CurrentStopCmd::Completed;
                                         }
                                     }
                                     CurrentStopCmd::SearchingForValidLocation => {

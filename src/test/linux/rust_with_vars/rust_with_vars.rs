@@ -66,6 +66,7 @@ fn main() {
     }
 
     add(arr[2], arr[3]);
+    let x = fib(20);
 
     // NOTE: Debugger does not recognize these types yet
     let vec = vec![1, 2, 3, 4, 5];
@@ -75,6 +76,14 @@ fn main() {
     let static_str = "Hello World";
     let string = String::from(static_str);
     let slice = &string[1..];
+}
+
+fn fib(n: u128) -> u128 {
+    if n == 0 || n == 1 {
+        return n;
+    }
+
+    fib(n - 1) + fib(n - 2)
 }
 
 fn add(x: i32, y: i32) -> i32 {

@@ -93,14 +93,26 @@ pub struct SourceLocation {
 pub enum CurrentStopCmd {
     SingleStep,
     StepOver {
-        start_boundary_index: u32,
+        start_rsp: u64,
+        start_file: StringId,
+        start_line: u64,
+        started_from_inline: bool,
     },
     StepInto {
         start_file: StringId,
         start_line: u64,
     },
     StepOut {
-        original_boundary_index: u32,
+        original_rsp: u64,
+        original_file: StringId,
+        original_line: u64,
+        started_from_inline: bool,
+    },
+    FinishStepOver {
+        original_rsp: u64,
+        original_file: StringId,
+        original_line: u64,
+        started_from_inline: bool,
     },
     #[default]
     Idle,
@@ -158,9 +170,6 @@ pub struct DebugSession {
     pub breakpoint_index_tracker: Vec<Option<BreakpointData>>,
     pub address_to_location: FxHashMap<u64, SourceLocation>,
 
-    // Line ranges to track next command location
-    pub line_ranges: Vec<AddressRange>,
-
     // Used to find out the actual order in while files were declared
     pub file_declaration_order: FxHashMap<StringId, Vec<u64>>,
 
@@ -195,7 +204,6 @@ impl DebugSession {
             current_cmd: CurrentStopCmd::default(),
             active_breakpoints: FxHashMap::default(),
             interner: StringInterner::default(),
-            line_ranges: Vec::with_capacity(200),
             pid,
         }
     }
@@ -217,34 +225,7 @@ impl DebugSession {
 
         session.raw_debug_frame = setup_session_debug_frame(binary_path);
 
-        session.set_up_line_ranges();
-
         session
-    }
-
-    /// Filter and sort line ranges
-    pub fn set_up_line_ranges(&mut self) {
-        // Ignore entries that arent within scope for this current process
-        self.line_ranges
-            .retain(|range| range.low_pc >= self.metadata.text_address);
-
-        self.line_ranges.sort_by_key(|r| r.low_pc);
-    }
-
-    pub fn find_range_index(&self, current_rip: u64) -> Option<u32> {
-        let current_pc = current_rip - self.base_address;
-        match self.line_ranges.binary_search_by(|p| {
-            if current_pc < p.low_pc {
-                std::cmp::Ordering::Greater
-            } else if current_pc >= p.high_pc {
-                std::cmp::Ordering::Less
-            } else {
-                std::cmp::Ordering::Equal
-            }
-        }) {
-            Ok(index) => Some(index as u32),
-            Err(_) => None,
-        }
     }
 
     /// Get the live register of the current process
@@ -384,9 +365,22 @@ impl DebugSession {
     }
 
     pub fn begin_step_over(&mut self) {
-        let start_boundary_index = self.find_range_index(self.current_rip()).unwrap();
+        let Some(current_location) = self.current_location() else {
+            self.current_cmd = CurrentStopCmd::SearchingForValidLocation;
+            self.single_step();
+            return;
+        };
+
+        let is_inline = self
+            .metadata
+            .is_in_inline(self.current_rip() - self.base_address)
+            .unwrap_or(true);
+
         self.current_cmd = CurrentStopCmd::StepOver {
-            start_boundary_index,
+            start_rsp: self.get_regs().regs.rsp,
+            start_file: current_location.file,
+            start_line: current_location.line,
+            started_from_inline: is_inline,
         };
         self.single_step();
     }

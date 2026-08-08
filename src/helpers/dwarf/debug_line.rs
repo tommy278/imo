@@ -75,23 +75,9 @@ fn update_session_cache(
             let mut last_indexed_file: Option<Rc<Path>> = None;
             let mut registered_lines: FxHashSet<u64> = FxHashSet::default();
 
-            let mut prev_row: Option<gimli::LineRow> = None;
-
             // Iterate over the line program rows.
             let mut rows = program.rows();
             while let Some((header, row)) = rows.next_row()? {
-                if let Some(prev) = prev_row {
-                    session.line_ranges.push(AddressRange {
-                        low_pc: prev.address(),
-                        high_pc: row.address(),
-                    });
-                }
-
-                if row.end_sequence() {
-                    prev_row = None;
-                } else {
-                    prev_row = Some(row.clone());
-                }
                 // Determine the path. Real applications should cache this for performance.
                 let mut path = path::PathBuf::new();
                 if let Some(file) = row.file(header) {
