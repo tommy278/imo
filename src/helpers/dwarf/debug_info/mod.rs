@@ -799,11 +799,11 @@ impl ActiveVariablesContext<'_> {
 
 impl DebuggerMetadataCache {
     /// Populate the cache with the debug_info
-    pub fn new(binary_path: &str) -> Self {
+    pub fn new(object: &object::File<'_>) -> Self {
         let mut default_cache = Self::default();
 
         // Populate the cache with data
-        lookup_vars(binary_path, &mut default_cache);
+        lookup_vars(&mut default_cache, object);
 
         default_cache
     }

@@ -24,12 +24,8 @@ impl RawDebugFrame {
 }
 
 /// Get details from dwarf and apply them to the debug session cache
-pub fn setup_session_debug_frame(binary_path: &str) -> RawDebugFrame {
-    let file = fs::File::open(binary_path).unwrap();
-    // TODO: Find a safer way to map file as suggested by gimli
-    let mmap = unsafe { memmap2::Mmap::map(&file).unwrap() };
-    let object = object::File::parse(&*mmap).unwrap();
-    update_session_cache(&object).unwrap()
+pub fn setup_session_debug_frame(object: &object::File<'_>) -> RawDebugFrame {
+    update_session_cache(object).unwrap()
 }
 
 /// Update the BreakpointTarget and SourceLocation in the debug session cache

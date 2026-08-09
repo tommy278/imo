@@ -243,14 +243,23 @@ impl DebugSession {
     pub fn new(pid: os::ProcessId, binary_path: &str) -> Self {
         let mut session = Self::from_pid(pid);
 
+        let file = std::fs::File::open(binary_path).unwrap();
+
+        // SAFETY: This is not safe. `gimli` does not mitigate against modifications to the
+        // file while it is being read. See the `memmap2` documentation and take your own
+        // precautions. `fs::read` could be used instead if you don't mind loading the entire
+        // file into memory.
+        let mmap = unsafe { memmap2::Mmap::map(&file).unwrap() };
+        let object = object::File::parse(&*mmap).unwrap();
+
         session.update_process_base_address();
 
-        session.metadata = DebuggerMetadataCache::new(binary_path);
+        session.metadata = DebuggerMetadataCache::new(&object);
 
         // Update line index and address to location
-        dwarf::debug_line::setup_session_cache(binary_path, &mut session);
+        dwarf::debug_line::setup_session_cache(&object, &mut session);
 
-        session.raw_debug_frame = setup_session_debug_frame(binary_path);
+        session.raw_debug_frame = setup_session_debug_frame(&object);
 
         session.set_up_line_row();
 

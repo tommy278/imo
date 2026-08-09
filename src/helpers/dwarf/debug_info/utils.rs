@@ -26,16 +26,7 @@ struct Section<'data> {
 
 // The reader type that will be stored in `Dwarf` and `DwarfPackage`.
 // If you don't need relocations, you can use `gimli::EndianSlice` directly.
-pub fn lookup_vars(binary_path: &str, info_cache: &mut DebuggerMetadataCache) {
-    let file = fs::File::open(binary_path).unwrap();
-
-    // SAFETY: This is not safe. `gimli` does not mitigate against modifications to the
-    // file while it is being read. See the `memmap2` documentation and take your own
-    // precautions. `fs::read` could be used instead if you don't mind loading the entire
-    // file into memory.
-    let mmap = unsafe { memmap2::Mmap::map(&file).unwrap() };
-    let object = object::File::parse(&*mmap).unwrap();
-
+pub fn lookup_vars(info_cache: &mut DebuggerMetadataCache, object: &object::File) {
     let text_address = object
         .section_by_name(".text")
         .map(|s| s.address())

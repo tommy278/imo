@@ -3,7 +3,6 @@ use object::{Object, ObjectSection};
 use rustc_hash::FxHashSet;
 use std::{
     borrow, error,
-    fs::{self},
     path::{self},
 };
 
@@ -15,11 +14,7 @@ use std::{
  */
 
 /// Get details from dwarf and apply them to the debug session cache
-pub fn setup_session_cache(binary_path: &str, session: &mut DebugSession) {
-    let file = fs::File::open(binary_path).unwrap();
-    // TODO: Find a safer way to map file as suggested by gimli
-    let mmap = unsafe { memmap2::Mmap::map(&file).unwrap() };
-    let object = object::File::parse(&*mmap).unwrap();
+pub fn setup_session_cache(object: &object::File<'_>, session: &mut DebugSession) {
     let endian = if object.is_little_endian() {
         gimli::RunTimeEndian::Little
     } else {
