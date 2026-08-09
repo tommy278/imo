@@ -298,11 +298,7 @@ pub fn debug(binary_path: &str) {
                                             };
                                             session.single_step();
                                         } else {
-                                            if session.current_location().is_some() {
-                                                session.current_cmd = CurrentStopCmd::Completed;
-                                            } else {
-                                                session.single_step();
-                                            }
+                                            session.current_cmd = CurrentStopCmd::Completed;
                                         }
                                     }
                                     CurrentStopCmd::SearchingForValidLocation => {
