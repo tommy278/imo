@@ -115,6 +115,19 @@ pub enum CurrentStopCmd {
         original_line: u64,
         started_from_inline: bool,
     },
+    Finish {
+        start_rsp: u64,
+        started_from_inline: bool,
+    },
+    StepOutFinish {
+        original_rsp: u64,
+        return_address: u64,
+        started_from_inline: bool,
+    },
+    CompleteFinish {
+        start_rsp: u64,
+        started_from_inline: bool,
+    },
     #[default]
     Idle,
     Running,
@@ -380,6 +393,18 @@ impl DebugSession {
             start_rsp: self.get_regs().regs.rsp,
             start_file: current_location.file,
             start_line: current_location.line,
+            started_from_inline: is_inline,
+        };
+        self.single_step();
+    }
+
+    pub fn begin_finish(&mut self) {
+        let is_inline = self
+            .metadata
+            .is_in_inline(self.current_rip() - self.base_address);
+
+        self.current_cmd = CurrentStopCmd::Finish {
+            start_rsp: self.get_regs().regs.rsp,
             started_from_inline: is_inline,
         };
         self.single_step();

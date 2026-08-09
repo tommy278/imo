@@ -215,6 +215,95 @@ pub fn debug(binary_path: &str) {
                                             }
                                         }
                                     }
+                                    CurrentStopCmd::Finish {
+                                        start_rsp,
+                                        started_from_inline,
+                                    } => {
+                                        let current_rsp = regs.rsp;
+
+                                        if current_rsp > start_rsp {
+                                            if session.current_location().is_some() {
+                                                session.current_cmd = CurrentStopCmd::Completed;
+                                            } else {
+                                                session.single_step();
+                                            }
+                                        } else if started_from_inline && start_rsp == current_rsp {
+                                            let pc = regs.rip - session.base_address;
+                                            if !session.metadata.is_in_inline(pc) {
+                                                session.current_cmd = CurrentStopCmd::Completed;
+                                            } else {
+                                                session.single_step();
+                                            }
+                                            continue;
+                                        } else {
+                                            let Some((_, return_address)) =
+                                                session.get_cfa_and_ret_addr()
+                                            else {
+                                                session.single_step();
+                                                continue;
+                                            };
+
+                                            let relative_address =
+                                                session.get_relative_address(return_address);
+                                            session.create_specific_breakpoint(relative_address);
+                                            session.current_cmd = CurrentStopCmd::StepOutFinish {
+                                                return_address,
+                                                original_rsp: start_rsp,
+                                                started_from_inline,
+                                            };
+                                            session.continue_session();
+                                        }
+                                    }
+
+                                    CurrentStopCmd::StepOutFinish {
+                                        return_address,
+                                        original_rsp,
+                                        started_from_inline,
+                                    } => {
+                                        // A handshake from the step over
+                                        // Simply clear breakpoint and send data back to finish stepover to handle completion
+                                        let breakpoint_addr = regs.rip - 1;
+
+                                        let relative_address =
+                                            session.get_relative_address(breakpoint_addr);
+                                        session.clear_specific_breakpoint(relative_address);
+
+                                        regs.rip = breakpoint_addr;
+                                        ptrace::setregs(pid, regs).unwrap();
+
+                                        if return_address == breakpoint_addr {
+                                            // If we are at the specific breakpoint to step out from then continue step over like normal
+                                            session.current_cmd = CurrentStopCmd::CompleteFinish {
+                                                start_rsp: original_rsp,
+                                                started_from_inline: started_from_inline,
+                                            };
+                                            session.single_step();
+                                        } else {
+                                            // If we are at a different breakpoint continue till we reach the target
+                                            session.continue_session();
+                                        }
+                                    }
+
+                                    CurrentStopCmd::CompleteFinish {
+                                        start_rsp,
+                                        started_from_inline,
+                                    } => {
+                                        // If we stepped out of original function or back to
+                                        // original function then complete else go back to stepping over
+                                        if start_rsp >= regs.rsp {
+                                            session.current_cmd = CurrentStopCmd::Finish {
+                                                start_rsp,
+                                                started_from_inline,
+                                            };
+                                            session.single_step();
+                                        } else {
+                                            if session.current_location().is_some() {
+                                                session.current_cmd = CurrentStopCmd::Completed;
+                                            } else {
+                                                session.single_step();
+                                            }
+                                        }
+                                    }
                                     CurrentStopCmd::SearchingForValidLocation => {
                                         // If the location is valid then complete the search
                                         if session.current_location().is_some() {

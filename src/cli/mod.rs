@@ -56,7 +56,6 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
             // Step into
             "s" | "step" => {
                 if !session.is_idle() {
-                    println!("{:?}", session.current_location());
                     session.begin_step_into();
                     break;
                 } else {
@@ -66,11 +65,18 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
             // Step Over / Next
             "n" | "next" => {
                 if !session.is_idle() {
-                    println!("{:?}", session.current_location());
                     session.begin_step_over();
                     break;
                 } else {
                     println!("Session not started yet")
+                }
+            }
+            "fin" | "finish" => {
+                if !session.is_idle() {
+                    session.begin_finish();
+                    break;
+                } else {
+                    println!("Session not started yet");
                 }
             }
             "b" | "break" => {
