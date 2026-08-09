@@ -141,6 +141,7 @@ fn update_session_cache(
                             location,
                             start_address: start_addr,
                             end_address: relative_address,
+                            is_stmt: row.is_stmt(),
                         });
                     }
                 }

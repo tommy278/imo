@@ -50,6 +50,7 @@ pub fn debug(binary_path: &str) {
             // Enter the event execution loop
             loop {
                 if session.current_cmd.is_completed() {
+                    println!("{:?}", session.current_location());
                     handle_user_debugger_menu(&mut session);
                 }
 
@@ -100,20 +101,24 @@ pub fn debug(binary_path: &str) {
 
                                         // If current rsp is greater than the start rsp then we stepped out of a function and should stop there
                                         if current_rsp > start_rsp {
-                                            if session.current_location().is_some() {
-                                                session.current_cmd = CurrentStopCmd::Completed;
-                                            } else {
-                                                session.single_step();
-                                            }
+                                            session.current_cmd = CurrentStopCmd::Completed;
                                         }
                                         // If rsp are the same then we are in the same function or it was inlined
                                         else if current_rsp == start_rsp {
                                             // We need location so keep stepping until we find a valid one
-                                            let Some(current_location) = session.current_location()
+                                            let Some(line_row) = session
+                                                .find_line_range(regs.rip - session.base_address)
                                             else {
                                                 session.single_step();
                                                 continue;
                                             };
+
+                                            if !line_row.is_stmt {
+                                                session.single_step();
+                                                continue;
+                                            }
+
+                                            let current_location = &line_row.location;
 
                                             // If its not an inline function just step till we are back in same file but not same line
                                             if !started_from_inline {
@@ -208,11 +213,7 @@ pub fn debug(binary_path: &str) {
                                             };
                                             session.single_step();
                                         } else {
-                                            if session.current_location().is_some() {
-                                                session.current_cmd = CurrentStopCmd::Completed;
-                                            } else {
-                                                session.single_step();
-                                            }
+                                            session.current_cmd = CurrentStopCmd::Completed;
                                         }
                                     }
                                     CurrentStopCmd::Finish {
@@ -222,11 +223,7 @@ pub fn debug(binary_path: &str) {
                                         let current_rsp = regs.rsp;
 
                                         if current_rsp > start_rsp {
-                                            if session.current_location().is_some() {
-                                                session.current_cmd = CurrentStopCmd::Completed;
-                                            } else {
-                                                session.single_step();
-                                            }
+                                            session.current_cmd = CurrentStopCmd::Completed;
                                         } else if started_from_inline && start_rsp == current_rsp {
                                             let pc = regs.rip - session.base_address;
                                             if !session.metadata.is_in_inline(pc) {

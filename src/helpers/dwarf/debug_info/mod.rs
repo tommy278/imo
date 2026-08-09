@@ -833,7 +833,6 @@ impl DebuggerMetadataCache {
         for scope in self.execution_scopes.iter() {
             if scope.is_in_scope(pc) {
                 if let Some(bytes) = scope.scope.get_bytes() {
-                    println!("{:?}", scope);
                     context.frame_base = Some(bytes);
                 }
                 if scope.find_active_scope(pc).is_some() {

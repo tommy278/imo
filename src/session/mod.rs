@@ -184,6 +184,7 @@ pub struct LineRow {
     pub location: SourceLocation,
     pub start_address: u64,
     pub end_address: u64,
+    pub is_stmt: bool,
 }
 
 /// Cache for entire debug session
