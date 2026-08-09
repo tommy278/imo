@@ -173,6 +173,17 @@ impl StringInterner {
 
         new_id
     }
+
+    pub fn get_string(&self, id: StringId) -> Option<String> {
+        self.buffer.get(id.0 as usize).cloned()
+    }
+}
+
+#[derive(Debug)]
+pub struct LineRow {
+    pub location: SourceLocation,
+    pub start_address: u64,
+    pub end_address: u64,
 }
 
 /// Cache for entire debug session
@@ -183,6 +194,8 @@ pub struct DebugSession {
     pub base_address: u64,
     pub breakpoint_index_tracker: Vec<Option<BreakpointData>>,
     pub address_to_location: FxHashMap<u64, SourceLocation>,
+
+    pub line_row: Vec<LineRow>,
 
     // Used to find out the actual order in while files were declared
     pub file_declaration_order: FxHashMap<StringId, Vec<u64>>,
@@ -218,6 +231,7 @@ impl DebugSession {
             current_cmd: CurrentStopCmd::default(),
             active_breakpoints: FxHashMap::default(),
             interner: StringInterner::default(),
+            line_row: Vec::new(),
             pid,
         }
     }
@@ -239,7 +253,32 @@ impl DebugSession {
 
         session.raw_debug_frame = setup_session_debug_frame(binary_path);
 
+        session.set_up_line_row();
+
         session
+    }
+
+    pub fn set_up_line_row(&mut self) {
+        self.line_row
+            .retain(|range| range.start_address >= self.metadata.text_address);
+
+        self.line_row.sort_by_key(|l| l.start_address);
+    }
+
+    pub fn find_line_range(&self, current_rip: u64) -> Option<&LineRow> {
+        let current_pc = current_rip - self.base_address;
+        match self.line_row.binary_search_by(|p| {
+            if current_pc < p.start_address {
+                std::cmp::Ordering::Greater
+            } else if current_pc >= p.end_address {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        }) {
+            Ok(index) => Some(&self.line_row[index]),
+            Err(_) => None,
+        }
     }
 
     /// Get the live register of the current process

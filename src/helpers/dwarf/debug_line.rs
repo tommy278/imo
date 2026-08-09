@@ -1,4 +1,4 @@
-use crate::{helpers::dwarf::debug_info::AddressRange, session::*};
+use crate::session::*;
 use object::{Object, ObjectSection};
 use rustc_hash::FxHashSet;
 use std::{
@@ -69,11 +69,13 @@ fn update_session_cache(
 
             // Track the active path and its Rc allocations across iterations
             let mut current_raw_path = path::PathBuf::new();
-            let mut current_file_rc: Option<Rc<Path>> = None;
+            let mut current_file_id: Option<StringId> = None;
 
             // Track the last indexed file to avoid instruction duplication per line
-            let mut last_indexed_file: Option<Rc<Path>> = None;
+            let mut last_indexed_file: Option<StringId> = None;
             let mut registered_lines: FxHashSet<u64> = FxHashSet::default();
+
+            let mut active_range_start: Option<(u64, SourceLocation)> = None;
 
             // Iterate over the line program rows.
             let mut rows = program.rows();
@@ -98,9 +100,13 @@ fn update_session_cache(
                 }
 
                 // Only perform a heap allocation when the file path changes
-                if current_file_rc.is_none() || path != current_raw_path {
+                if current_file_id.is_none() || path != current_raw_path {
                     current_raw_path = path.clone();
-                    current_file_rc = Some(Rc::from(path.as_path()));
+                    current_file_id = Some(
+                        session
+                            .interner
+                            .get_or_intern(path.to_string_lossy().into()),
+                    );
                 }
 
                 // Determine line/column. DWARF line/column is never 0, so we use that
@@ -111,15 +117,15 @@ fn update_session_cache(
                 };
 
                 // This unwrap is safe because we guranteed it has a value above
-                let file_rc = current_file_rc.as_ref().unwrap();
+                let file_id = current_file_id.unwrap();
 
                 // DEDUPLICATION LOGIC
                 // Only push to line index if this row starts a new line or swicthed to a
                 // different file
 
-                if last_indexed_file.as_ref().map_or(true, |f| f != file_rc) {
+                if last_indexed_file.map_or(true, |f| f != file_id) {
                     registered_lines.clear();
-                    last_indexed_file = Some(Rc::clone(file_rc));
+                    last_indexed_file = Some(file_id);
                 }
 
                 // Ignore line 0 for breakpoint indexing
@@ -130,15 +136,42 @@ fn update_session_cache(
                 let is_already_registered = registered_lines.contains(&line);
                 let relative_address = row.address();
 
-                let current_file_id = session
-                    .interner
-                    .get_or_intern(file_rc.to_string_lossy().into());
+                if let Some((start_addr, location)) = active_range_start {
+                    if relative_address > start_addr && location.line != 0 {
+                        session.line_row.push(LineRow {
+                            location,
+                            start_address: start_addr,
+                            end_address: relative_address,
+                        });
+                    }
+                }
 
+                if row.end_sequence() {
+                    active_range_start = None;
+                } else {
+                    active_range_start = Some((
+                        relative_address,
+                        SourceLocation {
+                            file: file_id,
+                            line: line,
+                        },
+                    ));
+                }
+
+                if row.is_stmt() && line != 0 {
+                    session.address_to_location.insert(
+                        relative_address,
+                        SourceLocation {
+                            file: file_id,
+                            line: line,
+                        },
+                    );
+                }
                 if row.is_stmt() {
                     session.address_to_location.insert(
                         relative_address,
                         SourceLocation {
-                            file: current_file_id,
+                            file: file_id,
                             line,
                         },
                     );
@@ -150,13 +183,13 @@ fn update_session_cache(
                         .entry(line)
                         .or_insert_with(Vec::new)
                         .push(interface::BreakpointTarget {
-                            file: file_rc.clone(),
+                            file: path.as_path().into(),
                             relative_address,
                         });
 
                     let declaration_history = session
                         .file_declaration_order
-                        .entry(current_file_id)
+                        .entry(file_id)
                         .or_insert_with(Vec::new);
 
                     // Only push if not on the same line
