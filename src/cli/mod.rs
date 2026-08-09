@@ -209,8 +209,8 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 let cl = session.current_location();
                 println!("From Vec: {:?}", cl);
             }
-            "rsp" => {
-                println!("{:?}", session.get_regs().regs.rsp);
+            "size" => {
+                println!("{:?}", std::mem::size_of_val(session));
             }
             "scope" => {
                 let scope = session

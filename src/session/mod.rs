@@ -266,6 +266,7 @@ impl DebugSession {
         session
     }
 
+    /// Remove unnecessary ranges and sort the address for binary search lookup
     pub fn set_up_line_row(&mut self) {
         self.line_row
             .retain(|range| range.start_address >= self.metadata.text_address);

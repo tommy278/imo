@@ -1,15 +1,5 @@
 use object::{Object, ObjectSection};
-use std::{
-    borrow, error,
-    fs::{self},
-};
-
-/*
- * Based on the 'simple_line' example from the gimli project.
- * Source: https://github.com/gimli-rs/gimli/blob/main/crates/examples/src/bin/simple_line.rs
- * * The implementation below was adapted to support specific address lookup
- * and integrated into the project's native debugger architecture.
- */
+use std::{borrow, error};
 
 #[derive(Debug, Default, Clone)]
 pub struct RawDebugFrame(pub Vec<u8>);
@@ -38,17 +28,6 @@ fn update_session_cache(object: &object::File) -> Result<RawDebugFrame, Box<dyn 
         })
     };
 
-    // Borrow a `Cow<[u8]>` to create an `EndianSlice`.
-    // let borrow_section = |section| gimli::EndianSlice::new(borrow::Cow::as_ref(section), endian);
-
     let debug_frame_raw = load_section(gimli::SectionId::EhFrame)?;
-    // let debug_frame = gimli::DebugFrame::new(&debug_frame_raw, endian);
-
-    // let base_addresses = gimli::BaseAddresses::default();
-    // let mut entries = debug_frame.entries(&base_addresses);
-
-    // while let Ok(Some(entry)) = entries.next() {
-    //     println!("{:?}", entry);
-    // }
     Ok(RawDebugFrame(debug_frame_raw.to_vec()))
 }
