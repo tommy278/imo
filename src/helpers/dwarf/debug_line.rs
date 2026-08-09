@@ -4,8 +4,7 @@ use rustc_hash::FxHashSet;
 use std::{
     borrow, error,
     fs::{self},
-    path::{self, Path},
-    rc::Rc,
+    path::{self},
 };
 
 /*
@@ -156,25 +155,6 @@ fn update_session_cache(
                             line: line,
                         },
                     ));
-                }
-
-                if row.is_stmt() && line != 0 {
-                    session.address_to_location.insert(
-                        relative_address,
-                        SourceLocation {
-                            file: file_id,
-                            line: line,
-                        },
-                    );
-                }
-                if row.is_stmt() {
-                    session.address_to_location.insert(
-                        relative_address,
-                        SourceLocation {
-                            file: file_id,
-                            line,
-                        },
-                    );
                 }
 
                 if !is_already_registered && !row.end_sequence() {

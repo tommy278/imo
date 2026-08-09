@@ -206,10 +206,8 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 }
             }
             "cl" => {
-                let line = session.find_line_range(session.current_rip());
                 let cl = session.current_location();
-                println!("From Vec: {:?} and From hashmap: {:?}", line, cl);
-                // println!("{:?}", session.line_row);
+                println!("From Vec: {:?}", cl);
             }
             "rsp" => {
                 println!("{:?}", session.get_regs().regs.rsp);

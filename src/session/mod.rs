@@ -9,7 +9,7 @@ use std::path::Path;
 use crate::helpers::dwarf::{
     self,
     debug_frame::{RawDebugFrame, setup_session_debug_frame},
-    debug_info::{ActiveVariablesContext, AddressRange, DebuggerMetadataCache},
+    debug_info::{ActiveVariablesContext, DebuggerMetadataCache},
 };
 use crate::interface::{DebugValue, RegisterViewer};
 use crate::session::interface::{BreakpointData, BreakpointMutationResult, BreakpointTarget};
@@ -193,7 +193,6 @@ pub struct DebugSession {
     pub line_index: FxHashMap<u64, Vec<BreakpointTarget>>,
     pub base_address: u64,
     pub breakpoint_index_tracker: Vec<Option<BreakpointData>>,
-    pub address_to_location: FxHashMap<u64, SourceLocation>,
 
     pub line_row: Vec<LineRow>,
 
@@ -224,7 +223,6 @@ impl DebugSession {
             base_address: 0,
             breakpoint_index_tracker: Vec::new(),
             line_index: FxHashMap::default(),
-            address_to_location: FxHashMap::default(),
             file_declaration_order: FxHashMap::default(),
             metadata: DebuggerMetadataCache::default(),
             raw_debug_frame: RawDebugFrame::default(),
@@ -265,8 +263,7 @@ impl DebugSession {
         self.line_row.sort_by_key(|l| l.start_address);
     }
 
-    pub fn find_line_range(&self, current_rip: u64) -> Option<&LineRow> {
-        let current_pc = current_rip - self.base_address;
+    pub fn find_line_range(&self, current_pc: u64) -> Option<&LineRow> {
         match self.line_row.binary_search_by(|p| {
             if current_pc < p.start_address {
                 std::cmp::Ordering::Greater
@@ -476,7 +473,7 @@ impl DebugSession {
 
     /// Obtain the location that an address belongs to within the program
     pub fn get_location_with_address(&self, relative_address: u64) -> Option<&SourceLocation> {
-        self.address_to_location.get(&relative_address)
+        self.find_line_range(relative_address).map(|l| &l.location)
     }
 
     /// Get the exact order in which the compiler actually initialized the variables
@@ -513,7 +510,7 @@ impl DebugSession {
         if let Some(variable) = node.get_variable_with_name(name) {
             let current_pc = regs.regs.rip - self.base_address;
 
-            if let Some(info) = self.address_to_location.get(&current_pc) {
+            if let Some(info) = self.get_location_with_address(current_pc) {
                 let SourceLocation { file, line } = info;
 
                 if let Some(line_order) = self.get_file_decl_order(*file) {
