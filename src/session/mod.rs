@@ -106,6 +106,7 @@ pub enum CurrentStopCmd {
         original_rsp: u64,
         original_file: StringId,
         original_line: u64,
+        return_address: u64,
         started_from_inline: bool,
     },
     FinishStepOver {

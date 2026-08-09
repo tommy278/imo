@@ -141,15 +141,8 @@ pub fn debug(binary_path: &str) {
                                                 continue;
                                             }
                                         } else {
-                                            // NOTE: For some reason closures get really low rsp values which is unusable
-                                            if regs.rsp < session.base_address {
-                                                session.single_step();
-                                                continue;
-                                            }
-
                                             // If current rsp is lower then we stepped into a child
                                             // In that case get the return address and continue there
-
                                             let (_, return_address) =
                                                 session.get_cfa_and_ret_addr().unwrap();
 
@@ -160,6 +153,7 @@ pub fn debug(binary_path: &str) {
                                                 original_rsp: start_rsp,
                                                 original_file: start_file,
                                                 original_line: start_line,
+                                                return_address,
                                                 started_from_inline,
                                             };
                                             session.continue_session();
@@ -169,6 +163,7 @@ pub fn debug(binary_path: &str) {
                                         original_rsp,
                                         original_file,
                                         original_line,
+                                        return_address,
                                         started_from_inline,
                                     } => {
                                         // A handshake from the step over
@@ -182,13 +177,19 @@ pub fn debug(binary_path: &str) {
                                         regs.rip = breakpoint_addr;
                                         ptrace::setregs(pid, regs).unwrap();
 
-                                        session.current_cmd = CurrentStopCmd::FinishStepOver {
-                                            original_rsp,
-                                            original_file,
-                                            original_line,
-                                            started_from_inline,
-                                        };
-                                        session.single_step();
+                                        if return_address == breakpoint_addr {
+                                            // If we are at the specific breakpoint to step out from then continue step over like normal
+                                            session.current_cmd = CurrentStopCmd::FinishStepOver {
+                                                original_rsp,
+                                                original_file,
+                                                original_line,
+                                                started_from_inline,
+                                            };
+                                            session.single_step();
+                                        } else {
+                                            // If we are at a different breakpoint continue till we reach the target
+                                            session.continue_session();
+                                        }
                                     }
                                     CurrentStopCmd::FinishStepOver {
                                         original_rsp,
