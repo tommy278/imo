@@ -148,8 +148,12 @@ pub fn debug(binary_path: &str) {
                                         } else {
                                             // If current rsp is lower then we stepped into a child
                                             // In that case get the return address and continue there
-                                            let (_, return_address) =
-                                                session.get_cfa_and_ret_addr().unwrap();
+                                            let Some((_, return_address)) =
+                                                session.get_cfa_and_ret_addr()
+                                            else {
+                                                session.single_step();
+                                                continue;
+                                            };
 
                                             let relative_address =
                                                 session.get_relative_address(return_address);

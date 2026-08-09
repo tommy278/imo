@@ -13,6 +13,7 @@ fn main() {
     let u32_some: Option<u32> = Some(32);
     let u64_some: Option<u64> = Some(64);
     let mut non: Option<i32> = None;
+    let mut g: HashMap<u8, &str> = HashMap::new();
 
     let b = false;
     let mut t = true;
@@ -70,7 +71,6 @@ fn main() {
 
     // NOTE: Debugger does not recognize these types yet
     let vec = vec![1, 2, 3, 4, 5];
-    let mut g: HashMap<u8, &str> = HashMap::new();
     let nested_vec = vec![vec![2]];
     let box_type = Box::new(12);
     let static_str = "Hello World";
