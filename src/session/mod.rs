@@ -85,7 +85,7 @@ impl ManagedBreakpoint {
 #[derive(Debug)]
 pub struct SourceLocation {
     pub file: StringId,
-    pub line: u64,
+    pub line: u32,
 }
 
 // The command to be ran when the debugger hits a sigtrap
@@ -95,24 +95,24 @@ pub enum CurrentStopCmd {
     StepOver {
         start_rsp: u64,
         start_file: StringId,
-        start_line: u64,
+        start_line: u32,
         started_from_inline: bool,
     },
     StepInto {
         start_file: StringId,
-        start_line: u64,
+        start_line: u32,
     },
     StepOut {
         original_rsp: u64,
         original_file: StringId,
-        original_line: u64,
+        original_line: u32,
         return_address: u64,
         started_from_inline: bool,
     },
     FinishStepOver {
         original_rsp: u64,
         original_file: StringId,
-        original_line: u64,
+        original_line: u32,
         started_from_inline: bool,
     },
     Finish {
@@ -191,14 +191,14 @@ pub struct LineRow {
 #[derive(Debug)]
 pub struct DebugSession {
     // Breakpoint data
-    pub line_index: FxHashMap<u64, Vec<BreakpointTarget>>,
+    pub line_index: FxHashMap<u32, Vec<BreakpointTarget>>,
     pub base_address: u64,
     pub breakpoint_index_tracker: Vec<Option<BreakpointData>>,
 
     pub line_row: Vec<LineRow>,
 
     // Used to find out the actual order in while files were declared
-    pub file_declaration_order: FxHashMap<StringId, Vec<u64>>,
+    pub file_declaration_order: FxHashMap<StringId, Vec<u32>>,
 
     // A global arena to consolidate repetitive string allocations into one location
     pub interner: StringInterner,
@@ -506,7 +506,7 @@ impl DebugSession {
 
     /// Get the exact order in which the compiler actually initialized the variables
     /// Rust does not always initialize variables sequentially
-    pub fn get_file_decl_order(&self, file: StringId) -> Option<&Vec<u64>> {
+    pub fn get_file_decl_order(&self, file: StringId) -> Option<&Vec<u32>> {
         self.file_declaration_order.get(&file)
     }
 
@@ -581,7 +581,7 @@ impl DebugSession {
 
     /// Clear all breakpoint for line_number by default
     /// Only clear specified breakpoints if file name is provided
-    pub fn clear_breakpoint(&mut self, line_number: u64, file: Option<&str>) -> Vec<usize> {
+    pub fn clear_breakpoint(&mut self, line_number: u32, file: Option<&str>) -> Vec<usize> {
         let mut cleared_breakpoints = Vec::new();
         let mut bp_idx = Vec::new();
 
@@ -689,7 +689,7 @@ impl DebugSession {
 
     /// Create breakpoint(s) at a file on a given line number
     /// Returns the number of breakpoint targets that were found on the given line alongside the address/first target if multiple addresses exist
-    pub fn create_breakpoint(&mut self, line_number: u64, file: &Path) -> (u64, BreakpointTarget) {
+    pub fn create_breakpoint(&mut self, line_number: u32, file: &Path) -> (u64, BreakpointTarget) {
         let line_index = self.get_breakpoint_target(line_number).unwrap();
 
         let line_index: Vec<BreakpointTarget> = line_index
@@ -714,7 +714,7 @@ impl DebugSession {
     }
 
     /// Get a breakpoint target at the address
-    pub fn find_line_ranges(&self, line_number: u64, file: StringId) -> Vec<u64> {
+    pub fn find_line_ranges(&self, line_number: u32, file: StringId) -> Vec<u64> {
         let line_index = self.get_breakpoint_target(line_number).unwrap();
         let resolved_file_name = self.id_to_string(file);
 
@@ -761,7 +761,7 @@ impl DebugSession {
     pub fn get_specific_breakpoint_target(
         &self,
         file_name: &str,
-        line_number: u64,
+        line_number: u32,
     ) -> Vec<BreakpointTarget> {
         let Some(line_index) = self.get_breakpoint_target(line_number) else {
             return vec![];
@@ -774,7 +774,7 @@ impl DebugSession {
     }
 
     /// Get breakpoint target (file name and relative_address ) from the just line number
-    pub fn get_breakpoint_target(&self, line_number: u64) -> Option<Vec<BreakpointTarget>> {
+    pub fn get_breakpoint_target(&self, line_number: u32) -> Option<Vec<BreakpointTarget>> {
         let line_index = self.line_index.get(&line_number);
         line_index.cloned()
     }

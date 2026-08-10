@@ -54,7 +54,7 @@ pub fn handle_event_by_index<F>(
 
 pub fn handle_breakpoint_clearing(
     session: &mut DebugSession,
-    line_number: u64,
+    line_number: u32,
     file: Option<&str>,
 ) {
     let bp = session.clear_breakpoint(line_number, file);
@@ -64,7 +64,7 @@ pub fn handle_breakpoint_clearing(
 pub fn handle_breakpoint_setting(
     session: &mut DebugSession,
     line_index: &[interface::BreakpointTarget],
-    line_number: u64,
+    line_number: u32,
 ) {
     if line_index.is_empty() {
         panic!("Error occured creating session")
@@ -136,7 +136,7 @@ fn handle_break_metadata(
     session: &mut DebugSession,
     bp_for_line: u64,
     first_bp: interface::BreakpointTarget,
-    line_number: u64,
+    line_number: u32,
 ) {
     // Handle metadata correctly
     let first_bp_relative_address = first_bp.relative_address;

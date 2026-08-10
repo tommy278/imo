@@ -643,7 +643,7 @@ pub struct DebugVariable {
     pub name: String,
     pub target_type_offset: usize,
     pub location: Vec<u8>,
-    pub decl_line: u64,
+    pub decl_line: u32,
 }
 
 impl DebugVariable {

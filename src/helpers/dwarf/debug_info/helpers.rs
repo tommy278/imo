@@ -46,7 +46,7 @@ pub fn extract_variable<'a>(
             name,
             target_type_offset,
             location,
-            decl_line,
+            decl_line: decl_line as u32,
         };
 
         return Some(debug_var);

@@ -85,7 +85,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 // Handle setting breakpoint if filename and line_number are provided
                 // eg: break running_task:6
                 if let Some((file_name, line_number)) = arg.split_once(":") {
-                    let line_number = line_number.parse::<u64>().expect("Could not parse number");
+                    let line_number = line_number.parse::<u32>().expect("Could not parse number");
 
                     let line_index = session.get_specific_breakpoint_target(file_name, line_number);
                     handle_breakpoint_setting(session, &line_index, line_number);
@@ -93,7 +93,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
 
                 // Handle setting breakpoint if only line_number is provided
                 // eg: break 12
-                if let Ok(line_number) = arg.parse::<u64>() {
+                if let Ok(line_number) = arg.parse::<u32>() {
                     let line_index = session.get_breakpoint_target(line_number).unwrap();
                     handle_breakpoint_setting(session, &line_index, line_number);
                 }
@@ -104,13 +104,13 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 // Handle clearing breakpoint if filename and line_number are provided
                 // eg: clear running_task:6
                 if let Some((file_name, line_number)) = arg.split_once(":") {
-                    let line_number = line_number.parse::<u64>().expect("Could not parse number");
+                    let line_number = line_number.parse::<u32>().expect("Could not parse number");
                     handle_breakpoint_clearing(session, line_number, Some(file_name));
                 }
 
                 // Handle clearing breakpoint if only line_number is provided
                 // eg: clear 12
-                if let Ok(line_number) = arg.parse::<u64>() {
+                if let Ok(line_number) = arg.parse::<u32>() {
                     handle_breakpoint_clearing(session, line_number, None);
                 }
             }

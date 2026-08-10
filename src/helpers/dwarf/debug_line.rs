@@ -67,7 +67,7 @@ fn update_session_cache(
 
             // Track the last indexed file to avoid instruction duplication per line
             let mut last_indexed_file: Option<StringId> = None;
-            let mut registered_lines: FxHashSet<u64> = FxHashSet::default();
+            let mut registered_lines: FxHashSet<u32> = FxHashSet::default();
 
             let mut active_range_start: Option<(u64, SourceLocation)> = None;
 
@@ -106,7 +106,7 @@ fn update_session_cache(
                 // Determine line/column. DWARF line/column is never 0, so we use that
                 // but other applications may want to display this differently.
                 let line = match row.line() {
-                    Some(line) => line.get(),
+                    Some(line) => line.get() as u32,
                     None => 0,
                 };
 

@@ -12,13 +12,13 @@ pub struct BreakpointTarget {
 #[derive(Debug, Clone)]
 pub struct BreakpointData {
     pub target: Vec<BreakpointTarget>,
-    pub line: u64,
+    pub line: u32,
     pub file: Box<Path>,
     pub enabled: bool,
 }
 
 impl BreakpointData {
-    pub fn from_target(target: Vec<BreakpointTarget>, line: u64, file: &Path) -> Self {
+    pub fn from_target(target: Vec<BreakpointTarget>, line: u32, file: &Path) -> Self {
         Self {
             target,
             line,
