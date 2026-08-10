@@ -212,6 +212,9 @@ pub struct DebugSession {
     // Debug frame for finding CFA
     pub raw_debug_frame: RawDebugFrame,
 
+    // Current register states
+    pub registers: Option<RegisterViewer>,
+
     // Different for each os
     pub active_breakpoints: FxHashMap<u64, ManagedBreakpoint>,
     pub pid: os::ProcessId,
@@ -231,6 +234,7 @@ impl DebugSession {
             active_breakpoints: FxHashMap::default(),
             interner: StringInterner::default(),
             line_row: Vec::new(),
+            registers: None,
             pid,
         }
     }
@@ -291,8 +295,17 @@ impl DebugSession {
 
     /// Get the live register of the current process
     pub fn get_regs(&self) -> RegisterViewer {
+        if let Some(regs) = self.registers {
+            return regs;
+        }
+
+        // Backup in case the register was not instantiated for some reason
         let regs = os::get_regs(self.pid);
-        RegisterViewer::new(regs)
+        return RegisterViewer { regs };
+    }
+
+    pub fn invalidate_register(&mut self) {
+        self.registers = None;
     }
 
     /// Create a specific breakpoint at a given address
@@ -407,11 +420,13 @@ impl DebugSession {
     }
 
     pub fn complete_single_step(&mut self) {
+        self.invalidate_register();
         self.current_cmd = CurrentStopCmd::SingleStep;
         self.single_step();
     }
 
     pub fn begin_step_into(&mut self) {
+        self.invalidate_register();
         let Some(current_location) = self.current_location() else {
             self.current_cmd = CurrentStopCmd::SearchingForValidLocation;
             self.single_step();
@@ -426,6 +441,7 @@ impl DebugSession {
     }
 
     pub fn begin_step_over(&mut self) {
+        self.invalidate_register();
         let Some(current_location) = self.current_location() else {
             self.current_cmd = CurrentStopCmd::SearchingForValidLocation;
             self.single_step();
@@ -446,6 +462,7 @@ impl DebugSession {
     }
 
     pub fn begin_finish(&mut self) {
+        self.invalidate_register();
         let is_inline = self
             .metadata
             .is_in_inline(self.current_rip() - self.base_address);

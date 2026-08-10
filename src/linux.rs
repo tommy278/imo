@@ -62,6 +62,7 @@ pub fn debug(binary_path: &str) {
                     }
                     WaitStatus::Stopped(pid, sig) => {
                         if let Ok(mut regs) = ptrace::getregs(pid) {
+                            session.registers = Some(crate::interface::RegisterViewer { regs });
                             // If stop was due to SIGTRAP, do not forward it to the child.
                             // Pass None to let the child continue its execution.
                             if sig == Signal::SIGTRAP {
@@ -185,6 +186,8 @@ pub fn debug(binary_path: &str) {
 
                                         regs.rip = breakpoint_addr;
                                         ptrace::setregs(pid, regs).unwrap();
+                                        session.registers =
+                                            Some(crate::interface::RegisterViewer { regs });
 
                                         if return_address == breakpoint_addr {
                                             // If we are at the specific breakpoint to step out from then continue step over like normal
@@ -272,6 +275,8 @@ pub fn debug(binary_path: &str) {
                                         regs.rip = breakpoint_addr;
                                         ptrace::setregs(pid, regs).unwrap();
 
+                                        session.registers =
+                                            Some(crate::interface::RegisterViewer { regs });
                                         if return_address == breakpoint_addr {
                                             // If we are at the specific breakpoint to step out from then continue step over like normal
                                             session.current_cmd = CurrentStopCmd::CompleteFinish {
@@ -332,6 +337,11 @@ pub fn debug(binary_path: &str) {
 
                                                     // Update pid register for future instruction continuation
                                                     ptrace::setregs(pid, regs).unwrap();
+
+                                                    session.registers =
+                                                        Some(crate::interface::RegisterViewer {
+                                                            regs,
+                                                        });
 
                                                     // Replace the 0xCC (INT3) back with the previous instruction
                                                     bp.breakpoint.disable(pid);
