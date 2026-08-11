@@ -1,6 +1,7 @@
 pub mod debug_frame;
 pub mod debug_info;
 pub mod debug_line;
+pub mod error;
 
 use crate::helpers::dwarf::debug_info::Abi;
 use crate::interface::RegisterViewer;

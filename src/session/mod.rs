@@ -244,13 +244,16 @@ impl DebugSession {
     // =================================================================
 
     /// Create a complete instance of the session cache
-    pub fn new(pid: os::ProcessId, binary_path: &str) -> Self {
+    pub fn new(
+        pid: os::ProcessId,
+        binary_path: &str,
+    ) -> Result<Self, dwarf::error::CacheSetupError> {
         let mut session = Self::from_pid(pid);
 
-        let file = std::fs::File::open(binary_path).unwrap();
+        let file = std::fs::File::open(binary_path)?;
 
-        let mmap = unsafe { memmap2::Mmap::map(&file).unwrap() };
-        let object = object::File::parse(&*mmap).unwrap();
+        let mmap = unsafe { memmap2::Mmap::map(&file)? };
+        let object = object::File::parse(&*mmap)?;
 
         session.update_process_base_address();
 
@@ -263,7 +266,7 @@ impl DebugSession {
 
         session.set_up_line_row();
 
-        session
+        Ok(session)
     }
 
     /// Remove unnecessary ranges and sort the address for binary search lookup

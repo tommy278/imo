@@ -4,12 +4,13 @@ use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::{ForkResult, fork};
 
 use crate::cli::handle_user_debugger_menu;
+use crate::error::DebuggerError;
 use crate::session::{CurrentStopCmd, DebugSession};
 
 /// Begin the parent and child processes
 /// Child Process executes the binary
 /// Parent Process begins the loop that monitors child process
-pub fn debug(binary_path: &str) {
+pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
     let fork_result = unsafe { fork() }.unwrap();
 
     match fork_result {
@@ -35,7 +36,7 @@ pub fn debug(binary_path: &str) {
             let _status_2 = waitpid(child, None).unwrap();
 
             // Setup session cache
-            let mut session = DebugSession::new(child, binary_path);
+            let mut session = DebugSession::new(child, binary_path)?;
 
             // Handle initial user input
             handle_user_debugger_menu(&mut session);
@@ -50,8 +51,7 @@ pub fn debug(binary_path: &str) {
                 let status = waitpid(child, None).unwrap();
                 match status {
                     WaitStatus::Exited(_, code) => {
-                        println!("Child process exited with the code {}", code);
-                        break;
+                        return Err(DebuggerError::Exit(code));
                     }
                     WaitStatus::Stopped(pid, sig) => {
                         if let Ok(mut regs) = ptrace::getregs(pid) {
@@ -367,7 +367,7 @@ pub fn debug(binary_path: &str) {
                     }
                     WaitStatus::Signaled(_, sig, _) => {
                         println!("Child process was killed by {:?} signal", sig);
-                        break;
+                        return Ok(());
                     }
                     _ => ptrace::cont(child, None).unwrap(),
                 }
