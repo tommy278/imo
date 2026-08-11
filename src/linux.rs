@@ -1,4 +1,3 @@
-use nix::sys::personality::{self, Persona};
 use nix::sys::ptrace;
 use nix::sys::signal::{Signal, raise};
 use nix::sys::wait::{WaitStatus, waitpid};
@@ -12,15 +11,9 @@ use crate::session::{CurrentStopCmd, DebugSession};
 /// Parent Process begins the loop that monitors child process
 pub fn debug(binary_path: &str) {
     let fork_result = unsafe { fork() }.unwrap();
-    println!("{}", binary_path);
 
     match fork_result {
         ForkResult::Child => {
-            // Disable memory randomization
-            let mut current_persona = personality::get().unwrap();
-            current_persona.insert(Persona::ADDR_NO_RANDOMIZE);
-            personality::set(current_persona).unwrap();
-
             ptrace::traceme().unwrap();
 
             // Stop child to avoid race condition with parent
@@ -72,7 +65,7 @@ pub fn debug(binary_path: &str) {
                                         session.current_cmd = CurrentStopCmd::Completed;
                                     }
                                     CurrentStopCmd::StepInto {
-                                        ref start_file,
+                                        start_file,
                                         start_line,
                                     } => {
                                         // Location is not valid so step until a valid one is found
@@ -83,7 +76,7 @@ pub fn debug(binary_path: &str) {
                                         };
 
                                         // If the location changed then stop
-                                        if &current_location.file != start_file
+                                        if current_location.file != start_file
                                             || current_location.line != start_line
                                         {
                                             session.current_cmd = CurrentStopCmd::Completed;
@@ -149,8 +142,7 @@ pub fn debug(binary_path: &str) {
                                         } else {
                                             // If current rsp is lower then we stepped into a child
                                             // In that case get the return address and continue there
-                                            let Some((_, return_address)) =
-                                                session.get_cfa_and_ret_addr()
+                                            let Some(return_address) = session.get_return_address()
                                             else {
                                                 session.single_step();
                                                 continue;
@@ -240,8 +232,7 @@ pub fn debug(binary_path: &str) {
                                             }
                                             continue;
                                         } else {
-                                            let Some((_, return_address)) =
-                                                session.get_cfa_and_ret_addr()
+                                            let Some(return_address) = session.get_return_address()
                                             else {
                                                 session.single_step();
                                                 continue;

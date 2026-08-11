@@ -1,4 +1,3 @@
-use iced_x86::Decoder;
 use nix::sys::ptrace::AddressType;
 use nix::sys::signal;
 use nix::sys::uio::{RemoteIoVec, process_vm_readv};

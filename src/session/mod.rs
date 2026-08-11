@@ -343,7 +343,7 @@ impl DebugSession {
         }
     }
 
-    pub fn get_cfa_and_ret_addr(&self) -> Option<(u64, u64)> {
+    pub fn get_return_address(&self) -> Option<u64> {
         let eh_frame = self.get_unwind_table();
         let base_addresses = self.metadata.base_addresses.clone();
 
@@ -375,11 +375,11 @@ impl DebugSession {
                                 let return_address =
                                     crate::session::linux::peek_data(self.pid, ra_storage_address)
                                         as u64;
-                                return Some((cfa_address, return_address));
+                                return Some(return_address);
                             }
                             gimli::RegisterRule::Register(saved_reg) => {
                                 let return_address = self.get_register_value(saved_reg);
-                                return Some((cfa_address, return_address));
+                                return Some(return_address);
                             }
                             _ => todo!(),
                         }

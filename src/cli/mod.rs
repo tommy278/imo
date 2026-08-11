@@ -25,7 +25,11 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
         let input = buffer.trim().to_lowercase();
         let mut parts = input.split_whitespace();
 
-        match parts.next().unwrap() {
+        let Some(part) = parts.next() else {
+            continue;
+        };
+
+        match part {
             "run" => {
                 if session.is_idle() {
                     session.toggle_running();
