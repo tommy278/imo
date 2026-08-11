@@ -16,7 +16,7 @@ use object::BinaryFormat;
 use crate::helpers::dwarf::debug_info::utils::lookup_vars;
 use crate::helpers::dwarf::evaluate_frame_base_bytes;
 use crate::interface::{DebugStructField, DebugValue, RegisterViewer, to_buffer};
-use crate::session::ProcessId;
+use crate::session::{ProcessId, os};
 
 pub type Reader<'data> =
     gimli::RelocateReader<gimli::EndianSlice<'data, gimli::RunTimeEndian>, &'data RelocationMap>;
@@ -209,7 +209,7 @@ impl DwarfType {
                 encoding,
                 byte_size,
             } => {
-                let raw_data = crate::session::linux::peek_data(pid, address);
+                let raw_data = os::peek_data(pid, address);
 
                 if name == "usize" {
                     return Some(DebugValue::Usize(raw_data as u64));
@@ -273,7 +273,7 @@ impl DwarfType {
                 name,
                 target_type_offset,
             } => {
-                let raw_data = crate::session::linux::peek_data(pid, address);
+                let raw_data = os::peek_data(pid, address);
                 if let Some(name) = name {
                     let ty = type_index.get(target_type_offset).unwrap();
                     let val = ty
@@ -313,7 +313,7 @@ impl DwarfType {
                 byte_size,
                 fields,
             } => {
-                let data = crate::session::linux::peek_data(pid, address);
+                let data = os::peek_data(pid, address);
 
                 let const_value = match byte_size {
                     1 => data as u8 as u64,
@@ -337,8 +337,7 @@ impl DwarfType {
                 variants,
             } => {
                 let tag_byte = if let Some(discr_member_offset) = discr_member_offset {
-                    let tag =
-                        crate::session::linux::peek_data(pid, address + discr_member_offset) as u8;
+                    let tag = os::peek_data(pid, address + discr_member_offset) as u8;
 
                     Some(tag)
                 } else {
@@ -685,7 +684,7 @@ impl DebugVariable {
 
                     // If offset if 0 then it is a generic and gimli can handle that case
                     if offset == 0 {
-                        let raw_data = crate::session::linux::peek_data(pid, address) as u64;
+                        let raw_data = os::peek_data(pid, address) as u64;
                         let value = gimli::Value::U64(raw_data);
                         result = evaluation.resume_with_memory(value).ok()?;
                     } else {

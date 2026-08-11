@@ -6,23 +6,20 @@ use gimli::UnwindSection;
 use rustc_hash::FxHashMap;
 use std::path::Path;
 
+use crate::helpers::dwarf::{
+    self,
+    debug_frame::{RawDebugFrame, setup_session_debug_frame},
+    debug_info::{ActiveVariablesContext, DebuggerMetadataCache},
+};
 use crate::interface::{DebugValue, RegisterViewer};
 use crate::session::interface::{BreakpointData, BreakpointMutationResult, BreakpointTarget};
-use crate::{
-    helpers::dwarf::{
-        self,
-        debug_frame::{RawDebugFrame, setup_session_debug_frame},
-        debug_info::{ActiveVariablesContext, DebuggerMetadataCache},
-    },
-    interface::UnifiedRegisters,
-};
 
 #[cfg(target_os = "linux")]
-use crate::session::linux as os;
+pub use crate::session::linux as os;
 
 // If not supported yet, add dummy values for compilation
 #[cfg(not(target_os = "linux"))]
-mod os {
+pub mod os {
     // Dummy types to satisfy the type aliases
     pub type ProcessId = i32;
     pub type PlatformRegStruct = ();
@@ -252,10 +249,6 @@ impl DebugSession {
 
         let file = std::fs::File::open(binary_path).unwrap();
 
-        // SAFETY: This is not safe. `gimli` does not mitigate against modifications to the
-        // file while it is being read. See the `memmap2` documentation and take your own
-        // precautions. `fs::read` could be used instead if you don't mind loading the entire
-        // file into memory.
         let mmap = unsafe { memmap2::Mmap::map(&file).unwrap() };
         let object = object::File::parse(&*mmap).unwrap();
 
@@ -384,8 +377,7 @@ impl DebugSession {
                             gimli::RegisterRule::Offset(offset) => {
                                 let ra_storage_address = (cfa_address as i64 + offset) as u64;
                                 let return_address =
-                                    crate::session::linux::peek_data(self.pid, ra_storage_address)
-                                        as u64;
+                                    os::peek_data(self.pid, ra_storage_address) as u64;
                                 return Some(return_address);
                             }
                             gimli::RegisterRule::Register(saved_reg) => {
