@@ -5,9 +5,37 @@ pub mod linux;
 use crate::session::PlatformRegStruct;
 use std::fmt;
 
+pub trait UnifiedRegisters {
+    fn stack_pointer(&self) -> u64;
+    fn instruction_pointer(&self) -> u64;
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct RegisterViewer {
     pub regs: PlatformRegStruct,
+}
+
+#[cfg(target_os = "linux")]
+impl UnifiedRegisters for RegisterViewer {
+    fn stack_pointer(&self) -> u64 {
+        self.regs.rsp
+    }
+
+    fn instruction_pointer(&self) -> u64 {
+        self.regs.rip
+    }
+}
+
+// Dummy for mac and windows interface
+#[cfg(not(target_os = "linux"))]
+impl UnifiedRegisters for RegisterViewer {
+    fn stack_pointer(&self) -> u64 {
+        0
+    }
+
+    fn instruction_pointer(&self) -> u64 {
+        0
+    }
 }
 
 impl RegisterViewer {

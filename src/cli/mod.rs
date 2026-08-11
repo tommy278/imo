@@ -49,7 +49,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 }
             }
             // Step a single instruction
-            "si" => {
+            "si" | "stepi" => {
                 if !session.is_idle() {
                     session.complete_single_step();
                     break;
@@ -75,7 +75,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                     println!("Session not started yet")
                 }
             }
-            "fin" | "finish" => {
+            "f" | "fin" | "finish" => {
                 if !session.is_idle() {
                     session.begin_finish();
                     break;
@@ -171,15 +171,6 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                         let regs = session.get_regs();
                         println!("{}", regs);
                     }
-                    "line" => {
-                        let arg = parts.next().expect("No args");
-
-                        let absolute_address = arg.parse::<u64>().expect("Could not parse address");
-
-                        if let Some(var) = session.get_location_with_address(absolute_address) {
-                            println!("{:?}", var);
-                        }
-                    }
                     _ => {
                         todo!()
                     }
@@ -195,41 +186,6 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 } else {
                     println!("Var '{}' not in scope at current breakpoint", arg);
                 }
-            }
-            "debug" => {
-                let path = std::path::PathBuf::from(
-                    "/Users/tommy/Projects/imo/src/test/linux/rust_with_vars/rust_with_vars.rs",
-                );
-
-                let id = session
-                    .interner
-                    .get_or_intern(path.to_string_lossy().into());
-
-                if let Some(val) = session.get_file_decl_order(id) {
-                    println!("{:?}", val);
-                }
-            }
-            "cl" => {
-                let cl = session.current_location();
-                println!("From Vec: {:?}", cl);
-            }
-            "size" => {
-                println!("{:?}", std::mem::size_of_val(session));
-            }
-            "scope" => {
-                let scope = session
-                    .metadata
-                    .is_in_inline(session.current_rip() - session.base_address);
-                println!("{:?}", scope);
-            }
-            // Another debug
-            "offset" | "off" => {
-                let arg = parts.next().unwrap();
-
-                let arg = arg.parse::<usize>().unwrap();
-
-                let ty = session.metadata.type_index.get(&arg);
-                println!("Val is: {:?}", ty);
             }
             "q" | "quit" => {
                 // End current debug session

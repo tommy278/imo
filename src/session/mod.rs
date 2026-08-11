@@ -6,13 +6,16 @@ use gimli::UnwindSection;
 use rustc_hash::FxHashMap;
 use std::path::Path;
 
-use crate::helpers::dwarf::{
-    self,
-    debug_frame::{RawDebugFrame, setup_session_debug_frame},
-    debug_info::{ActiveVariablesContext, DebuggerMetadataCache},
-};
 use crate::interface::{DebugValue, RegisterViewer};
 use crate::session::interface::{BreakpointData, BreakpointMutationResult, BreakpointTarget};
+use crate::{
+    helpers::dwarf::{
+        self,
+        debug_frame::{RawDebugFrame, setup_session_debug_frame},
+        debug_info::{ActiveVariablesContext, DebuggerMetadataCache},
+    },
+    interface::UnifiedRegisters,
+};
 
 #[cfg(target_os = "linux")]
 use crate::session::linux as os;
@@ -93,7 +96,7 @@ pub struct SourceLocation {
 pub enum CurrentStopCmd {
     SingleStep,
     StepOver {
-        start_rsp: u64,
+        start_stack_pointer: u64,
         start_file: StringId,
         start_line: u32,
         started_from_inline: bool,
@@ -103,29 +106,29 @@ pub enum CurrentStopCmd {
         start_line: u32,
     },
     StepOut {
-        original_rsp: u64,
+        original_stack_pointer: u64,
         original_file: StringId,
         original_line: u32,
         return_address: u64,
         started_from_inline: bool,
     },
     FinishStepOver {
-        original_rsp: u64,
+        original_stack_pointer: u64,
         original_file: StringId,
         original_line: u32,
         started_from_inline: bool,
     },
     Finish {
-        start_rsp: u64,
+        start_stack_pointer: u64,
         started_from_inline: bool,
     },
     StepOutFinish {
-        original_rsp: u64,
+        original_stack_pointer: u64,
         return_address: u64,
         started_from_inline: bool,
     },
     CompleteFinish {
-        start_rsp: u64,
+        start_stack_pointer: u64,
         started_from_inline: bool,
     },
     #[default]
@@ -335,11 +338,19 @@ impl DebugSession {
     pub fn get_register_value(&self, register: gimli::Register) -> u64 {
         let regs = self.get_regs().regs;
 
-        match register.0 {
-            6 => regs.rbp,
-            7 => regs.rsp,
-            16 => regs.rip,
-            _ => todo!("Not implemented yet {}", register.0),
+        #[cfg(target_os = "linux")]
+        {
+            match register.0 {
+                6 => regs.rbp,
+                7 => regs.rsp,
+                16 => regs.rip,
+                _ => todo!("Not implemented yet {}", register.0),
+            }
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            0
         }
     }
 
@@ -347,7 +358,7 @@ impl DebugSession {
         let eh_frame = self.get_unwind_table();
         let base_addresses = self.metadata.base_addresses.clone();
 
-        let current_pc = self.current_rip() - self.base_address;
+        let current_pc = self.current_instruction_pointer() - self.base_address;
 
         if let Ok(fde) =
             eh_frame.fde_for_address(&base_addresses, current_pc, |sections, bases, offset| {
@@ -390,8 +401,12 @@ impl DebugSession {
         None
     }
 
-    pub fn current_rip(&self) -> u64 {
-        self.get_regs().regs.rip
+    pub fn current_instruction_pointer(&self) -> u64 {
+        self.get_regs().instruction_pointer()
+    }
+
+    pub fn current_stack_pointer(&self) -> u64 {
+        self.get_regs().stack_pointer()
     }
 
     pub fn id_to_string(&self, id: StringId) -> &str {
@@ -450,10 +465,10 @@ impl DebugSession {
 
         let is_inline = self
             .metadata
-            .is_in_inline(self.current_rip() - self.base_address);
+            .is_in_inline(self.current_instruction_pointer() - self.base_address);
 
         self.current_cmd = CurrentStopCmd::StepOver {
-            start_rsp: self.get_regs().regs.rsp,
+            start_stack_pointer: self.current_stack_pointer(),
             start_file: current_location.file,
             start_line: current_location.line,
             started_from_inline: is_inline,
@@ -465,17 +480,17 @@ impl DebugSession {
         self.invalidate_register();
         let is_inline = self
             .metadata
-            .is_in_inline(self.current_rip() - self.base_address);
+            .is_in_inline(self.current_instruction_pointer() - self.base_address);
 
         self.current_cmd = CurrentStopCmd::Finish {
-            start_rsp: self.get_regs().regs.rsp,
+            start_stack_pointer: self.current_stack_pointer(),
             started_from_inline: is_inline,
         };
         self.single_step();
     }
 
     pub fn current_location(&self) -> Option<&SourceLocation> {
-        let abs = self.get_regs().regs.rip;
+        let abs = self.current_instruction_pointer();
         let rel_addr = self.get_relative_address(abs);
         self.get_location_with_address(rel_addr)
     }
@@ -517,7 +532,7 @@ impl DebugSession {
 
     /// Find current scope with internal pc
     pub fn find_current_scope(&self) -> ActiveVariablesContext<'_> {
-        let current_pc = self.get_regs().regs.rip - self.base_address;
+        let current_pc = self.current_instruction_pointer() - self.base_address;
         self.metadata.find_scope_by_pc(current_pc)
     }
 
@@ -536,7 +551,7 @@ impl DebugSession {
         // If it is that means it has been declared and if not then it hasnt
 
         if let Some(variable) = node.get_variable_with_name(name) {
-            let current_pc = regs.regs.rip - self.base_address;
+            let current_pc = regs.instruction_pointer() - self.base_address;
 
             if let Some(info) = self.get_location_with_address(current_pc) {
                 let SourceLocation { file, line } = info;

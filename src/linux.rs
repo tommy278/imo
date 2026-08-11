@@ -86,7 +86,7 @@ pub fn debug(binary_path: &str) {
                                         }
                                     }
                                     CurrentStopCmd::StepOver {
-                                        start_rsp,
+                                        start_stack_pointer,
                                         start_file,
                                         start_line,
                                         started_from_inline,
@@ -94,11 +94,11 @@ pub fn debug(binary_path: &str) {
                                         let current_rsp = regs.rsp;
 
                                         // If current rsp is greater than the start rsp then we stepped out of a function and should stop there
-                                        if current_rsp > start_rsp {
+                                        if current_rsp > start_stack_pointer {
                                             session.current_cmd = CurrentStopCmd::Completed;
                                         }
                                         // If rsp are the same then we are in the same function or it was inlined
-                                        else if current_rsp == start_rsp {
+                                        else if current_rsp == start_stack_pointer {
                                             // We need location so keep stepping until we find a valid one
                                             let Some(line_row) = session
                                                 .find_line_range(regs.rip - session.base_address)
@@ -152,7 +152,7 @@ pub fn debug(binary_path: &str) {
                                                 session.get_relative_address(return_address);
                                             session.create_specific_breakpoint(relative_address);
                                             session.current_cmd = CurrentStopCmd::StepOut {
-                                                original_rsp: start_rsp,
+                                                original_stack_pointer: start_stack_pointer,
                                                 original_file: start_file,
                                                 original_line: start_line,
                                                 return_address,
@@ -162,7 +162,7 @@ pub fn debug(binary_path: &str) {
                                         }
                                     }
                                     CurrentStopCmd::StepOut {
-                                        original_rsp,
+                                        original_stack_pointer,
                                         original_file,
                                         original_line,
                                         return_address,
@@ -184,7 +184,7 @@ pub fn debug(binary_path: &str) {
                                         if return_address == breakpoint_addr {
                                             // If we are at the specific breakpoint to step out from then continue step over like normal
                                             session.current_cmd = CurrentStopCmd::FinishStepOver {
-                                                original_rsp,
+                                                original_stack_pointer,
                                                 original_file,
                                                 original_line,
                                                 started_from_inline,
@@ -196,16 +196,16 @@ pub fn debug(binary_path: &str) {
                                         }
                                     }
                                     CurrentStopCmd::FinishStepOver {
-                                        original_rsp,
+                                        original_stack_pointer,
                                         original_file,
                                         original_line,
                                         started_from_inline,
                                     } => {
                                         // If we stepped out of original function or back to
                                         // original function then complete else go back to stepping over
-                                        if original_rsp >= regs.rsp {
+                                        if original_stack_pointer >= regs.rsp {
                                             session.current_cmd = CurrentStopCmd::StepOver {
-                                                start_rsp: original_rsp,
+                                                start_stack_pointer: original_stack_pointer,
                                                 start_file: original_file,
                                                 start_line: original_line,
                                                 started_from_inline,
@@ -216,14 +216,16 @@ pub fn debug(binary_path: &str) {
                                         }
                                     }
                                     CurrentStopCmd::Finish {
-                                        start_rsp,
+                                        start_stack_pointer,
                                         started_from_inline,
                                     } => {
                                         let current_rsp = regs.rsp;
 
-                                        if current_rsp > start_rsp {
+                                        if current_rsp > start_stack_pointer {
                                             session.current_cmd = CurrentStopCmd::Completed;
-                                        } else if started_from_inline && start_rsp == current_rsp {
+                                        } else if started_from_inline
+                                            && start_stack_pointer == current_rsp
+                                        {
                                             let pc = regs.rip - session.base_address;
                                             if !session.metadata.is_in_inline(pc) {
                                                 session.current_cmd = CurrentStopCmd::Completed;
@@ -243,7 +245,7 @@ pub fn debug(binary_path: &str) {
                                             session.create_specific_breakpoint(relative_address);
                                             session.current_cmd = CurrentStopCmd::StepOutFinish {
                                                 return_address,
-                                                original_rsp: start_rsp,
+                                                original_stack_pointer: start_stack_pointer,
                                                 started_from_inline,
                                             };
                                             session.continue_session();
@@ -252,7 +254,7 @@ pub fn debug(binary_path: &str) {
 
                                     CurrentStopCmd::StepOutFinish {
                                         return_address,
-                                        original_rsp,
+                                        original_stack_pointer,
                                         started_from_inline,
                                     } => {
                                         // A handshake from the step over
@@ -271,7 +273,7 @@ pub fn debug(binary_path: &str) {
                                         if return_address == breakpoint_addr {
                                             // If we are at the specific breakpoint to step out from then continue step over like normal
                                             session.current_cmd = CurrentStopCmd::CompleteFinish {
-                                                start_rsp: original_rsp,
+                                                start_stack_pointer: original_stack_pointer,
                                                 started_from_inline: started_from_inline,
                                             };
                                             session.single_step();
@@ -282,14 +284,14 @@ pub fn debug(binary_path: &str) {
                                     }
 
                                     CurrentStopCmd::CompleteFinish {
-                                        start_rsp,
+                                        start_stack_pointer,
                                         started_from_inline,
                                     } => {
                                         // If we stepped out of original function or back to
                                         // original function then complete else go back to stepping over
-                                        if start_rsp >= regs.rsp {
+                                        if start_stack_pointer >= regs.rsp {
                                             session.current_cmd = CurrentStopCmd::Finish {
-                                                start_rsp,
+                                                start_stack_pointer,
                                                 started_from_inline,
                                             };
                                             session.single_step();
