@@ -7,11 +7,12 @@
 
 use gimli::{EndianSlice, Reader as _, RelocateReader, RunTimeEndian, UnitRef, constants};
 use object::{Object, ObjectSection};
-use std::{borrow, error, fs, rc::Rc};
+use std::{borrow, error};
 
 use crate::helpers::dwarf::debug_info::{
     Abi, DebuggerMetadataCache, DwarfType, EnumVariant, Enumerator, GenericField, Reader,
     RelocationMap, ScopeCacheNode, StructField, TypeCacheNode,
+    error::DebugInfoError,
     helpers::{
         extract_inline_node, extract_lexical_block_node, extract_subprogram_node, extract_variable,
     },
@@ -26,20 +27,20 @@ struct Section<'data> {
 
 // The reader type that will be stored in `Dwarf` and `DwarfPackage`.
 // If you don't need relocations, you can use `gimli::EndianSlice` directly.
-pub fn lookup_vars(info_cache: &mut DebuggerMetadataCache, object: &object::File) {
-    let text_address = object
-        .section_by_name(".text")
-        .map(|s| s.address())
-        .unwrap();
+pub fn lookup_vars(
+    info_cache: &mut DebuggerMetadataCache,
+    object: &object::File,
+) -> Result<(), DebugInfoError> {
+    let read_section = |name: &str| {
+        let section = object.section_by_name(name).map(|s| s.address());
+        section.ok_or(DebugInfoError::ReadingSection(name.to_string()))
+    };
+
+    let text_address = read_section(".text")?;
+    let got_address = read_section(".got")?;
+    let eh_frame_address = read_section(".eh_frame")?;
 
     info_cache.text_address = text_address;
-
-    let got_address = object.section_by_name(".got").map(|s| s.address()).unwrap();
-
-    let eh_frame_address = object
-        .section_by_name(".eh_frame")
-        .map(|s| s.address())
-        .unwrap();
 
     info_cache.base_addresses = gimli::BaseAddresses::default()
         .set_text(text_address)
@@ -55,18 +56,20 @@ pub fn lookup_vars(info_cache: &mut DebuggerMetadataCache, object: &object::File
         gimli::RunTimeEndian::Big
     };
 
-    dump_file(&object, info_cache).unwrap();
+    dump_file(&object, info_cache)?;
+
+    Ok(())
 }
 
 fn dump_file(
     object: &object::File,
     info_cache: &mut DebuggerMetadataCache,
-) -> Result<(), Box<dyn error::Error>> {
+) -> Result<(), DebugInfoError> {
     // Load a `Section` that may own its data.
     fn load_section<'data>(
         object: &object::File<'data>,
         name: &str,
-    ) -> Result<Section<'data>, Box<dyn error::Error>> {
+    ) -> Result<Section<'data>, DebugInfoError> {
         Ok(match object.section_by_name(name) {
             Some(section) => Section {
                 data: section.uncompressed_data()?,
@@ -94,7 +97,6 @@ fn dump_file(
     // Iterate over the compilation units.
     let mut iter = dwarf.units();
     while let Some(header) = iter.next()? {
-        // println!("Unit at <.debug_info+0x{:x}>", header.offset().0);
         let unit = dwarf.unit(header)?;
         let unit_ref = unit.unit_ref(&dwarf);
         dump_unit(unit_ref, info_cache)?;
@@ -171,7 +173,7 @@ fn dump_unit<'a>(
                         }
                         gimli::DW_AT_name => {
                             if let Ok(str) = unit.attr_string(attr.value()) {
-                                name = Some(str.to_string_lossy().unwrap().to_string())
+                                name = Some(str.to_string_lossy()?.to_string())
                             }
                         }
                         _ => {
@@ -206,7 +208,7 @@ fn dump_unit<'a>(
                         }
                         gimli::DW_AT_name => {
                             if let Ok(str) = unit.attr_string(attr.value()) {
-                                name = Some(str.to_string_lossy().unwrap().to_string());
+                                name = Some(str.to_string_lossy()?.to_string());
                             }
                         }
                         _ => continue,
@@ -259,7 +261,7 @@ fn dump_unit<'a>(
                     match attr.name() {
                         gimli::DW_AT_name => {
                             if let Ok(str) = unit.attr_string(attr.value()) {
-                                name = Some(str.to_string_lossy().unwrap().to_string());
+                                name = Some(str.to_string_lossy()?.to_string());
                             }
                         }
                         gimli::DW_AT_byte_size => {
@@ -272,13 +274,13 @@ fn dump_unit<'a>(
                 }
 
                 if entry.has_children() {
-                    let mut cursor = unit.entries_at_offset(entry.offset()).unwrap();
+                    let mut cursor = unit.entries_at_offset(entry.offset())?;
 
-                    cursor.next_dfs().unwrap();
+                    cursor.next_dfs()?;
 
                     let start_depth = cursor.current().map(|e| e.depth()).unwrap_or_default();
 
-                    while let Some(child_entry) = cursor.next_dfs().unwrap() {
+                    while let Some(child_entry) = cursor.next_dfs()? {
                         if child_entry.depth() <= start_depth {
                             break;
                         }
@@ -292,9 +294,8 @@ fn dump_unit<'a>(
                                     match attr.name() {
                                         gimli::DW_AT_name => {
                                             if let Ok(str) = unit.attr_string(attr.value()) {
-                                                inner_name = Some(
-                                                    str.to_string_lossy().unwrap().to_string(),
-                                                );
+                                                inner_name =
+                                                    Some(str.to_string_lossy()?.to_string());
                                             }
                                         }
                                         gimli::DW_AT_const_value => {
@@ -349,12 +350,12 @@ fn dump_unit<'a>(
                 let mut element_count = None;
 
                 if entry.has_children() {
-                    let mut cursor = unit.entries_at_offset(entry.offset()).unwrap();
+                    let mut cursor = unit.entries_at_offset(entry.offset())?;
 
                     // Skip array entry, move to first child
-                    cursor.next_dfs().unwrap();
+                    cursor.next_dfs()?;
 
-                    while let Some(entry) = cursor.next_dfs().unwrap() {
+                    while let Some(entry) = cursor.next_dfs()? {
                         if entry.tag() == constants::DW_TAG_subrange_type {
                             for attr in entry.attrs() {
                                 match attr.name() {
@@ -396,7 +397,7 @@ fn dump_unit<'a>(
                     match attr.name() {
                         gimli::DW_AT_name => {
                             if let Ok(str) = unit.attr_string(attr.value()) {
-                                name = Some(str.to_string_lossy().unwrap().to_string());
+                                name = Some(str.to_string_lossy()?.to_string());
                             }
                         }
                         gimli::DW_AT_byte_size => {
@@ -428,11 +429,11 @@ fn dump_unit<'a>(
 
                 if entry.has_children() {
                     // Iterate through children
-                    let mut cursor = unit.entries_at_offset(entry.offset()).unwrap();
-                    cursor.next_dfs().unwrap(); // Skip first since it is the current entry
+                    let mut cursor = unit.entries_at_offset(entry.offset())?;
+                    cursor.next_dfs()?; // Skip first since it is the current entry
                     let start_depth = cursor.current().map(|e| e.depth()).unwrap_or_default();
 
-                    while let Some(child_entry) = cursor.next_dfs().unwrap() {
+                    while let Some(child_entry) = cursor.next_dfs()? {
                         if child_entry.depth() <= start_depth {
                             break;
                         }
@@ -448,9 +449,7 @@ fn dump_unit<'a>(
                                     match attr.name() {
                                         gimli::DW_AT_name => {
                                             if let Ok(str) = unit.attr_string(attr.value()) {
-                                                name = Some(
-                                                    str.to_string_lossy().unwrap().to_string(),
-                                                );
+                                                name = Some(str.to_string_lossy()?.to_string());
                                             }
                                         }
                                         gimli::DW_AT_type => {
@@ -490,9 +489,7 @@ fn dump_unit<'a>(
                                     match attr.name() {
                                         gimli::DW_AT_name => {
                                             if let Ok(str) = unit.attr_string(attr.value()) {
-                                                name = Some(
-                                                    str.to_string_lossy().unwrap().to_string(),
-                                                );
+                                                name = Some(str.to_string_lossy()?.to_string());
                                             }
                                         }
                                         gimli::DW_AT_type => {
@@ -519,7 +516,7 @@ fn dump_unit<'a>(
                                 if let Some(gimli::AttributeValue::UnitRef(discr_offset)) =
                                     child_entry.attr_value(gimli::DW_AT_discr)
                                 {
-                                    let discr_entry = unit.entry(discr_offset).unwrap();
+                                    let discr_entry = unit.entry(discr_offset)?;
                                     if let Some(gimli::AttributeValue::Udata(off)) =
                                         discr_entry.attr_value(gimli::DW_AT_data_member_location)
                                     {
@@ -531,7 +528,8 @@ fn dump_unit<'a>(
                                 let mut entries = unit.entries_at_offset(child_entry.offset())?;
                                 entries.next_dfs()?;
 
-                                let variant_part_depth = entries.current().unwrap().depth();
+                                let variant_part_depth =
+                                    entries.current().map(|e| e.depth()).unwrap_or_default();
 
                                 // Keep track of the current variant
                                 let mut variant: Option<EnumVariant> = None;
@@ -600,9 +598,7 @@ fn dump_unit<'a>(
                                                             unit.attr_string(attr.value())
                                                         {
                                                             name = Some(
-                                                                str.to_string_lossy()
-                                                                    .unwrap()
-                                                                    .to_string(),
+                                                                str.to_string_lossy()?.to_string(),
                                                             );
                                                         }
                                                     }

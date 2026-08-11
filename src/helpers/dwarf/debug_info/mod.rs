@@ -1,3 +1,4 @@
+pub mod error;
 pub mod helpers;
 pub mod utils;
 
@@ -13,6 +14,7 @@ use rustc_hash::FxHashMap;
 use gimli::{Encoding, EndianSlice, Expression, RunTimeEndian};
 use object::BinaryFormat;
 
+use crate::helpers::dwarf::debug_info::error::DebugInfoError;
 use crate::helpers::dwarf::debug_info::utils::lookup_vars;
 use crate::helpers::dwarf::evaluate_frame_base_bytes;
 use crate::interface::{DebugStructField, DebugValue, RegisterViewer, to_buffer};
@@ -798,13 +800,13 @@ impl ActiveVariablesContext<'_> {
 
 impl DebuggerMetadataCache {
     /// Populate the cache with the debug_info
-    pub fn new(object: &object::File<'_>) -> Self {
+    pub fn new(object: &object::File<'_>) -> Result<Self, DebugInfoError> {
         let mut default_cache = Self::default();
 
         // Populate the cache with data
-        lookup_vars(&mut default_cache, object);
+        lookup_vars(&mut default_cache, object)?;
 
-        default_cache
+        Ok(default_cache)
     }
 
     pub fn is_in_inline(&self, pc: u64) -> bool {

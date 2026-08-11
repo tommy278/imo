@@ -17,7 +17,7 @@ pub fn extract_variable<'a>(
         match attr.name() {
             gimli::DW_AT_name => {
                 if let Ok(str) = unit.attr_string(attr.value()) {
-                    name = Some(str.to_string_lossy().unwrap().to_string());
+                    name = Some(str.to_string_lossy().ok()?.to_string());
                 }
             }
             gimli::DW_AT_type => {
@@ -77,12 +77,12 @@ pub fn extract_subprogram_node<'a>(
             }
             gimli::DW_AT_name => {
                 if let Ok(str) = unit.attr_string(attr.value()) {
-                    display_name = Some(str.to_string_lossy().unwrap().to_string());
+                    display_name = Some(str.to_string_lossy().ok()?.to_string());
                 }
             }
             gimli::DW_AT_linkage_name => {
                 if let Ok(str) = unit.attr_string(attr.value()) {
-                    linkage_name = Some(str.to_string_lossy().unwrap().to_string());
+                    linkage_name = Some(str.to_string_lossy().ok()?.to_string());
                 }
             }
             gimli::DW_AT_frame_base => {

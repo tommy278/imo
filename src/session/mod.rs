@@ -257,7 +257,7 @@ impl DebugSession {
 
         session.update_process_base_address();
 
-        session.metadata = DebuggerMetadataCache::new(&object);
+        session.metadata = DebuggerMetadataCache::new(&object)?;
 
         // Update line index and address to location
         dwarf::debug_line::setup_session_cache(&object, &mut session);
