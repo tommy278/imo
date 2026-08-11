@@ -7,7 +7,7 @@
 
 use gimli::{EndianSlice, Reader as _, RelocateReader, RunTimeEndian, UnitRef, constants};
 use object::{Object, ObjectSection};
-use std::{borrow, error};
+use std::borrow;
 
 use crate::helpers::dwarf::debug_info::{
     Abi, DebuggerMetadataCache, DwarfType, EnumVariant, Enumerator, GenericField, Reader,

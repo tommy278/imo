@@ -5,9 +5,9 @@ pub enum DebugInfoError {
     #[error("Error reading {0} section")]
     ReadingSection(String),
 
-    #[error("Eror loading section {0}")]
+    #[error("Failed to load debug info section")]
     LoadingSection(#[from] object::Error),
 
-    #[error("Error parsing section: {0}")]
+    #[error("Failed to parse DWARF debug info")]
     ParsingSection(#[from] gimli::Error),
 }

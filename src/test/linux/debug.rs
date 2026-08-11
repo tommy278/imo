@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use crate::linux;
 
 /// Run the test on the path only given the path from the linux directory
@@ -12,7 +14,15 @@ fn test_path(path: &str) {
     let internal_dir = format!("/src/test/linux/{}", formatted_path);
     dir.push_str(&internal_dir);
 
-    linux::debug(&dir);
+    if let Err(err) = linux::debug(&dir) {
+        eprintln!("{}", err);
+
+        let mut source = err.source();
+        while let Some(underlying_err) = source {
+            eprintln!(" Caused by: {}", underlying_err);
+            source = underlying_err.source();
+        }
+    }
 }
 
 // NOTE: Chose this format for lsp support with finding path names
