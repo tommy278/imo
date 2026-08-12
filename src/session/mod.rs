@@ -262,7 +262,7 @@ impl DebugSession {
         // Update line index and address to location
         dwarf::debug_line::setup_session_cache(&object, &mut session)?;
 
-        session.raw_debug_frame = setup_session_debug_frame(&object);
+        session.raw_debug_frame = setup_session_debug_frame(&object)?;
 
         session.set_up_line_row();
 

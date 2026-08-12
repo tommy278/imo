@@ -1,5 +1,13 @@
 use object::{Object, ObjectSection};
-use std::{borrow, error};
+use std::borrow;
+
+use thiserror;
+
+#[derive(Debug, thiserror::Error)]
+pub enum DebugFrameError {
+    #[error("Failed to load debug frame section")]
+    LoadingSection(#[from] object::Error),
+}
 
 #[derive(Debug, Default, Clone)]
 pub struct RawDebugFrame(pub Vec<u8>);
@@ -14,14 +22,16 @@ impl RawDebugFrame {
 }
 
 /// Get details from dwarf and apply them to the debug session cache
-pub fn setup_session_debug_frame(object: &object::File<'_>) -> RawDebugFrame {
-    update_session_cache(object).unwrap()
+pub fn setup_session_debug_frame(
+    object: &object::File<'_>,
+) -> Result<RawDebugFrame, DebugFrameError> {
+    update_session_cache(object)
 }
 
 /// Update the BreakpointTarget and SourceLocation in the debug session cache
-fn update_session_cache(object: &object::File) -> Result<RawDebugFrame, Box<dyn error::Error>> {
+fn update_session_cache(object: &object::File) -> Result<RawDebugFrame, DebugFrameError> {
     // Load a section and return as `Cow<[u8]>`.
-    let load_section = |id: gimli::SectionId| -> Result<borrow::Cow<[u8]>, Box<dyn error::Error>> {
+    let load_section = |id: gimli::SectionId| -> Result<borrow::Cow<[u8]>, DebugFrameError> {
         Ok(match object.section_by_name(id.name()) {
             Some(section) => section.uncompressed_data()?,
             None => borrow::Cow::Borrowed(&[]),

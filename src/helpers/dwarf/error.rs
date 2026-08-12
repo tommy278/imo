@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+use crate::helpers::dwarf::debug_frame::DebugFrameError;
 use crate::helpers::dwarf::debug_info::error::DebugInfoError;
 use crate::helpers::dwarf::debug_line::DebugLineError;
 
@@ -15,4 +16,6 @@ pub enum CacheSetupError {
     DebugInfo(#[from] DebugInfoError),
     #[error("Failed to read debug line section")]
     DebugLine(#[from] DebugLineError),
+    #[error("Failed to read debug frame section")]
+    DebugFrame(#[from] DebugFrameError),
 }
