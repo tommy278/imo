@@ -9,16 +9,15 @@ pub mod utils;
  * and integrated into the project's native debugger architecture.
  */
 
-use rustc_hash::FxHashMap;
-
 use gimli::{Encoding, EndianSlice, Expression, RunTimeEndian};
 use object::BinaryFormat;
+use rustc_hash::FxHashMap;
 
 use crate::helpers::dwarf::debug_info::error::DebugInfoError;
 use crate::helpers::dwarf::debug_info::utils::lookup_vars;
 use crate::helpers::dwarf::evaluate_frame_base_bytes;
 use crate::interface::{DebugStructField, DebugValue, RegisterViewer, to_buffer};
-use crate::session::{ProcessId, error::SystemError, os};
+use crate::session::{ProcessId, error::SystemError, error::VariableParseError, os};
 
 pub type Reader<'data> =
     gimli::RelocateReader<gimli::EndianSlice<'data, gimli::RunTimeEndian>, &'data RelocationMap>;
@@ -675,24 +674,24 @@ impl DebugVariable {
         bytes: &[u8],
         type_index: &FxHashMap<usize, TypeCacheNode>,
         pid: ProcessId,
-    ) -> Option<u64> {
+    ) -> Result<Option<u64>, VariableParseError> {
         let expression = Expression(EndianSlice::new(&self.location, endian));
 
         let mut evaluation = expression.evaluation(encoding);
-        let mut result = evaluation.evaluate().ok()?;
+        let mut result = evaluation.evaluate()?;
 
         loop {
             match result {
                 gimli::EvaluationResult::RequiresFrameBase => {
                     let frame_base = evaluate_frame_base_bytes(bytes, regs, abi);
-                    result = evaluation.resume_with_frame_base(frame_base).ok()?;
+                    result = evaluation.resume_with_frame_base(frame_base)?;
                 }
                 gimli::EvaluationResult::Complete => {
                     let pieces = evaluation.result();
 
                     if let Some(piece) = pieces.first() {
                         if let gimli::Location::Address { address } = piece.location {
-                            return Some(address);
+                            return Ok(Some(address));
                         }
                     }
                     break;
@@ -704,24 +703,25 @@ impl DebugVariable {
 
                     // If offset if 0 then it is a generic and gimli can handle that case
                     if offset == 0 {
-                        let raw_data = os::peek_data(pid, address).ok()? as u64;
+                        let raw_data = os::peek_data(pid, address)? as u64;
                         let value = gimli::Value::U64(raw_data);
-                        result = evaluation.resume_with_memory(value).ok()?;
+                        result = evaluation.resume_with_memory(value)?;
                     } else {
                         // NOTE: not sure how effectively this works because I cannot produce the case where the value does not have offset 0
                         let ty = type_index.get(&offset).unwrap();
-                        let raw_value = ty
-                            .dwarf_type
-                            .to_debug_value(type_index, address, pid)
-                            .ok()?;
+                        let Some(raw_value) =
+                            ty.dwarf_type.to_debug_value(type_index, address, pid)?
+                        else {
+                            return Ok(None);
+                        };
 
-                        let value = match raw_value? {
+                        let value = match raw_value {
                             DebugValue::Integer(int) => gimli::Value::I64(int),
                             DebugValue::Unsigned(unsigned) => gimli::Value::U64(unsigned),
                             _ => unreachable!(),
                         };
 
-                        result = evaluation.resume_with_memory(value).ok()?;
+                        result = evaluation.resume_with_memory(value)?;
                     }
                 }
                 gimli::EvaluationResult::RequiresRegister {
@@ -733,7 +733,7 @@ impl DebugVariable {
                 _ => todo!("Other result : {:?}", result),
             }
         }
-        None
+        Ok(None)
     }
 }
 

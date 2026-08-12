@@ -545,12 +545,14 @@ impl DebugSession {
         &self,
         node: &ActiveVariablesContext,
         name: &str,
-    ) -> Result<Option<DebugValue>, SystemError> {
+    ) -> Result<Option<DebugValue>, error::VariableParseError> {
         let regs = self.get_regs()?;
 
         let endian = self.metadata.endian;
-        let encoding = self.metadata.encoding.unwrap();
         let abi = &self.metadata.abi;
+        let Some(encoding) = self.metadata.encoding else {
+            return Err(error::VariableParseError::Encoding);
+        };
 
         // Since rust does not declare variables in sequential order
         // We store the actual order the variables were actually declared
@@ -580,24 +582,31 @@ impl DebugSession {
                 return Ok(None);
             }
 
+            let Some(frame_base) = node.frame_base else {
+                return Err(error::VariableParseError::FrameBase);
+            };
+
             // Get the variable's address
-            let address = variable
-                .parse_value(
-                    &regs,
-                    encoding,
-                    endian,
-                    abi,
-                    node.frame_base.unwrap(),
-                    &self.metadata.type_index,
-                    self.pid,
-                )
-                .unwrap();
+            let Some(address) = variable.parse_value(
+                &regs,
+                encoding,
+                endian,
+                abi,
+                frame_base,
+                &self.metadata.type_index,
+                self.pid,
+            )?
+            else {
+                return Err(error::VariableParseError::Address);
+            };
 
             // Resolve the variable's live value with address and current pid
             if let Some(ty) = self.metadata.type_index.get(&variable.target_type_offset) {
-                return ty
-                    .dwarf_type
-                    .to_debug_value(&self.metadata.type_index, address, self.pid);
+                let result =
+                    ty.dwarf_type
+                        .to_debug_value(&self.metadata.type_index, address, self.pid)?;
+
+                return Ok(result);
             }
         }
         Ok(None)

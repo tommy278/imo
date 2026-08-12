@@ -1,4 +1,3 @@
-pub mod error;
 pub mod helpers;
 
 use std::io;
@@ -180,12 +179,24 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
             "p" | "print" => {
                 let arg = parts.next().expect("No args");
 
-                let scope = session.find_current_scope().unwrap();
+                let scope_result = session.find_current_scope();
 
-                if let Ok(Some(val)) = session.get_var_value(&scope, arg) {
-                    println!("{} = {}", arg, val);
-                } else {
-                    println!("Var '{}' not in scope at current breakpoint", arg);
+                match scope_result {
+                    Ok(scope) => {
+                        let var_result = session.get_var_value(&scope, arg);
+
+                        match var_result {
+                            Ok(var) => {
+                                if let Some(val) = var {
+                                    println!("{} = {}", arg, val);
+                                } else {
+                                    println!("Var '{}' not in scope at current breakpoint", arg);
+                                }
+                            }
+                            Err(err) => eprintln!("Error occured parsing variable: {err}"),
+                        }
+                    }
+                    Err(err) => eprintln!("Could not resolve current scope: {err}"),
                 }
             }
             "q" | "quit" => {
