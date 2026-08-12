@@ -1,3 +1,4 @@
+pub mod error;
 pub mod helpers;
 
 use std::io;
@@ -168,7 +169,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                         }
                     }
                     "r" | "reg" => {
-                        let regs = session.get_regs();
+                        let regs = session.get_regs().unwrap();
                         println!("{}", regs);
                     }
                     _ => {
@@ -179,9 +180,9 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
             "p" | "print" => {
                 let arg = parts.next().expect("No args");
 
-                let scope = session.find_current_scope();
+                let scope = session.find_current_scope().unwrap();
 
-                if let Some(val) = session.get_var_value(&scope, arg) {
+                if let Ok(Some(val)) = session.get_var_value(&scope, arg) {
                     println!("{} = {}", arg, val);
                 } else {
                     println!("Var '{}' not in scope at current breakpoint", arg);

@@ -24,40 +24,44 @@ pub fn get_process_base_address(pid: ProcessId) -> u64 {
 }
 
 /// Continue debug session
-pub fn continue_session(pid: ProcessId) {
-    ptrace::cont(pid, None).unwrap();
+pub fn continue_session(pid: ProcessId) -> Result<(), LinuxError> {
+    ptrace::cont(pid, None)?;
+    Ok(())
 }
 
 /// Kill debug session
-pub fn kill_session(pid: ProcessId) {
-    ptrace::kill(pid).unwrap()
+pub fn kill_session(pid: ProcessId) -> Result<(), LinuxError> {
+    ptrace::kill(pid)?;
+    Ok(())
 }
 
-pub fn send_trap_signal(pid: ProcessId) {
-    signal::kill(pid, signal::Signal::SIGTRAP).unwrap();
+pub fn send_trap_signal(pid: ProcessId) -> Result<(), LinuxError> {
+    signal::kill(pid, signal::Signal::SIGTRAP)?;
+    Ok(())
 }
 
 /// Proceed forward when the process is stopped
-pub fn step(pid: ProcessId) {
-    ptrace::step(pid, None).unwrap();
+pub fn step(pid: ProcessId) -> Result<(), LinuxError> {
+    ptrace::step(pid, None)?;
+    Ok(())
 }
 
 /// Get all register data
-pub fn get_regs(pid: ProcessId) -> PlatformRegStruct {
-    ptrace::getregs(pid).unwrap()
+pub fn get_regs(pid: ProcessId) -> Result<PlatformRegStruct, LinuxError> {
+    let regs = ptrace::getregs(pid)?;
+    Ok(regs)
 }
 
-pub fn peek_data(pid: ProcessId, address: u64) -> i64 {
-    ptrace::read(pid, address as AddressType).expect("Could not read address")
+pub fn peek_data(pid: ProcessId, address: u64) -> Result<i64, LinuxError> {
+    let data = ptrace::read(pid, address as AddressType)?;
+    Ok(data)
 }
 
-pub fn opt_peek_data(pid: ProcessId, address: u64) -> Option<u64> {
-    ptrace::read(pid, address as AddressType)
-        .ok()
-        .map(|v| v as u64)
-}
-
-pub fn read_bytes(pid: ProcessId, remote_address: usize, len: usize) -> Option<Vec<u8>> {
+pub fn read_bytes(
+    pid: ProcessId,
+    remote_address: usize,
+    len: usize,
+) -> Result<Vec<u8>, LinuxError> {
     let mut buffer = vec![0u8; len];
     let local_iov = IoSliceMut::new(&mut buffer);
 
@@ -69,25 +73,20 @@ pub fn read_bytes(pid: ProcessId, remote_address: usize, len: usize) -> Option<V
     let bytes_read = process_vm_readv(pid, &mut [local_iov], &[remote_iov]).unwrap();
 
     if bytes_read == len {
-        return Some(buffer);
+        return Ok(buffer);
     }
 
-    unimplemented!("Error reading bytes");
+    Err(LinuxError::ByteReadError)
 }
 
-pub fn get_instruction_info(pid: ProcessId, rip: usize) -> Option<iced_x86::Instruction> {
-    let bytes = read_bytes(pid, rip, 15).unwrap();
+// Linux specific errors
 
-    if bytes.iter().all(|&b| b == 0) {
-        return None;
-    }
+use thiserror::Error;
 
-    let mut decoder = iced_x86::Decoder::with_ip(64, &bytes, 0, iced_x86::DecoderOptions::NONE);
-    let instruction = decoder.decode();
-
-    if instruction.is_invalid() {
-        return None;
-    }
-
-    Some(instruction)
+#[derive(Debug, Error)]
+pub enum LinuxError {
+    #[error("Failed to execute ptrace command. Errno: {0}")]
+    PtraceError(#[from] nix::errno::Errno),
+    #[error("Failed to read bytes at given address")]
+    ByteReadError,
 }

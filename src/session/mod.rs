@@ -2,6 +2,8 @@ pub mod interface;
 #[cfg(target_os = "linux")]
 pub mod linux;
 
+pub mod error;
+
 use gimli::UnwindSection;
 use rustc_hash::FxHashMap;
 use std::path::Path;
@@ -12,6 +14,7 @@ use crate::helpers::dwarf::{
     debug_info::{ActiveVariablesContext, DebuggerMetadataCache},
 };
 use crate::interface::{DebugValue, RegisterViewer};
+use crate::session::error::SystemError;
 use crate::session::interface::{BreakpointData, BreakpointMutationResult, BreakpointTarget};
 
 #[cfg(target_os = "linux")]
@@ -293,14 +296,14 @@ impl DebugSession {
     }
 
     /// Get the live register of the current process
-    pub fn get_regs(&self) -> RegisterViewer {
+    pub fn get_regs(&self) -> Result<RegisterViewer, error::SystemError> {
         if let Some(regs) = self.registers {
-            return regs;
+            return Ok(regs);
         }
 
         // Backup in case the register was not instantiated for some reason
-        let regs = os::get_regs(self.pid);
-        return RegisterViewer { regs };
+        let regs = os::get_regs(self.pid)?;
+        Ok(RegisterViewer { regs })
     }
 
     pub fn invalidate_register(&mut self) {
@@ -331,22 +334,22 @@ impl DebugSession {
             .get_unwind_table_with_endian(self.metadata.endian)
     }
 
-    pub fn get_register_value(&self, register: gimli::Register) -> u64 {
-        let regs = self.get_regs().regs;
+    pub fn get_register_value(&self, register: gimli::Register) -> Option<u64> {
+        let regs = self.get_regs().ok()?.regs;
 
         #[cfg(target_os = "linux")]
         {
             match register.0 {
-                6 => regs.rbp,
-                7 => regs.rsp,
-                16 => regs.rip,
+                6 => Some(regs.rbp),
+                7 => Some(regs.rsp),
+                16 => Some(regs.rip),
                 _ => todo!("Not implemented yet {}", register.0),
             }
         }
 
         #[cfg(not(target_os = "linux"))]
         {
-            0
+            Some(0)
         }
     }
 
@@ -354,7 +357,7 @@ impl DebugSession {
         let eh_frame = self.get_unwind_table();
         let base_addresses = self.metadata.base_addresses.clone();
 
-        let current_pc = self.current_instruction_pointer() - self.base_address;
+        let current_pc = self.current_pc().ok()?;
 
         if let Ok(fde) =
             eh_frame.fde_for_address(&base_addresses, current_pc, |sections, bases, offset| {
@@ -368,7 +371,7 @@ impl DebugSession {
             while let Some(row) = table.next_row().ok()? {
                 let cfa_address = match row.cfa() {
                     gimli::CfaRule::RegisterAndOffset { register, offset } => {
-                        let reg_value = self.get_register_value(*register);
+                        let reg_value = self.get_register_value(*register)?;
                         (reg_value as i64 + offset) as u64
                     }
                     gimli::CfaRule::Expression(_) => todo!(),
@@ -380,11 +383,11 @@ impl DebugSession {
                             gimli::RegisterRule::Offset(offset) => {
                                 let ra_storage_address = (cfa_address as i64 + offset) as u64;
                                 let return_address =
-                                    os::peek_data(self.pid, ra_storage_address) as u64;
+                                    os::peek_data(self.pid, ra_storage_address).ok()? as u64;
                                 return Some(return_address);
                             }
                             gimli::RegisterRule::Register(saved_reg) => {
-                                let return_address = self.get_register_value(saved_reg);
+                                let return_address = self.get_register_value(saved_reg)?;
                                 return Some(return_address);
                             }
                             _ => todo!(),
@@ -396,17 +399,35 @@ impl DebugSession {
         None
     }
 
-    pub fn current_instruction_pointer(&self) -> u64 {
-        self.get_regs().instruction_pointer()
+    pub fn current_instruction_pointer(&self) -> Result<u64, SystemError> {
+        self.get_regs().map(|r| r.instruction_pointer())
     }
 
-    pub fn current_stack_pointer(&self) -> u64 {
-        self.get_regs().stack_pointer()
+    pub fn current_stack_pointer(&self) -> Result<u64, SystemError> {
+        self.get_regs().map(|r| r.stack_pointer())
+    }
+
+    pub fn current_pc(&self) -> Result<u64, SystemError> {
+        let pc = self.current_instruction_pointer()? - self.base_address;
+        Ok(pc)
     }
 
     pub fn id_to_string(&self, id: StringId) -> &str {
         &self.interner.buffer[id.0 as usize]
     }
+
+    /// Continue session from last interrupt
+    pub fn continue_session(&self) -> Result<(), error::SystemError> {
+        os::continue_session(self.pid)
+    }
+
+    pub fn send_trap_signal(&self) -> Result<(), error::SystemError> {
+        os::send_trap_signal(self.pid)
+    }
+
+    // ========================================
+    // CLI Commands
+    // ========================================
 
     pub fn is_idle(&self) -> bool {
         self.current_cmd.is_idle()
@@ -415,89 +436,75 @@ impl DebugSession {
     pub fn toggle_running(&mut self) {
         self.current_cmd = CurrentStopCmd::Running;
     }
-
-    /// Continue session from last interrupt
-    pub fn continue_session(&self) {
-        os::continue_session(self.pid);
-    }
-
-    pub fn send_trap_signal(&self) {
-        os::send_trap_signal(self.pid);
-    }
-
     pub fn toggle_continue(&mut self) {
         self.current_cmd = CurrentStopCmd::Continuing;
     }
 
-    pub fn complete_single_step(&mut self) {
+    pub fn complete_single_step(&mut self) -> Result<(), SystemError> {
         self.invalidate_register();
         self.current_cmd = CurrentStopCmd::SingleStep;
-        self.single_step();
+        self.single_step()
     }
 
-    pub fn begin_step_into(&mut self) {
+    pub fn begin_step_into(&mut self) -> Result<(), SystemError> {
         self.invalidate_register();
         let Some(current_location) = self.current_location() else {
             self.current_cmd = CurrentStopCmd::SearchingForValidLocation;
-            self.single_step();
-            return;
+            self.single_step()?;
+            return Ok(());
         };
 
         self.current_cmd = CurrentStopCmd::StepInto {
             start_file: current_location.file.clone(),
             start_line: current_location.line,
         };
-        self.single_step();
+        self.single_step()
     }
 
-    pub fn begin_step_over(&mut self) {
+    pub fn begin_step_over(&mut self) -> Result<(), SystemError> {
         self.invalidate_register();
         let Some(current_location) = self.current_location() else {
             self.current_cmd = CurrentStopCmd::SearchingForValidLocation;
-            self.single_step();
-            return;
+            self.single_step()?;
+            return Ok(());
         };
 
-        let is_inline = self
-            .metadata
-            .is_in_inline(self.current_instruction_pointer() - self.base_address);
+        let is_inline = self.metadata.is_in_inline(self.current_pc()?);
 
         self.current_cmd = CurrentStopCmd::StepOver {
-            start_stack_pointer: self.current_stack_pointer(),
+            start_stack_pointer: self.current_stack_pointer()?,
             start_file: current_location.file,
             start_line: current_location.line,
             started_from_inline: is_inline,
         };
-        self.single_step();
+        self.single_step()
     }
 
-    pub fn begin_finish(&mut self) {
+    pub fn begin_finish(&mut self) -> Result<(), SystemError> {
         self.invalidate_register();
-        let is_inline = self
-            .metadata
-            .is_in_inline(self.current_instruction_pointer() - self.base_address);
+        let is_inline = self.metadata.is_in_inline(self.current_pc()?);
 
         self.current_cmd = CurrentStopCmd::Finish {
-            start_stack_pointer: self.current_stack_pointer(),
+            start_stack_pointer: self.current_stack_pointer()?,
             started_from_inline: is_inline,
         };
-        self.single_step();
+        self.single_step()
     }
 
     pub fn current_location(&self) -> Option<&SourceLocation> {
-        let abs = self.current_instruction_pointer();
+        let abs = self.current_instruction_pointer().ok()?;
         let rel_addr = self.get_relative_address(abs);
         self.get_location_with_address(rel_addr)
     }
 
     /// Move forward from the specified stop
-    pub fn single_step(&self) {
-        os::step(self.pid);
+    pub fn single_step(&self) -> Result<(), error::SystemError> {
+        os::step(self.pid)
     }
 
     /// Kill the current session
-    pub fn kill_session(&self) {
-        os::kill_session(self.pid);
+    pub fn kill_session(&self) -> Result<(), error::SystemError> {
+        os::kill_session(self.pid)
     }
 
     /// Get and update the process base address
@@ -526,18 +533,23 @@ impl DebugSession {
     }
 
     /// Find current scope with internal pc
-    pub fn find_current_scope(&self) -> ActiveVariablesContext<'_> {
-        let current_pc = self.current_instruction_pointer() - self.base_address;
-        self.metadata.find_scope_by_pc(current_pc)
+    pub fn find_current_scope(&self) -> Result<ActiveVariablesContext<'_>, SystemError> {
+        let current_pc = self.current_instruction_pointer()? - self.base_address;
+        let context = self.metadata.find_scope_by_pc(current_pc);
+        Ok(context)
     }
 
     /// Get the value of a variable with the given name
     /// Requires current scope to evaluate the value
-    pub fn get_var_value(&self, node: &ActiveVariablesContext, name: &str) -> Option<DebugValue> {
-        let regs = self.get_regs();
+    pub fn get_var_value(
+        &self,
+        node: &ActiveVariablesContext,
+        name: &str,
+    ) -> Result<Option<DebugValue>, SystemError> {
+        let regs = self.get_regs()?;
 
         let endian = self.metadata.endian;
-        let encoding = self.metadata.encoding?;
+        let encoding = self.metadata.encoding.unwrap();
         let abi = &self.metadata.abi;
 
         // Since rust does not declare variables in sequential order
@@ -557,27 +569,29 @@ impl DebugSession {
                             line_order.iter().position(|&l| l == variable.decl_line)
                         {
                             if var_decl_idx >= current_idx {
-                                return Some(DebugValue::Err(
+                                return Ok(Some(DebugValue::Err(
                                     "Variable not initialized yet".to_string(),
-                                ));
+                                )));
                             }
                         }
                     }
                 }
             } else {
-                return None;
+                return Ok(None);
             }
 
             // Get the variable's address
-            let address = variable.parse_value(
-                &regs,
-                encoding,
-                endian,
-                abi,
-                node.frame_base?,
-                &self.metadata.type_index,
-                self.pid,
-            )?;
+            let address = variable
+                .parse_value(
+                    &regs,
+                    encoding,
+                    endian,
+                    abi,
+                    node.frame_base.unwrap(),
+                    &self.metadata.type_index,
+                    self.pid,
+                )
+                .unwrap();
 
             // Resolve the variable's live value with address and current pid
             if let Some(ty) = self.metadata.type_index.get(&variable.target_type_offset) {
@@ -586,7 +600,7 @@ impl DebugSession {
                     .to_debug_value(&self.metadata.type_index, address, self.pid);
             }
         }
-        None
+        Ok(None)
     }
 
     /// Clear all breakpoint for line_number by default

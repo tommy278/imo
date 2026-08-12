@@ -18,7 +18,7 @@ use crate::helpers::dwarf::debug_info::error::DebugInfoError;
 use crate::helpers::dwarf::debug_info::utils::lookup_vars;
 use crate::helpers::dwarf::evaluate_frame_base_bytes;
 use crate::interface::{DebugStructField, DebugValue, RegisterViewer, to_buffer};
-use crate::session::{ProcessId, os};
+use crate::session::{ProcessId, error::SystemError, os};
 
 pub type Reader<'data> =
     gimli::RelocateReader<gimli::EndianSlice<'data, gimli::RunTimeEndian>, &'data RelocationMap>;
@@ -204,25 +204,25 @@ impl DwarfType {
         type_index: &FxHashMap<usize, TypeCacheNode>,
         address: u64,
         pid: ProcessId,
-    ) -> Option<DebugValue> {
+    ) -> Result<Option<DebugValue>, SystemError> {
         match self {
             DwarfType::Base {
                 name,
                 encoding,
                 byte_size,
             } => {
-                let raw_data = os::peek_data(pid, address);
+                let raw_data = os::peek_data(pid, address)?;
 
                 if name == "usize" {
-                    return Some(DebugValue::Usize(raw_data as u64));
+                    return Ok(Some(DebugValue::Usize(raw_data as u64)));
                 } else if name == "isize" {
-                    return Some(DebugValue::Isize(raw_data as i64));
+                    return Ok(Some(DebugValue::Isize(raw_data as i64)));
                 }
                 match encoding {
                     // Boolean
                     2 => {
                         let masked = raw_data & 0xFF;
-                        Some(DebugValue::Boolean(masked != 0))
+                        Ok(Some(DebugValue::Boolean(masked != 0)))
                     }
 
                     // Float
@@ -230,44 +230,44 @@ impl DwarfType {
                         4 => {
                             let bits_32 = (raw_data & 0xFFFF_FFFF) as u32;
                             let float_val = f32::from_bits(bits_32);
-                            Some(DebugValue::Float(float_val as f64))
+                            Ok(Some(DebugValue::Float(float_val as f64)))
                         }
                         8 => {
                             let bits_64 = raw_data as u64;
                             let float_val = f64::from_bits(bits_64);
-                            Some(DebugValue::Float(float_val))
+                            Ok(Some(DebugValue::Float(float_val)))
                         }
-                        _ => None,
+                        _ => Ok(None),
                     },
 
                     // Signed integers
                     5 => match byte_size {
-                        1 => Some(DebugValue::Integer((raw_data as i8) as i64)),
-                        2 => Some(DebugValue::Integer((raw_data as i16) as i64)),
-                        4 => Some(DebugValue::Integer((raw_data as i32) as i64)),
-                        8 => Some(DebugValue::Integer(raw_data)),
-                        _ => Some(DebugValue::Integer(raw_data)),
+                        1 => Ok(Some(DebugValue::Integer((raw_data as i8) as i64))),
+                        2 => Ok(Some(DebugValue::Integer((raw_data as i16) as i64))),
+                        4 => Ok(Some(DebugValue::Integer((raw_data as i32) as i64))),
+                        8 => Ok(Some(DebugValue::Integer(raw_data))),
+                        _ => Ok(Some(DebugValue::Integer(raw_data))),
                     },
 
                     // Unsigned integers
                     7 => match byte_size {
-                        1 => Some(DebugValue::Unsigned((raw_data as u8) as u64)),
-                        2 => Some(DebugValue::Unsigned((raw_data as u16) as u64)),
-                        4 => Some(DebugValue::Unsigned((raw_data as u32) as u64)),
-                        8 => Some(DebugValue::Unsigned(raw_data as u64)),
-                        _ => Some(DebugValue::Unsigned(raw_data as u64)),
+                        1 => Ok(Some(DebugValue::Unsigned((raw_data as u8) as u64))),
+                        2 => Ok(Some(DebugValue::Unsigned((raw_data as u16) as u64))),
+                        4 => Ok(Some(DebugValue::Unsigned((raw_data as u32) as u64))),
+                        8 => Ok(Some(DebugValue::Unsigned(raw_data as u64))),
+                        _ => Ok(Some(DebugValue::Unsigned(raw_data as u64))),
                     },
 
                     // Chars
                     16 => {
                         let raw_char = raw_data as u32;
                         if let Some(char) = char::from_u32(raw_char) {
-                            return Some(DebugValue::Char(char));
+                            return Ok(Some(DebugValue::Char(char)));
                         };
 
-                        None
+                        Ok(None)
                     }
-                    _ => None,
+                    _ => Ok(None),
                 }
             }
             // Pointer
@@ -275,21 +275,24 @@ impl DwarfType {
                 name,
                 target_type_offset,
             } => {
-                let raw_data = os::peek_data(pid, address);
+                let raw_data = os::peek_data(pid, address)?;
                 if let Some(name) = name {
                     let ty = type_index.get(target_type_offset).unwrap();
-                    let val = ty
-                        .dwarf_type
-                        .to_debug_value(type_index, raw_data as u64, pid)
-                        .unwrap();
+                    let Some(val) =
+                        ty.dwarf_type
+                            .to_debug_value(type_index, raw_data as u64, pid)?
+                    else {
+                        return Ok(None);
+                    };
+
                     if name.starts_with("alloc::boxed::Box<") {
-                        return Some(DebugValue::Box(Box::new(val)));
+                        return Ok(Some(DebugValue::Box(Box::new(val))));
                     }
                     if name.contains(";") {
-                        return Some(val);
+                        return Ok(Some(val));
                     }
                 }
-                Some(DebugValue::Pointer(raw_data as usize))
+                Ok(Some(DebugValue::Pointer(raw_data as usize)))
             }
             // Array
             DwarfType::Array {
@@ -302,20 +305,25 @@ impl DwarfType {
                 let offset_num = ty.dwarf_type.get_byte_size(type_index);
 
                 for i in 0..*count {
-                    let var =
-                        ty.dwarf_type
-                            .to_debug_value(type_index, address + offset_num * i, pid);
+                    let Some(var) = ty.dwarf_type.to_debug_value(
+                        type_index,
+                        address + offset_num as u64,
+                        pid,
+                    )?
+                    else {
+                        return Ok(None);
+                    };
 
-                    array.push(var.unwrap());
+                    array.push(var);
                 }
-                Some(DebugValue::Array(array))
+                Ok(Some(DebugValue::Array(array)))
             }
             DwarfType::Enum {
                 name,
                 byte_size,
                 fields,
             } => {
-                let data = os::peek_data(pid, address);
+                let data = os::peek_data(pid, address)?;
 
                 let const_value = match byte_size {
                     1 => data as u8 as u64,
@@ -324,12 +332,18 @@ impl DwarfType {
                     8 | _ => data as u64,
                 };
 
-                let inner_name = fields.iter().find(|f| f.value == const_value)?.name.clone();
+                let Some(inner_name) = fields
+                    .iter()
+                    .find(|f| f.value == const_value)
+                    .map(|i| i.name.clone())
+                else {
+                    return Ok(None);
+                };
 
-                return Some(DebugValue::Enum {
+                return Ok(Some(DebugValue::Enum {
                     name: name.to_owned(),
                     inner_name,
-                });
+                }));
             }
             DwarfType::Variant {
                 name,
@@ -339,7 +353,7 @@ impl DwarfType {
                 variants,
             } => {
                 let tag_byte = if let Some(discr_member_offset) = discr_member_offset {
-                    let tag = os::peek_data(pid, address + discr_member_offset) as u8;
+                    let tag = os::peek_data(pid, address + discr_member_offset)? as u8;
 
                     Some(tag)
                 } else {
@@ -364,10 +378,14 @@ impl DwarfType {
 
                         let inner_name = ty.dwarf_type.get_name();
 
-                        let mut inner_value = ty
-                            .dwarf_type
-                            .to_debug_value(type_index, address + field_def.location, pid)
-                            .unwrap();
+                        let Some(mut inner_value) = ty.dwarf_type.to_debug_value(
+                            type_index,
+                            address + field_def.location,
+                            pid,
+                        )?
+                        else {
+                            return Ok(None);
+                        };
 
                         // Handle all possible variations to display names
                         if let DebugValue::Struct {
@@ -383,34 +401,38 @@ impl DwarfType {
                             // No field because for structs the variant doesnt have the fields but it belongs to the struct
                             // Example Some(12) would be displayed as Option<u32>::Some(12) otherwise
                             if fields.is_empty() {
-                                return Some(DebugValue::Variant {
+                                return Ok(Some(DebugValue::Variant {
                                     name: struct_name.to_string(),
                                     field: None,
-                                });
+                                }));
                             }
-                            return Some(DebugValue::Variant {
+                            return Ok(Some(DebugValue::Variant {
                                 name: inner_name,
                                 field: None,
-                            });
+                            }));
                         }
 
                         // Again skip long rust names with angle brackets
                         if !name.contains("<") {
-                            return Some(DebugValue::Variant {
+                            return Ok(Some(DebugValue::Variant {
                                 name: format!("{}::{}", name, inner_name),
                                 field: Some(Box::new(inner_value)),
-                            });
+                            }));
                         }
 
-                        return Some(DebugValue::Variant {
+                        return Ok(Some(DebugValue::Variant {
                             name: inner_name,
                             field: Some(Box::new(inner_value)),
-                        });
+                        }));
                     } else {
-                        return Some(DebugValue::Err("Could not find active field".to_string()));
+                        return Ok(Some(DebugValue::Err(
+                            "Could not find active field".to_string(),
+                        )));
                     }
                 } else {
-                    return Some(DebugValue::Err("Could not find active enum".to_string()));
+                    return Ok(Some(DebugValue::Err(
+                        "Could not find active enum".to_string(),
+                    )));
                 }
             }
             DwarfType::Structure {
@@ -429,13 +451,13 @@ impl DwarfType {
                         type_index,
                         address + vec_field.location,
                         pid,
-                    );
+                    )?;
 
                     if let Some(DebugValue::Vec(buf)) = buffer {
                         let raw_values = to_buffer(&buf);
                         let string = String::from_utf8_lossy(&raw_values).into_owned();
 
-                        return Some(DebugValue::String(string));
+                        return Ok(Some(DebugValue::String(string)));
                     }
                 }
 
@@ -447,7 +469,7 @@ impl DwarfType {
                         type_index,
                         address + len_field.location,
                         pid,
-                    );
+                    )?;
 
                     let buf_field = fields.iter().find(|f| f.name == "buf").unwrap();
                     let buf_ty = type_index.get(&buf_field.type_offset).unwrap();
@@ -456,7 +478,7 @@ impl DwarfType {
                         type_index,
                         address + buf_field.location,
                         pid,
-                    );
+                    )?;
 
                     let value = generics.iter().find(|g| g.name == "T").unwrap();
                     let ty = type_index.get(&value.type_offset).unwrap();
@@ -474,17 +496,17 @@ impl DwarfType {
                         let mut buffer = Vec::with_capacity(cap as usize);
 
                         for i in 0..len {
-                            let data = ty
-                                .dwarf_type
-                                .to_debug_value(
-                                    type_index,
-                                    heap_pointer_value as u64 + i * size,
-                                    pid,
-                                )
-                                .unwrap();
+                            let Some(data) = ty.dwarf_type.to_debug_value(
+                                type_index,
+                                heap_pointer_value as u64 + i * size,
+                                pid,
+                            )?
+                            else {
+                                return Ok(None);
+                            };
                             buffer.push(data);
                         }
-                        return Some(DebugValue::Vec(buffer));
+                        return Ok(Some(DebugValue::Vec(buffer)));
                     }
                 }
 
@@ -496,7 +518,7 @@ impl DwarfType {
                         type_index,
                         address + ptr_field.location,
                         pid,
-                    );
+                    )?;
 
                     let cap_field = fields.iter().find(|f| f.name == "cap").unwrap();
                     let cap_ty = type_index.get(&cap_field.type_offset).unwrap();
@@ -505,15 +527,15 @@ impl DwarfType {
                         type_index,
                         address + cap_field.location,
                         pid,
-                    );
+                    )?;
 
                     if let (Some(DebugValue::Pointer(ptr)), Some(DebugValue::Usize(cap))) =
                         (heap_pointer, capacity)
                     {
-                        return Some(DebugValue::RawVecInner {
+                        return Ok(Some(DebugValue::RawVecInner {
                             heap_pointer_value: ptr,
                             cap,
-                        });
+                        }));
                     }
                 }
 
@@ -547,10 +569,12 @@ impl DwarfType {
                 for field in fields {
                     let ty = type_index.get(&field.type_offset).unwrap();
 
-                    let value = ty
-                        .dwarf_type
-                        .to_debug_value(type_index, address + field.location, pid)
-                        .unwrap();
+                    let Some(value) =
+                        ty.dwarf_type
+                            .to_debug_value(type_index, address + field.location, pid)?
+                    else {
+                        return Ok(None);
+                    };
 
                     values.push(DebugStructField {
                         name: field.name.to_string(),
@@ -565,15 +589,9 @@ impl DwarfType {
                     let len = &values[1].value;
 
                     if let (DebugValue::Pointer(ptr), DebugValue::Usize(len)) = (ptr, len) {
-                        let res =
-                            crate::session::linux::read_bytes(pid, *ptr as usize, *len as usize);
-
-                        if let Some(res) = res {
-                            let string = String::from_utf8_lossy(&res).into_owned();
-
-                            return Some(DebugValue::StringSlice(string));
-                        }
-                        return None;
+                        let res = os::read_bytes(pid, *ptr as usize, *len as usize)?;
+                        let string = String::from_utf8_lossy(&res).into_owned();
+                        return Ok(Some(DebugValue::StringSlice(string)));
                     }
                 }
 
@@ -582,7 +600,7 @@ impl DwarfType {
                 if is_tuple {
                     let tup_values: Vec<DebugValue> =
                         values.iter().map(|f| f.value.clone()).collect();
-                    return Some(DebugValue::Tuple(tup_values));
+                    return Ok(Some(DebugValue::Tuple(tup_values)));
                 }
 
                 let structure = DebugValue::Struct {
@@ -590,7 +608,7 @@ impl DwarfType {
                     fields: values,
                 };
 
-                return Some(structure);
+                return Ok(Some(structure));
             }
             _ => todo!(),
         }
@@ -686,15 +704,18 @@ impl DebugVariable {
 
                     // If offset if 0 then it is a generic and gimli can handle that case
                     if offset == 0 {
-                        let raw_data = os::peek_data(pid, address) as u64;
+                        let raw_data = os::peek_data(pid, address).ok()? as u64;
                         let value = gimli::Value::U64(raw_data);
                         result = evaluation.resume_with_memory(value).ok()?;
                     } else {
                         // NOTE: not sure how effectively this works because I cannot produce the case where the value does not have offset 0
                         let ty = type_index.get(&offset).unwrap();
-                        let raw_value = ty.dwarf_type.to_debug_value(type_index, address, pid)?;
+                        let raw_value = ty
+                            .dwarf_type
+                            .to_debug_value(type_index, address, pid)
+                            .ok()?;
 
-                        let value = match raw_value {
+                        let value = match raw_value? {
                             DebugValue::Integer(int) => gimli::Value::I64(int),
                             DebugValue::Unsigned(unsigned) => gimli::Value::U64(unsigned),
                             _ => unreachable!(),
