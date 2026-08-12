@@ -2,9 +2,11 @@ use crate::session::*;
 use object::{Object, ObjectSection};
 use rustc_hash::FxHashSet;
 use std::{
-    borrow, error,
+    borrow,
     path::{self},
 };
+
+use thiserror;
 
 /*
  * Based on the 'simple_line' example from the gimli project.
@@ -13,14 +15,27 @@ use std::{
  * and integrated into the project's native debugger architecture.
  */
 
+#[derive(Debug, thiserror::Error)]
+pub enum DebugLineError {
+    #[error("Failed to load debug line section")]
+    LoadingSection(#[from] object::Error),
+
+    #[error("Failed to parse DWARF debug line")]
+    ParsingSection(#[from] gimli::Error),
+}
+
 /// Get details from dwarf and apply them to the debug session cache
-pub fn setup_session_cache(object: &object::File<'_>, session: &mut DebugSession) {
+pub fn setup_session_cache(
+    object: &object::File<'_>,
+    session: &mut DebugSession,
+) -> Result<(), DebugLineError> {
     let endian = if object.is_little_endian() {
         gimli::RunTimeEndian::Little
     } else {
         gimli::RunTimeEndian::Big
     };
-    update_session_cache(&object, endian, session).unwrap();
+    update_session_cache(&object, endian, session)?;
+    Ok(())
 }
 
 /// Update the BreakpointTarget and SourceLocation in the debug session cache
@@ -28,9 +43,9 @@ fn update_session_cache(
     object: &object::File,
     endian: gimli::RunTimeEndian,
     session: &mut DebugSession,
-) -> Result<(), Box<dyn error::Error>> {
+) -> Result<(), DebugLineError> {
     // Load a section and return as `Cow<[u8]>`.
-    let load_section = |id: gimli::SectionId| -> Result<borrow::Cow<[u8]>, Box<dyn error::Error>> {
+    let load_section = |id: gimli::SectionId| -> Result<borrow::Cow<[u8]>, DebugLineError> {
         Ok(match object.section_by_name(id.name()) {
             Some(section) => section.uncompressed_data()?,
             None => borrow::Cow::Borrowed(&[]),

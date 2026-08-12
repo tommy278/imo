@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 use crate::helpers::dwarf::debug_info::error::DebugInfoError;
+use crate::helpers::dwarf::debug_line::DebugLineError;
 
 #[derive(Error, Debug)]
 pub enum CacheSetupError {
@@ -12,4 +13,6 @@ pub enum CacheSetupError {
     MappingFile(#[from] std::io::Error),
     #[error("Failed to read debug info section")]
     DebugInfo(#[from] DebugInfoError),
+    #[error("Failed to read debug line section")]
+    DebugLine(#[from] DebugLineError),
 }
