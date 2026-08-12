@@ -362,10 +362,10 @@ impl DebugSession {
             })
         {
             let mut ctx = gimli::UnwindContext::new();
-            let mut table = fde.rows(&eh_frame, &base_addresses, &mut ctx).unwrap();
+            let mut table = fde.rows(&eh_frame, &base_addresses, &mut ctx).ok()?;
 
             let ra_register = fde.cie().return_address_register();
-            while let Some(row) = table.next_row().unwrap() {
+            while let Some(row) = table.next_row().ok()? {
                 let cfa_address = match row.cfa() {
                     gimli::CfaRule::RegisterAndOffset { register, offset } => {
                         let reg_value = self.get_register_value(*register);
@@ -609,14 +609,16 @@ impl DebugSession {
                         }
                     }
                 } else {
-                    let bp_file = bp.file.to_str().expect("Could not convert path");
-
-                    // Safe unwrap since this is the path where the file is Some
-                    if bp.line == line_number && bp_file.ends_with(file.unwrap()) {
-                        if let Some(removed_bp) = opt_bp.take() {
-                            cleared_breakpoints.push(removed_bp);
-                            bp_idx.push(idx + 1);
+                    if let Some(bp_file) = bp.file.to_str() {
+                        // Safe unwrap since this is the path where the file is Some
+                        if bp.line == line_number && bp_file.ends_with(file.unwrap()) {
+                            if let Some(removed_bp) = opt_bp.take() {
+                                cleared_breakpoints.push(removed_bp);
+                                bp_idx.push(idx + 1);
+                            }
                         }
+                    } else {
+                        eprintln!("[Warning] Failed to convert file path at index {}", idx)
                     }
                 }
             }
@@ -699,8 +701,10 @@ impl DebugSession {
 
     /// Create breakpoint(s) at a file on a given line number
     /// Returns the number of breakpoint targets that were found on the given line alongside the address/first target if multiple addresses exist
-    pub fn create_breakpoint(&mut self, line_number: u32, file: &Path) -> (u64, BreakpointTarget) {
-        let line_index = self.get_breakpoint_target(line_number).unwrap();
+    pub fn create_breakpoint(&mut self, line_number: u32, file: &Path) -> BreakpointMutationResult {
+        let Some(line_index) = self.get_breakpoint_target(line_number) else {
+            return BreakpointMutationResult::NotFound;
+        };
 
         let line_index: Vec<BreakpointTarget> = line_index
             .into_iter()
@@ -720,19 +724,10 @@ impl DebugSession {
                 file,
             )));
 
-        (bp_for_line, line_index[0].clone())
-    }
-
-    /// Get a breakpoint target at the address
-    pub fn find_line_ranges(&self, line_number: u32, file: StringId) -> Vec<u64> {
-        let line_index = self.get_breakpoint_target(line_number).unwrap();
-        let resolved_file_name = self.id_to_string(file);
-
-        line_index
-            .into_iter()
-            .filter(|bp| bp.file.to_str().unwrap() == resolved_file_name)
-            .map(|t| t.relative_address)
-            .collect()
+        BreakpointMutationResult::Created {
+            count: bp_for_line as u8,
+            target: line_index[0].clone(),
+        }
     }
 
     /// Get the current index of the breakpoint the user is currently on

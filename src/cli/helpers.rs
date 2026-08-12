@@ -49,6 +49,8 @@ pub fn handle_event_by_index<F>(
         interface::BreakpointMutationResult::NotFound => {
             println!("Could not {} breakpoint", action);
         }
+        // This is for creation which is not index based
+        _ => unreachable!(),
     }
 }
 
@@ -88,10 +90,16 @@ pub fn handle_breakpoint_setting(
     if unique_files.len() == 1 {
         // Input the first file name since they are all the same
         let default = line_index[0].file.as_ref();
-        let (bp_for_line, first_bp) = session.create_breakpoint(line_number, default);
+        let result = session.create_breakpoint(line_number, default);
 
-        handle_break_metadata(session, bp_for_line, first_bp, line_number);
-        return;
+        match result {
+            interface::BreakpointMutationResult::Created { count, target } => {
+                handle_break_metadata(session, count, target, line_number);
+                return;
+            }
+            interface::BreakpointMutationResult::NotFound => println!("Could not find breakpoint"),
+            _ => unreachable!(),
+        }
     }
 
     // All addresses are not the same file
@@ -127,14 +135,21 @@ pub fn handle_breakpoint_setting(
 
     let chosen_file = file_choices[index];
 
-    let (bp_for_line, first_bp) = session.create_breakpoint(line_number, chosen_file);
-    handle_break_metadata(session, bp_for_line, first_bp, line_number);
+    let result = session.create_breakpoint(line_number, chosen_file);
+    match result {
+        interface::BreakpointMutationResult::Created { count, target } => {
+            handle_break_metadata(session, count, target, line_number);
+            return;
+        }
+        interface::BreakpointMutationResult::NotFound => println!("Could not find breakpoint"),
+        _ => unreachable!(),
+    }
 }
 
 /// Create breakpoints and give user the data regarding them
 fn handle_break_metadata(
     session: &mut DebugSession,
-    bp_for_line: u64,
+    bp_for_line: u8,
     first_bp: interface::BreakpointTarget,
     line_number: u32,
 ) {

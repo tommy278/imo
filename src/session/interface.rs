@@ -68,6 +68,7 @@ impl std::fmt::Display for BreakpointData {
 
 #[derive(Debug)]
 pub enum BreakpointMutationResult {
+    Created { count: u8, target: BreakpointTarget },
     Updated,
     AlreadyInState,
     NotFound,
