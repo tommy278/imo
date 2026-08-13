@@ -5,8 +5,8 @@ use std::{
 
 use rustc_hash::FxHashSet;
 
-use crate::helpers::trim_file_path;
 use crate::session::{DebugSession, interface};
+use crate::{helpers::trim_file_path, session::error::SystemError};
 
 /// Flush so the print statement is immediately displayed on screen
 /// Used for print statement since its not flushed automcatically unlike println
@@ -170,4 +170,20 @@ fn handle_break_metadata(
         trimmed_path,
         location_detail
     );
+}
+
+pub fn handle_cmd<F>(is_idle: bool, func: F) -> bool
+where
+    F: FnOnce() -> Result<(), SystemError>,
+{
+    if is_idle {
+        println!("Session not started yet");
+        return false; // The Debugger is still idle the command did not execute
+    }
+
+    if let Err(err) = func() {
+        println!("{err}")
+    }
+
+    true // Notifying the caller to break / The command was successful
 }

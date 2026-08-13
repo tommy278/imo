@@ -3,7 +3,8 @@ pub mod helpers;
 use std::io;
 
 use crate::cli::helpers::{
-    flush_output, handle_breakpoint_clearing, handle_breakpoint_setting, handle_event_by_index,
+    flush_output, handle_breakpoint_clearing, handle_breakpoint_setting, handle_cmd,
+    handle_event_by_index,
 };
 use crate::session::DebugSession;
 
@@ -29,58 +30,47 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
             continue;
         };
 
+        let is_idle = session.is_idle();
+
         match part {
             "run" => {
-                if session.is_idle() {
+                if is_idle {
                     session.toggle_running();
-                    session.continue_session();
+                    if let Err(err) = session.continue_session() {
+                        println!("{err}")
+                    }
                     break;
                 } else {
                     println!("Session is already running")
                 }
             }
             "c" | "continue" => {
-                if !session.is_idle() {
-                    session.toggle_continue();
-                    session.continue_session();
+                session.toggle_continue();
+                if handle_cmd(is_idle, || session.continue_session()) {
                     break;
-                } else {
-                    println!("Session not started yet")
                 }
             }
             // Step a single instruction
             "si" | "stepi" => {
-                if !session.is_idle() {
-                    session.complete_single_step();
+                if handle_cmd(is_idle, || session.complete_single_step()) {
                     break;
-                } else {
-                    println!("Session not started yet")
                 }
             }
             // Step into
             "s" | "step" => {
-                if !session.is_idle() {
-                    session.begin_step_into();
+                if handle_cmd(is_idle, || session.begin_step_into()) {
                     break;
-                } else {
-                    println!("Session not started yet")
                 }
             }
             // Step Over / Next
             "n" | "next" => {
-                if !session.is_idle() {
-                    session.begin_step_over();
+                if handle_cmd(is_idle, || session.begin_step_over()) {
                     break;
-                } else {
-                    println!("Session not started yet")
                 }
             }
             "f" | "fin" | "finish" => {
-                if !session.is_idle() {
-                    session.begin_finish();
+                if handle_cmd(is_idle, || session.begin_finish()) {
                     break;
-                } else {
-                    println!("Session not started yet");
                 }
             }
             "b" | "break" => {
@@ -201,7 +191,9 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
             }
             "q" | "quit" => {
                 // End current debug session
-                session.kill_session();
+                if let Err(err) = session.kill_session() {
+                    eprintln!("{err}")
+                }
                 break;
             }
             _ => {
