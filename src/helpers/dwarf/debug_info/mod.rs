@@ -133,6 +133,20 @@ macro_rules! get_type {
     };
 }
 
+macro_rules! get_size {
+    ($ty:expr, $type_index: expr) => {
+        match $ty.dwarf_type.get_byte_size($type_index) {
+            Some(size) => size,
+            None => {
+                return Ok(Some(DebugValue::Err(format!(
+                    "Failed to get size of type: {:?}",
+                    $ty
+                ))))
+            }
+        }
+    };
+}
+
 macro_rules! get_value {
     ($fields:expr, $type_index:expr, $target_field:expr, $address: expr, $pid: expr) => {{
         let field = get_field!($fields, $target_field);
@@ -197,32 +211,32 @@ pub enum DwarfType {
 }
 
 impl DwarfType {
-    fn get_byte_size(&self, type_index: &FxHashMap<usize, TypeCacheNode>) -> u64 {
+    fn get_byte_size(&self, type_index: &FxHashMap<usize, TypeCacheNode>) -> Option<u64> {
         match self {
-            DwarfType::Base { byte_size, .. } => *byte_size,
+            DwarfType::Base { byte_size, .. } => Some(*byte_size),
 
             // Pointer has a fixed size
             // TODO: this changes on different systems
-            DwarfType::Pointer { .. } => 8,
+            DwarfType::Pointer { .. } => Some(8),
 
             // TODO: this will probably change
-            DwarfType::Const { .. } => 8,
+            DwarfType::Const { .. } => Some(8),
 
             // Recursively find the size and multiply by count all the way down
             DwarfType::Array {
                 count,
                 target_type_offset,
             } => {
-                let ty = type_index.get(target_type_offset).unwrap();
-                let resolved_size = ty.dwarf_type.get_byte_size(type_index);
+                let ty = type_index.get(target_type_offset)?;
+                let resolved_size = ty.dwarf_type.get_byte_size(type_index)?;
 
-                count * resolved_size
+                Some(count * resolved_size)
             }
 
-            DwarfType::Enum { byte_size, .. } => *byte_size,
+            DwarfType::Enum { byte_size, .. } => Some(*byte_size),
 
-            DwarfType::Structure { byte_size, .. } => *byte_size,
-            DwarfType::Variant { byte_size, .. } => *byte_size,
+            DwarfType::Structure { byte_size, .. } => Some(*byte_size),
+            DwarfType::Variant { byte_size, .. } => Some(*byte_size),
         }
     }
 
@@ -341,7 +355,7 @@ impl DwarfType {
                 let mut array = Vec::new();
                 let ty = get_type!(type_index, target_type_offset);
 
-                let offset_num = ty.dwarf_type.get_byte_size(type_index);
+                let offset_num = get_size!(ty, type_index);
 
                 for i in 0..*count {
                     let Some(var) = ty.dwarf_type.to_debug_value(
@@ -500,7 +514,7 @@ impl DwarfType {
                     let value = get_field!(generics, "T");
                     let ty = get_type!(type_index, &value.type_offset);
 
-                    let size = ty.dwarf_type.get_byte_size(type_index);
+                    let size = get_size!(ty, type_index);
 
                     if let (
                         Some(DebugValue::RawVecInner {
@@ -546,7 +560,10 @@ impl DwarfType {
                     .iter()
                     .filter(|field| {
                         if let Some(ty) = type_index.get(&field.type_offset) {
-                            ty.dwarf_type.get_byte_size(type_index) > 0
+                            let Some(size) = ty.dwarf_type.get_byte_size(type_index) else {
+                                return false;
+                            };
+                            size > 0
                         } else {
                             true
                         }
@@ -711,7 +728,9 @@ impl DebugVariable {
                         result = evaluation.resume_with_memory(value)?;
                     } else {
                         // NOTE: not sure how effectively this works because I cannot produce the case where the value does not have offset 0
-                        let ty = type_index.get(&offset).unwrap();
+                        let Some(ty) = type_index.get(&offset) else {
+                            return Ok(None);
+                        };
                         let Some(raw_value) =
                             ty.dwarf_type.to_debug_value(type_index, address, pid)?
                         else {
