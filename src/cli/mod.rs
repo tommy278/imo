@@ -4,7 +4,7 @@ use std::io;
 
 use crate::cli::helpers::{
     flush_output, handle_breakpoint_clearing, handle_breakpoint_setting, handle_cmd,
-    handle_event_by_index,
+    handle_event_by_index, parse_arg, parse_line_arg,
 };
 use crate::session::DebugSession;
 
@@ -30,11 +30,9 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
             continue;
         };
 
-        let is_idle = session.is_idle();
-
         match part {
             "run" => {
-                if is_idle {
+                if session.is_idle() {
                     session.toggle_running();
                     if let Err(err) = session.continue_session() {
                         println!("{err}")
@@ -45,41 +43,32 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 }
             }
             "c" | "continue" => {
-                session.toggle_continue();
-                if handle_cmd(is_idle, || session.continue_session()) {
+                if !session.is_idle() {
+                    session.toggle_running();
+                    if let Err(err) = session.continue_session() {
+                        println!("{err}")
+                    }
                     break;
+                } else {
+                    println!("Session is already running")
                 }
             }
             // Step a single instruction
-            "si" | "stepi" => {
-                if handle_cmd(is_idle, || session.complete_single_step()) {
-                    break;
-                }
-            }
+            "si" | "stepi" => handle_cmd!(session, session.complete_single_step()),
             // Step into
-            "s" | "step" => {
-                if handle_cmd(is_idle, || session.begin_step_into()) {
-                    break;
-                }
-            }
+            "s" | "step" => handle_cmd!(session, session.begin_step_into()),
             // Step Over / Next
-            "n" | "next" => {
-                if handle_cmd(is_idle, || session.begin_step_over()) {
-                    break;
-                }
-            }
-            "f" | "fin" | "finish" => {
-                if handle_cmd(is_idle, || session.begin_finish()) {
-                    break;
-                }
-            }
+            "n" | "next" => handle_cmd!(session, session.begin_step_over()),
+
+            "f" | "fin" | "finish" => handle_cmd!(session, session.begin_finish()),
+
             "b" | "break" => {
-                let arg = parts.next().expect("Did not provide a second argument");
+                let arg = parse_arg!(parts, "break");
 
                 // Handle setting breakpoint if filename and line_number are provided
                 // eg: break running_task:6
                 if let Some((file_name, line_number)) = arg.split_once(":") {
-                    let line_number = line_number.parse::<u32>().expect("Could not parse number");
+                    let line_number = parse_line_arg!(line_number, u32);
 
                     let line_index = session.get_specific_breakpoint_target(file_name, line_number);
                     handle_breakpoint_setting(session, &line_index, line_number);
@@ -87,65 +76,62 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
 
                 // Handle setting breakpoint if only line_number is provided
                 // eg: break 12
-                if let Ok(line_number) = arg.parse::<u32>() {
-                    let line_index = session.get_breakpoint_target(line_number).unwrap();
-                    handle_breakpoint_setting(session, &line_index, line_number);
-                }
+
+                let line_number = parse_line_arg!(arg, u32);
+                let line_index = session.get_breakpoint_target(line_number).unwrap();
+                handle_breakpoint_setting(session, &line_index, line_number);
             }
             "clear" => {
-                let arg = parts.next().expect("Did not provide a second argument");
+                let arg = parse_arg!(parts, "clear");
 
                 // Handle clearing breakpoint if filename and line_number are provided
                 // eg: clear running_task:6
                 if let Some((file_name, line_number)) = arg.split_once(":") {
-                    let line_number = line_number.parse::<u32>().expect("Could not parse number");
+                    let line_number = parse_line_arg!(line_number, u32);
                     handle_breakpoint_clearing(session, line_number, Some(file_name));
                 }
 
                 // Handle clearing breakpoint if only line_number is provided
                 // eg: clear 12
-                if let Ok(line_number) = arg.parse::<u32>() {
-                    handle_breakpoint_clearing(session, line_number, None);
-                }
+
+                let line_number = parse_line_arg!(arg, u32);
+                handle_breakpoint_clearing(session, line_number, None);
             }
             "d" | "delete" => {
-                let arg = parts.next().expect("No args");
+                let arg = parse_arg!(parts, "delete");
 
-                if let Ok(user_index) = arg.parse::<usize>() {
-                    handle_event_by_index(
-                        session,
-                        user_index,
-                        |s, idx| s.delete_breakpoint(idx),
-                        "delete",
-                    );
-                }
+                let user_index = parse_line_arg!(arg, usize);
+                handle_event_by_index(
+                    session,
+                    user_index,
+                    |s, idx| s.delete_breakpoint(idx),
+                    "delete",
+                );
             }
             "e" | "enable" => {
-                let arg = parts.next().expect("No args");
+                let arg = parse_arg!(parts, "enable");
 
-                if let Ok(user_index) = arg.parse::<usize>() {
-                    handle_event_by_index(
-                        session,
-                        user_index,
-                        |s, idx| s.enable_breakpoint(idx),
-                        "enable",
-                    );
-                }
+                let user_index = parse_line_arg!(arg, usize);
+                handle_event_by_index(
+                    session,
+                    user_index,
+                    |s, idx| s.enable_breakpoint(idx),
+                    "enable",
+                );
             }
             "dis" | "disable" => {
-                let arg = parts.next().expect("No args");
+                let arg = parse_arg!(parts, "disable");
 
-                if let Ok(user_index) = arg.parse::<usize>() {
-                    handle_event_by_index(
-                        session,
-                        user_index,
-                        |s, idx| s.disable_breakpoint(idx),
-                        "disable",
-                    );
-                }
+                let user_index = parse_line_arg!(arg, usize);
+                handle_event_by_index(
+                    session,
+                    user_index,
+                    |s, idx| s.disable_breakpoint(idx),
+                    "disable",
+                );
             }
             "i" | "info" => {
-                let arg = parts.next().expect("No args");
+                let arg = parse_arg!(parts, "info");
 
                 match arg {
                     "b" | "breakpoints" => {
@@ -167,7 +153,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                 }
             }
             "p" | "print" => {
-                let arg = parts.next().expect("No args");
+                let arg = parse_arg!(parts, "print");
 
                 let scope_result = session.find_current_scope();
 

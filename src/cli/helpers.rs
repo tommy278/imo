@@ -172,18 +172,50 @@ fn handle_break_metadata(
     );
 }
 
-pub fn handle_cmd<F>(is_idle: bool, func: F) -> bool
-where
-    F: FnOnce() -> Result<(), SystemError>,
-{
-    if is_idle {
-        println!("Session not started yet");
-        return false; // The Debugger is still idle the command did not execute
-    }
-
-    if let Err(err) = func() {
-        println!("{err}")
-    }
-
-    true // Notifying the caller to break / The command was successful
+#[macro_export]
+macro_rules! handle_cmd {
+    ($session:expr, $cmd_call:expr) => {
+        if $session.is_idle() {
+            println!("Session not started yet");
+        } else {
+            if let Err(err) = $cmd_call {
+                println!("{err}");
+            }
+            break;
+        }
+    };
 }
+
+#[macro_export]
+macro_rules! parse_line_arg {
+    ($line_str:expr, $target_type:ty) => {
+        match $line_str.parse::<$target_type>() {
+            Ok(num) => num,
+            Err(_) => {
+                println!(
+                    "Error: '{}' is not a valid {} value",
+                    $line_str,
+                    stringify!($target_type)
+                );
+                continue;
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! parse_arg {
+    ($parts:expr, $cmd: expr) => {
+        match $parts.next() {
+            Some(arg) => arg,
+            None => {
+                eprintln!("Error: '{}' requires a location", $cmd);
+                continue;
+            }
+        }
+    };
+}
+
+pub use crate::handle_cmd;
+pub use crate::parse_arg;
+pub use crate::parse_line_arg;
