@@ -5,35 +5,49 @@ use nix::unistd::{ForkResult, fork};
 
 use crate::cli::handle_user_debugger_menu;
 use crate::error::DebuggerError;
+use crate::session::linux::LinuxError;
 use crate::session::{CurrentStopCmd, DebugSession};
+
+macro_rules! wait {
+    ($child: expr) => {
+        waitpid($child, None).map_err(|e| LinuxError::Ptrace(e))
+    };
+}
+
+macro_rules! set_regs {
+    ($pid: expr, $regs: expr) => {
+        ptrace::setregs($pid, $regs).map_err(|e| LinuxError::Ptrace(e))
+    };
+}
 
 /// Begin the parent and child processes
 /// Child Process executes the binary
 /// Parent Process begins the loop that monitors child process
 pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
-    let fork_result = unsafe { fork() }.unwrap();
+    let fork_result = unsafe { fork() }.map_err(|e| LinuxError::Ptrace(e))?;
 
     match fork_result {
         ForkResult::Child => {
-            ptrace::traceme().unwrap();
+            ptrace::traceme().map_err(|e| LinuxError::Ptrace(e))?;
 
             // Stop child to avoid race condition with parent
-            raise(Signal::SIGSTOP).unwrap();
+            raise(Signal::SIGSTOP).map_err(|e| LinuxError::Ptrace(e))?;
 
-            let path = std::ffi::CString::new(binary_path).unwrap();
+            let path = std::ffi::CString::new(binary_path).map_err(|e| LinuxError::CString(e))?;
 
             let err = nix::unistd::execv(&path, &[&path]).unwrap_err();
-            panic!("Failed to execute process: {}", err);
+            eprintln!("Failed to execute process: {}", err);
+            Ok(())
         }
         ForkResult::Parent { child } => {
             // Catch the initial SIGSTOP from the child
-            let _status_1 = waitpid(child, None).unwrap();
+            let _status_1 = wait!(child)?;
 
             // Tell child to continue to the execv call
-            ptrace::cont(child, None).unwrap();
+            ptrace::cont(child, None).map_err(|e| LinuxError::Ptrace(e))?;
 
             // Catch the automatic SIGTRAP generated after execv finishes loading
-            let _status_2 = waitpid(child, None).unwrap();
+            let _status_2 = wait!(child)?;
 
             // Setup session cache
             let mut session = DebugSession::new(child, binary_path)?;
@@ -48,7 +62,7 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
                     handle_user_debugger_menu(&mut session);
                 }
 
-                let status = waitpid(child, None).unwrap();
+                let status = wait!(child)?;
                 match status {
                     WaitStatus::Exited(_, code) => {
                         return Err(DebuggerError::Exit(code));
@@ -71,7 +85,7 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
                                         // Location is not valid so step until a valid one is found
                                         let Some(current_location) = session.current_location()
                                         else {
-                                            session.single_step();
+                                            session.single_step()?;
                                             continue;
                                         };
 
@@ -82,7 +96,7 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
                                             session.current_cmd = CurrentStopCmd::Completed;
                                         } else {
                                             // Still on the same location keep going
-                                            session.single_step();
+                                            session.single_step()?;
                                         }
                                     }
                                     CurrentStopCmd::StepOver {
@@ -103,12 +117,12 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
                                             let Some(line_row) = session
                                                 .find_line_range(regs.rip - session.base_address)
                                             else {
-                                                session.single_step();
+                                                session.single_step()?;
                                                 continue;
                                             };
 
                                             if !line_row.is_stmt {
-                                                session.single_step();
+                                                session.single_step()?;
                                                 continue;
                                             }
 
@@ -121,7 +135,7 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
                                                 {
                                                     session.current_cmd = CurrentStopCmd::Completed;
                                                 } else {
-                                                    session.single_step();
+                                                    session.single_step()?;
                                                 }
                                                 continue;
                                             } else {
@@ -135,7 +149,7 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
                                                 {
                                                     session.current_cmd = CurrentStopCmd::Completed;
                                                 } else {
-                                                    session.single_step();
+                                                    session.single_step()?;
                                                 }
                                                 continue;
                                             }
@@ -144,7 +158,7 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
                                             // In that case get the return address and continue there
                                             let Some(return_address) = session.get_return_address()
                                             else {
-                                                session.single_step();
+                                                session.single_step()?;
                                                 continue;
                                             };
 
@@ -158,7 +172,7 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
                                                 return_address,
                                                 started_from_inline,
                                             };
-                                            session.continue_session();
+                                            session.continue_session()?;
                                         }
                                     }
                                     CurrentStopCmd::StepOut {
@@ -177,7 +191,7 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
                                         session.clear_specific_breakpoint(relative_address);
 
                                         regs.rip = breakpoint_addr;
-                                        ptrace::setregs(pid, regs).unwrap();
+                                        set_regs!(pid, regs)?;
                                         session.registers =
                                             Some(crate::interface::RegisterViewer { regs });
 
@@ -189,10 +203,10 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
                                                 original_line,
                                                 started_from_inline,
                                             };
-                                            session.single_step();
+                                            session.single_step()?;
                                         } else {
                                             // If we are at a different breakpoint continue till we reach the target
-                                            session.continue_session();
+                                            session.continue_session()?;
                                         }
                                     }
                                     CurrentStopCmd::FinishStepOver {
@@ -210,7 +224,7 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
                                                 start_line: original_line,
                                                 started_from_inline,
                                             };
-                                            session.single_step();
+                                            session.single_step()?;
                                         } else {
                                             session.current_cmd = CurrentStopCmd::Completed;
                                         }
@@ -230,13 +244,13 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
                                             if !session.metadata.is_in_inline(pc) {
                                                 session.current_cmd = CurrentStopCmd::Completed;
                                             } else {
-                                                session.single_step();
+                                                session.single_step()?;
                                             }
                                             continue;
                                         } else {
                                             let Some(return_address) = session.get_return_address()
                                             else {
-                                                session.single_step();
+                                                session.single_step()?;
                                                 continue;
                                             };
 
@@ -248,7 +262,7 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
                                                 original_stack_pointer: start_stack_pointer,
                                                 started_from_inline,
                                             };
-                                            session.continue_session();
+                                            session.continue_session()?;
                                         }
                                     }
 
@@ -266,7 +280,7 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
                                         session.clear_specific_breakpoint(relative_address);
 
                                         regs.rip = breakpoint_addr;
-                                        ptrace::setregs(pid, regs).unwrap();
+                                        set_regs!(pid, regs)?;
 
                                         session.registers =
                                             Some(crate::interface::RegisterViewer { regs });
@@ -276,10 +290,10 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
                                                 start_stack_pointer: original_stack_pointer,
                                                 started_from_inline: started_from_inline,
                                             };
-                                            session.single_step();
+                                            session.single_step()?;
                                         } else {
                                             // If we are at a different breakpoint continue till we reach the target
-                                            session.continue_session();
+                                            session.continue_session()?;
                                         }
                                     }
 
@@ -294,7 +308,7 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
                                                 start_stack_pointer,
                                                 started_from_inline,
                                             };
-                                            session.single_step();
+                                            session.single_step()?;
                                         } else {
                                             session.current_cmd = CurrentStopCmd::Completed;
                                         }
@@ -305,7 +319,7 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
                                             session.current_cmd = CurrentStopCmd::Completed;
                                         } else {
                                             // Location is not valid continue searching
-                                            session.single_step();
+                                            session.single_step()?;
                                         }
                                     }
                                     CurrentStopCmd::Running | CurrentStopCmd::Continuing => {
@@ -329,7 +343,7 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
                                                     regs.rip = breakpoint_addr;
 
                                                     // Update pid register for future instruction continuation
-                                                    ptrace::setregs(pid, regs).unwrap();
+                                                    set_regs!(pid, regs)?;
 
                                                     session.registers =
                                                         Some(crate::interface::RegisterViewer {
@@ -351,7 +365,7 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
                                                     "Failed to read child's memory: {:?}",
                                                     err
                                                 );
-                                                ptrace::cont(pid, None).unwrap();
+                                                session.continue_session()?;
                                             }
                                         }
                                     }
@@ -361,7 +375,7 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
                                 }
                             } else {
                                 // Forward other unexpected signals (like SIGINT, SIGSEGV) to the child
-                                ptrace::cont(pid, sig).unwrap();
+                                ptrace::cont(pid, sig).map_err(|e| LinuxError::Ptrace(e))?;
                             }
                         }
                     }
@@ -369,7 +383,7 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
                         println!("Child process was killed by {:?} signal", sig);
                         return Ok(());
                     }
-                    _ => ptrace::cont(child, None).unwrap(),
+                    _ => session.continue_session()?,
                 }
             }
         }

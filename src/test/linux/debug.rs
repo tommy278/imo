@@ -16,12 +16,6 @@ fn test_path(path: &str) {
 
     if let Err(err) = linux::debug(&dir) {
         eprintln!("{}", err);
-
-        let mut source = err.source();
-        while let Some(underlying_err) = source {
-            eprintln!(" Caused by: {}", underlying_err);
-            source = underlying_err.source();
-        }
     }
 }
 
@@ -39,7 +33,7 @@ fn multiple() {
 
 #[test]
 fn rust_with_vars() {
-    test_path("./rust_with_vars/rust_with_vars");
+    test_path("./rust_with_vars/rust_with_varssss");
 }
 
 #[test]

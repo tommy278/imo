@@ -400,10 +400,9 @@ impl DwarfType {
             }
             DwarfType::Variant {
                 name,
-                byte_size,
-                alignment,
                 discr_member_offset,
                 variants,
+                ..
             } => {
                 let tag_byte = if let Some(discr_member_offset) = discr_member_offset {
                     let tag = os::peek_data(pid, address + discr_member_offset)? as u8;
@@ -490,10 +489,9 @@ impl DwarfType {
             }
             DwarfType::Structure {
                 name,
-                byte_size,
-                alignment,
                 generics,
                 fields,
+                ..
             } => {
                 // Handle base case for known rust types
                 if name == "String" {
@@ -746,10 +744,7 @@ impl DebugVariable {
                         result = evaluation.resume_with_memory(value)?;
                     }
                 }
-                gimli::EvaluationResult::RequiresRegister {
-                    register,
-                    base_type,
-                } => {
+                gimli::EvaluationResult::RequiresRegister { .. } => {
                     todo!()
                 }
                 _ => todo!("Other result : {:?}", result),

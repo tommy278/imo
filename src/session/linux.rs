@@ -91,4 +91,6 @@ pub enum LinuxError {
     Ptrace(#[from] nix::errno::Errno),
     #[error("Failed to read bytes at given address")]
     ByteRead,
+    #[error("Failed to create C string: {0}")]
+    CString(#[from] std::ffi::NulError),
 }
