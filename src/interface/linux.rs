@@ -1,3 +1,4 @@
+use crate::session::linux::{self, LinuxError};
 use nix::sys::ptrace;
 use nix::unistd::Pid;
 
@@ -20,9 +21,9 @@ impl BreakPoint {
     }
 
     /// Overwrite the lowest byte with 0xCC (INT3) while saving the original byte
-    pub fn enable(&mut self, pid: Pid) {
+    pub fn enable(&mut self, pid: Pid) -> Result<(), LinuxError> {
         // Read the current memory word
-        let word = ptrace::read(pid, self.addr as ptrace::AddressType).unwrap();
+        let word = linux::peek_data(pid, self.addr)?;
 
         // Save the original lowest byte
         self.original_byte = (word & 0xFF) as u8;
@@ -31,20 +32,24 @@ impl BreakPoint {
         let breakpoint_word = (word & !0xFF) | 0xCC;
 
         // Write word back to child memory
-        ptrace::write(pid, self.addr as ptrace::AddressType, breakpoint_word).unwrap();
+        ptrace::write(pid, self.addr as ptrace::AddressType, breakpoint_word)?;
         self.is_enabled = true;
+
+        Ok(())
     }
 
     /// Swaps 0xCC out, puts original byte back
-    pub fn disable(&mut self, pid: Pid) {
+    pub fn disable(&mut self, pid: Pid) -> Result<(), LinuxError> {
         if !self.is_enabled {
-            return;
+            return Ok(());
         }
 
-        let word = ptrace::read(pid, self.addr as ptrace::AddressType).unwrap();
+        let word = linux::peek_data(pid, self.addr)?;
         let restored_word = (word & !0xFF) | (self.original_byte as i64);
 
-        ptrace::write(pid, self.addr as ptrace::AddressType, restored_word).unwrap();
+        ptrace::write(pid, self.addr as ptrace::AddressType, restored_word)?;
         self.is_enabled = false;
+
+        Ok(())
     }
 }

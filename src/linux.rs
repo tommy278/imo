@@ -164,7 +164,7 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
 
                                             let relative_address =
                                                 session.get_relative_address(return_address);
-                                            session.create_specific_breakpoint(relative_address);
+                                            session.create_specific_breakpoint(relative_address)?;
                                             session.current_cmd = CurrentStopCmd::StepOut {
                                                 original_stack_pointer: start_stack_pointer,
                                                 original_file: start_file,
@@ -188,7 +188,7 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
 
                                         let relative_address =
                                             session.get_relative_address(breakpoint_addr);
-                                        session.clear_specific_breakpoint(relative_address);
+                                        session.clear_specific_breakpoint(relative_address)?;
 
                                         regs.rip = breakpoint_addr;
                                         set_regs!(pid, regs)?;
@@ -256,7 +256,7 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
 
                                             let relative_address =
                                                 session.get_relative_address(return_address);
-                                            session.create_specific_breakpoint(relative_address);
+                                            session.create_specific_breakpoint(relative_address)?;
                                             session.current_cmd = CurrentStopCmd::StepOutFinish {
                                                 return_address,
                                                 original_stack_pointer: start_stack_pointer,
@@ -277,7 +277,7 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
 
                                         let relative_address =
                                             session.get_relative_address(breakpoint_addr);
-                                        session.clear_specific_breakpoint(relative_address);
+                                        session.clear_specific_breakpoint(relative_address)?;
 
                                         regs.rip = breakpoint_addr;
                                         set_regs!(pid, regs)?;

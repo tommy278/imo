@@ -1,5 +1,3 @@
-use std::error::Error;
-
 use crate::linux;
 
 /// Run the test on the path only given the path from the linux directory
@@ -33,7 +31,7 @@ fn multiple() {
 
 #[test]
 fn rust_with_vars() {
-    test_path("./rust_with_vars/rust_with_varssss");
+    test_path("./rust_with_vars/rust_with_vars");
 }
 
 #[test]
