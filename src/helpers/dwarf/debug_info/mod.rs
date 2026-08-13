@@ -105,6 +105,47 @@ pub struct Enumerator {
     value: u64,
 }
 
+macro_rules! get_field {
+    ($fields:expr, $target_field:expr) => {
+        match $fields.iter().find(|f| f.name == $target_field) {
+            Some(field) => field,
+            None => {
+                return Ok(Some(DebugValue::Err(format!(
+                    "Failed to get field: {}",
+                    $target_field
+                ))))
+            }
+        }
+    };
+}
+
+macro_rules! get_type {
+    ($type_index:expr, $offset:expr) => {
+        match $type_index.get($offset) {
+            Some(field) => field,
+            None => {
+                return Ok(Some(DebugValue::Err(format!(
+                    "Failed to get type at offset: {}",
+                    $offset
+                ))))
+            }
+        }
+    };
+}
+
+macro_rules! get_value {
+    ($fields:expr, $type_index:expr, $target_field:expr, $address: expr, $pid: expr) => {{
+        let field = get_field!($fields, $target_field);
+        let ty = get_type!($type_index, &field.type_offset);
+
+        let value = ty
+            .dwarf_type
+            .to_debug_value($type_index, $address + field.location, $pid)?;
+
+        value
+    }};
+}
+
 /// Store different variations of data that can be generated from the dwarf data
 #[derive(Debug)]
 pub enum DwarfType {
@@ -184,9 +225,7 @@ impl DwarfType {
             DwarfType::Variant { byte_size, .. } => *byte_size,
         }
     }
-}
 
-impl DwarfType {
     pub fn get_name(&self) -> String {
         match self {
             DwarfType::Base { name, .. } => name.to_owned(),
@@ -198,6 +237,7 @@ impl DwarfType {
             DwarfType::Variant { name, .. } => name.to_owned(),
         }
     }
+
     pub fn to_debug_value(
         &self,
         type_index: &FxHashMap<usize, TypeCacheNode>,
@@ -276,7 +316,7 @@ impl DwarfType {
             } => {
                 let raw_data = os::peek_data(pid, address)?;
                 if let Some(name) = name {
-                    let ty = type_index.get(target_type_offset).unwrap();
+                    let ty = get_type!(type_index, target_type_offset);
                     let Some(val) =
                         ty.dwarf_type
                             .to_debug_value(type_index, raw_data as u64, pid)?
@@ -299,14 +339,14 @@ impl DwarfType {
                 count,
             } => {
                 let mut array = Vec::new();
-                let ty = type_index.get(target_type_offset).unwrap();
+                let ty = get_type!(type_index, target_type_offset);
 
                 let offset_num = ty.dwarf_type.get_byte_size(type_index);
 
                 for i in 0..*count {
                     let Some(var) = ty.dwarf_type.to_debug_value(
                         type_index,
-                        address + offset_num as u64,
+                        address + offset_num * i as u64,
                         pid,
                     )?
                     else {
@@ -373,7 +413,7 @@ impl DwarfType {
 
                 if let Some(active_variant) = active_variant {
                     if let Some(field_def) = active_variant.fields.first() {
-                        let ty = type_index.get(&field_def.type_offset).unwrap();
+                        let ty = get_type!(type_index, &field_def.type_offset);
 
                         let inner_name = ty.dwarf_type.get_name();
 
@@ -443,14 +483,7 @@ impl DwarfType {
             } => {
                 // Handle base case for known rust types
                 if name == "String" {
-                    let vec_field = fields.iter().find(|f| f.name == "vec").unwrap();
-                    let vec_ty = type_index.get(&vec_field.type_offset).unwrap();
-
-                    let buffer = vec_ty.dwarf_type.to_debug_value(
-                        type_index,
-                        address + vec_field.location,
-                        pid,
-                    )?;
+                    let buffer = get_value!(fields, type_index, "vec", address, pid);
 
                     if let Some(DebugValue::Vec(buf)) = buffer {
                         let raw_values = to_buffer(&buf);
@@ -461,26 +494,11 @@ impl DwarfType {
                 }
 
                 if name.starts_with("Vec<") {
-                    let len_field = fields.iter().find(|f| f.name == "len").unwrap();
-                    let len_ty = type_index.get(&len_field.type_offset).unwrap();
+                    let len = get_value!(fields, type_index, "len", address, pid);
+                    let buf = get_value!(fields, type_index, "buf", address, pid);
 
-                    let len = len_ty.dwarf_type.to_debug_value(
-                        type_index,
-                        address + len_field.location,
-                        pid,
-                    )?;
-
-                    let buf_field = fields.iter().find(|f| f.name == "buf").unwrap();
-                    let buf_ty = type_index.get(&buf_field.type_offset).unwrap();
-
-                    let buf = buf_ty.dwarf_type.to_debug_value(
-                        type_index,
-                        address + buf_field.location,
-                        pid,
-                    )?;
-
-                    let value = generics.iter().find(|g| g.name == "T").unwrap();
-                    let ty = type_index.get(&value.type_offset).unwrap();
+                    let value = get_field!(generics, "T");
+                    let ty = get_type!(type_index, &value.type_offset);
 
                     let size = ty.dwarf_type.get_byte_size(type_index);
 
@@ -510,23 +528,8 @@ impl DwarfType {
                 }
 
                 if name == "RawVecInner<alloc::alloc::Global>" {
-                    let ptr_field = fields.iter().find(|f| f.name == "ptr").unwrap();
-                    let ptr_ty = type_index.get(&ptr_field.type_offset).unwrap();
-
-                    let heap_pointer = ptr_ty.dwarf_type.to_debug_value(
-                        type_index,
-                        address + ptr_field.location,
-                        pid,
-                    )?;
-
-                    let cap_field = fields.iter().find(|f| f.name == "cap").unwrap();
-                    let cap_ty = type_index.get(&cap_field.type_offset).unwrap();
-
-                    let capacity = cap_ty.dwarf_type.to_debug_value(
-                        type_index,
-                        address + cap_field.location,
-                        pid,
-                    )?;
+                    let heap_pointer = get_value!(fields, type_index, "ptr", address, pid);
+                    let capacity = get_value!(fields, type_index, "cap", address, pid);
 
                     if let (Some(DebugValue::Pointer(ptr)), Some(DebugValue::Usize(cap))) =
                         (heap_pointer, capacity)
@@ -566,7 +569,7 @@ impl DwarfType {
                 let mut values = Vec::new();
 
                 for field in fields {
-                    let ty = type_index.get(&field.type_offset).unwrap();
+                    let ty = get_type!(type_index, &field.type_offset);
 
                     let Some(value) =
                         ty.dwarf_type

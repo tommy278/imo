@@ -12,6 +12,7 @@ use crate::helpers::dwarf::{
     self,
     debug_frame::{RawDebugFrame, setup_session_debug_frame},
     debug_info::{ActiveVariablesContext, DebuggerMetadataCache},
+    error::CacheSetupError,
 };
 use crate::interface::{DebugValue, RegisterViewer};
 use crate::session::error::SystemError;
@@ -258,7 +259,7 @@ impl DebugSession {
         let mmap = unsafe { memmap2::Mmap::map(&file)? };
         let object = object::File::parse(&*mmap)?;
 
-        session.update_process_base_address();
+        session.update_process_base_address()?;
 
         session.metadata = DebuggerMetadataCache::new(&object)?;
 
@@ -508,8 +509,9 @@ impl DebugSession {
     }
 
     /// Get and update the process base address
-    pub fn update_process_base_address(&mut self) {
-        self.base_address = os::get_process_base_address(self.pid);
+    pub fn update_process_base_address(&mut self) -> Result<(), CacheSetupError> {
+        self.base_address = os::get_process_base_address(self.pid)?;
+        Ok(())
     }
 
     // =================================================================

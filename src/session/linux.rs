@@ -11,16 +11,16 @@ pub type PlatformBreakpoint = crate::interface::linux::BreakPoint;
 pub type PlatformRegStruct = user_regs_struct;
 
 /// Get process base address
-pub fn get_process_base_address(pid: ProcessId) -> u64 {
+pub fn get_process_base_address(pid: ProcessId) -> Result<u64, CacheSetupError> {
     let maps_path = format!("/proc/{}/maps", pid);
     if let Ok(content) = read_to_string(maps_path) {
         if let Some(first_line) = content.lines().next() {
             if let Some(base_str) = first_line.split('-').next() {
-                return u64::from_str_radix(base_str, 16).unwrap_or_default();
+                return u64::from_str_radix(base_str, 16).map_err(|_| CacheSetupError::BaseAddress);
             }
         }
     }
-    0
+    Err(CacheSetupError::BaseAddress)
 }
 
 /// Continue debug session
@@ -76,17 +76,19 @@ pub fn read_bytes(
         return Ok(buffer);
     }
 
-    Err(LinuxError::ByteReadError)
+    Err(LinuxError::ByteRead)
 }
 
 // Linux specific errors
 
 use thiserror::Error;
 
+use crate::helpers::dwarf::error::CacheSetupError;
+
 #[derive(Debug, Error)]
 pub enum LinuxError {
     #[error("Failed to execute ptrace command. Errno: {0}")]
-    PtraceError(#[from] nix::errno::Errno),
+    Ptrace(#[from] nix::errno::Errno),
     #[error("Failed to read bytes at given address")]
-    ByteReadError,
+    ByteRead,
 }

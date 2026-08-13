@@ -135,6 +135,10 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
 
                 match arg {
                     "b" | "breakpoints" => {
+                        if session.breakpoint_index_tracker.is_empty() {
+                            println!("No breakpoint found");
+                            continue;
+                        }
                         for (idx, bp) in session.breakpoint_index_tracker.iter().enumerate() {
                             // NOTE: User index is 1 based
                             if let Some(bp) = bp {
@@ -148,7 +152,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession) {
                         println!("{}", regs);
                     }
                     _ => {
-                        todo!()
+                        println!("Not handled yet")
                     }
                 }
             }
