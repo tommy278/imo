@@ -187,7 +187,7 @@ macro_rules! handle_cmd {
             if let Err(err) = $cmd_call {
                 println!("{err}");
             }
-            break;
+            return Ok(());
         }
     };
 }

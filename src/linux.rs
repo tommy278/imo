@@ -2,6 +2,7 @@ use nix::sys::ptrace;
 use nix::sys::signal::{Signal, raise};
 use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::{ForkResult, fork};
+use rustyline::DefaultEditor;
 
 use crate::cli::handle_user_debugger_menu;
 use crate::error::DebuggerError;
@@ -23,7 +24,7 @@ macro_rules! set_regs {
 /// Begin the parent and child processes
 /// Child Process executes the binary
 /// Parent Process begins the loop that monitors child process
-pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
+pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerError> {
     let fork_result = unsafe { fork() }.map_err(|e| LinuxError::Ptrace(e))?;
 
     match fork_result {
@@ -53,13 +54,13 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
             let mut session = DebugSession::new(child, binary_path)?;
 
             // Handle initial user input
-            handle_user_debugger_menu(&mut session);
+            handle_user_debugger_menu(&mut session, rl)?;
 
             // Enter the event execution loop
             loop {
                 if session.current_cmd.is_completed() {
                     println!("{:?}", session.current_location());
-                    handle_user_debugger_menu(&mut session);
+                    handle_user_debugger_menu(&mut session, rl)?;
                 }
 
                 let status = wait!(child)?;
@@ -351,13 +352,13 @@ pub fn debug(binary_path: &str) -> Result<(), DebuggerError> {
                                                         });
 
                                                     // Replace the 0xCC (INT3) back with the previous instruction
-                                                    bp.breakpoint.disable(pid);
+                                                    bp.breakpoint.disable(pid)?;
 
                                                     // Open interactive menu
-                                                    handle_user_debugger_menu(&mut session);
+                                                    handle_user_debugger_menu(&mut session, rl)?;
                                                 } else {
                                                     // It was probably a SIGTRAP from the step
-                                                    handle_user_debugger_menu(&mut session);
+                                                    handle_user_debugger_menu(&mut session, rl)?;
                                                 }
                                             }
                                             Err(err) => {

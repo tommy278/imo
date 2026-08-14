@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 use std::process::exit;
 
+use rustyline::DefaultEditor;
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
@@ -27,9 +29,16 @@ fn main() {
         exit(1);
     }
 
+    let Ok(mut rl) = DefaultEditor::new() else {
+        eprintln!("Failed to create editor instance");
+        return;
+    };
+
     #[cfg(target_os = "linux")]
     {
-        imo::linux::debug(target_binary);
+        if let Err(e) = imo::linux::debug(&mut rl, target_binary) {
+            eprintln!("{e}");
+        }
     }
 
     #[cfg(not(target_os = "linux"))]

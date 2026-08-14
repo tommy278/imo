@@ -7,6 +7,9 @@ pub enum DebuggerError {
     #[error("Failed to set up cache: {0}")]
     Cache(#[from] dwarf::error::CacheSetupError),
 
+    #[error("Failed to read line: {0}")]
+    ReadLine(#[from] rustyline::error::ReadlineError),
+
     #[error("Failed to perform system command: {0}")]
     System(#[from] SystemError),
 

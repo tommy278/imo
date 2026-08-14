@@ -1,3 +1,5 @@
+use rustyline::DefaultEditor;
+
 use crate::linux;
 
 /// Run the test on the path only given the path from the linux directory
@@ -12,7 +14,12 @@ fn test_path(path: &str) {
     let internal_dir = format!("/src/test/linux/{}", formatted_path);
     dir.push_str(&internal_dir);
 
-    if let Err(err) = linux::debug(&dir) {
+    let Ok(mut rl) = DefaultEditor::new() else {
+        eprintln!("Failed to create editor instance");
+        return;
+    };
+
+    if let Err(err) = linux::debug(&mut rl, &dir) {
         eprintln!("{}", err);
     }
 }
