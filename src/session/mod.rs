@@ -6,7 +6,9 @@ pub mod error;
 
 use gimli::UnwindSection;
 use rustc_hash::FxHashMap;
-use std::path::Path;
+use std::fs;
+use std::io::{BufRead, BufReader};
+use std::path::{Path, PathBuf};
 
 use crate::helpers::dwarf::{
     self,
@@ -86,10 +88,40 @@ impl ManagedBreakpoint {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct SourceLocation {
     pub file: StringId,
     pub line: u32,
+}
+
+#[derive(Default, Debug)]
+pub struct SourceCodeCache {
+    pub entries: FxHashMap<PathBuf, Vec<String>>,
+}
+
+impl SourceCodeCache {
+    pub fn get_line_entry(&self, path: &Path, line: u32) -> Option<&String> {
+        if let Some(entry) = self.entries.get(path) {
+            return entry.get(line as usize);
+        }
+
+        None
+    }
+
+    pub fn create_line_entry(&mut self, path: &Path, line: u32) -> Option<String> {
+        if !path.exists() {
+            return None;
+        }
+
+        let file = fs::File::open(path).unwrap();
+        let reader = BufReader::new(file);
+
+        let line_entry: Vec<String> = reader.lines().map(|l| l.unwrap()).collect();
+        let source_line = line_entry.get(line as usize).cloned();
+        self.entries.insert(path.into(), line_entry);
+
+        source_line
+    }
 }
 
 // The command to be ran when the debugger hits a sigtrap
@@ -207,6 +239,8 @@ pub struct DebugSession {
     // A global arena to consolidate repetitive string allocations into one location
     pub interner: StringInterner,
 
+    pub source_file: SourceCodeCache,
+
     // Metdata
     pub metadata: DebuggerMetadataCache,
 
@@ -237,6 +271,7 @@ impl DebugSession {
             current_cmd: CurrentStopCmd::default(),
             active_breakpoints: FxHashMap::default(),
             interner: StringInterner::default(),
+            source_file: SourceCodeCache::default(),
             line_row: Vec::new(),
             registers: None,
             pid,
@@ -498,6 +533,21 @@ impl DebugSession {
         let abs = self.current_instruction_pointer().ok()?;
         let rel_addr = self.get_relative_address(abs);
         self.get_location_with_address(rel_addr)
+    }
+
+    pub fn get_or_create_source_file(&mut self, path: &Path, line: u32) -> Option<String> {
+        if let Some(entry) = self.source_file.get_line_entry(path, line).cloned() {
+            return Some(entry);
+        }
+        self.source_file.create_line_entry(path, line)
+    }
+
+    pub fn get_current_source_file(&mut self) -> Option<String> {
+        let current_location = self.current_location().copied()?;
+        let path_string = self.interner.get_string(current_location.file)?;
+        let path = Path::new(&path_string);
+
+        self.get_or_create_source_file(path, current_location.line)
     }
 
     /// Move forward from the specified stop

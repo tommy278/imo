@@ -59,7 +59,7 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
             // Enter the event execution loop
             loop {
                 if session.current_cmd.is_completed() {
-                    println!("{:?}", session.current_location());
+                    println!("{:?}", session.get_current_source_file());
                     handle_user_debugger_menu(&mut session, rl)?;
                 }
 
