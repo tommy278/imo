@@ -61,8 +61,16 @@ pub fn handle_breakpoint_clearing(
     line_number: u32,
     file: Option<&str>,
 ) {
-    let bp = session.clear_breakpoint(line_number, file);
-    println!("{:?}", bp);
+    match session.clear_breakpoint(line_number, file) {
+        Ok(bp) => {
+            if bp.is_empty() {
+                println!("No breakpoint cleared");
+                return;
+            }
+            println!("{:?}", bp)
+        }
+        Err(e) => eprintln!("{e}"),
+    }
 }
 
 pub fn handle_breakpoint_setting(
@@ -71,7 +79,8 @@ pub fn handle_breakpoint_setting(
     line_number: u32,
 ) {
     if line_index.is_empty() {
-        panic!("Error occured creating session")
+        println!("Cannot set breakpoint at target");
+        return;
     }
 
     let unique_files: FxHashSet<&Path> = line_index

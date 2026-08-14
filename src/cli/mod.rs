@@ -61,12 +61,13 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
 
                         // Handle setting breakpoint if filename and line_number are provided
                         // eg: break running_task:6
-                        if let Some((file_name, line_number)) = arg.split_once(":") {
-                            let line_number = parse_line_arg!(line_number, u32);
+                        if let Some((file_name, line_num)) = arg.split_once(":") {
+                            let line_number = parse_line_arg!(line_num, u32);
 
                             let line_index =
                                 session.get_specific_breakpoint_target(file_name, line_number);
                             handle_breakpoint_setting(session, &line_index, line_number);
+                            continue;
                         }
 
                         // Handle setting breakpoint if only line_number is provided
@@ -84,6 +85,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                         if let Some((file_name, line_number)) = arg.split_once(":") {
                             let line_number = parse_line_arg!(line_number, u32);
                             handle_breakpoint_clearing(session, line_number, Some(file_name));
+                            continue;
                         }
 
                         // Handle clearing breakpoint if only line_number is provided
