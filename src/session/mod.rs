@@ -118,10 +118,6 @@ impl SourceCodeCache {
         None
     }
 
-    pub fn entry_exists(&self, path: &Path) -> bool {
-        self.entries.get(path).is_some()
-    }
-
     pub fn create_and_get_line_entry(&mut self, path: &Path, line: u32) -> Option<&str> {
         if !path.exists() {
             return None;
@@ -560,8 +556,10 @@ impl DebugSession {
     }
 
     pub fn get_or_create_source_file(&mut self, path: &Path, line: u32) -> Option<&str> {
-        if self.source_file.entry_exists(path) {
-            return self.source_file.get_line_entry(path, line);
+        if let Some(entry) = self.source_file.get_line_entry(path, line) {
+            // Returning normally confuses compiler
+            // NOTE: This is safe because entry is guaranteed to exist simply casting it as a raw pointer
+            unsafe { return Some(&*(entry as *const str)) }
         }
         self.source_file.create_and_get_line_entry(path, line)
     }
