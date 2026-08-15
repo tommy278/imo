@@ -59,7 +59,13 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
             // Enter the event execution loop
             loop {
                 if session.current_cmd.is_completed() {
-                    println!("{:?}", session.get_current_source_file());
+                    if let Some(line) = session.get_current_source_file() {
+                        println!("{line}");
+                    } else {
+                        // TODO: Make this variant more descriptive
+                        // Maybe the path and line
+                        println!("Not found");
+                    }
                     handle_user_debugger_menu(&mut session, rl)?;
                 }
 
@@ -354,8 +360,7 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                                                     // Replace the 0xCC (INT3) back with the previous instruction
                                                     bp.breakpoint.disable(pid)?;
 
-                                                    // Open interactive menu
-                                                    handle_user_debugger_menu(&mut session, rl)?;
+                                                    session.current_cmd = CurrentStopCmd::Completed;
                                                 } else {
                                                     // It was probably a SIGTRAP from the step
                                                     handle_user_debugger_menu(&mut session, rl)?;

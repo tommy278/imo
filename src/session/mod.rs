@@ -94,21 +94,35 @@ pub struct SourceLocation {
     pub line: u32,
 }
 
+#[derive(Debug, Default)]
+pub struct SourceCodeInfo {
+    source_code: String,
+    line_offsets: Vec<usize>,
+}
+
 #[derive(Default, Debug)]
 pub struct SourceCodeCache {
-    pub entries: FxHashMap<PathBuf, Vec<String>>,
+    pub entries: FxHashMap<PathBuf, SourceCodeInfo>,
 }
 
 impl SourceCodeCache {
-    pub fn get_line_entry(&self, path: &Path, line: u32) -> Option<&String> {
+    pub fn get_line_entry(&self, path: &Path, line: u32) -> Option<&str> {
         if let Some(entry) = self.entries.get(path) {
-            return entry.get(line as usize);
+            let index = line.saturating_sub(1) as usize;
+            let line_offset = entry.line_offsets.get(index)?;
+            let next_line_offset = entry.line_offsets.get(index + 1)?;
+
+            return Some(&entry.source_code[*line_offset..*next_line_offset]);
         }
 
         None
     }
 
-    pub fn create_line_entry(&mut self, path: &Path, line: u32) -> Option<String> {
+    pub fn entry_exists(&self, path: &Path) -> bool {
+        self.entries.get(path).is_some()
+    }
+
+    pub fn create_and_get_line_entry(&mut self, path: &Path, line: u32) -> Option<&str> {
         if !path.exists() {
             return None;
         }
@@ -116,11 +130,21 @@ impl SourceCodeCache {
         let file = fs::File::open(path).unwrap();
         let reader = BufReader::new(file);
 
-        let line_entry: Vec<String> = reader.lines().map(|l| l.unwrap()).collect();
-        let source_line = line_entry.get(line as usize).cloned();
-        self.entries.insert(path.into(), line_entry);
+        let mut source_code: String = String::new();
+        let mut line_offsets: Vec<usize> = Vec::new();
 
-        source_line
+        for line in reader.lines() {
+            line_offsets.push(source_code.len());
+            source_code.push_str(line.ok()?.as_ref());
+        }
+
+        let source_code_info = SourceCodeInfo {
+            source_code,
+            line_offsets,
+        };
+
+        self.entries.insert(path.into(), source_code_info);
+        self.get_line_entry(path, line)
     }
 }
 
@@ -535,14 +559,14 @@ impl DebugSession {
         self.get_location_with_address(rel_addr)
     }
 
-    pub fn get_or_create_source_file(&mut self, path: &Path, line: u32) -> Option<String> {
-        if let Some(entry) = self.source_file.get_line_entry(path, line).cloned() {
-            return Some(entry);
+    pub fn get_or_create_source_file(&mut self, path: &Path, line: u32) -> Option<&str> {
+        if self.source_file.entry_exists(path) {
+            return self.source_file.get_line_entry(path, line);
         }
-        self.source_file.create_line_entry(path, line)
+        self.source_file.create_and_get_line_entry(path, line)
     }
 
-    pub fn get_current_source_file(&mut self) -> Option<String> {
+    pub fn get_current_source_file(&mut self) -> Option<&str> {
         let current_location = self.current_location().copied()?;
         let path_string = self.interner.get_string(current_location.file)?;
         let path = Path::new(&path_string);
