@@ -100,6 +100,45 @@ pub struct SourceCodeInfo {
     line_offsets: Vec<usize>,
 }
 
+pub enum SourceCodeDisplay<'a> {
+    FullyResolved {
+        source_code: &'a str,
+        line_number: u32,
+    },
+    PartiallyResolved {
+        path: Box<Path>,
+        line_number: u32,
+    },
+    CacheCorrupt {
+        id: StringId,
+    },
+    Unresolved,
+}
+
+impl std::fmt::Display for SourceCodeDisplay<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::FullyResolved {
+                source_code,
+                line_number,
+            } => write!(f, "{}\n{}", line_number, source_code)?,
+            Self::PartiallyResolved { path, line_number } => write!(
+                f,
+                "Could not locate {}. Line number: {}.",
+                path.display(),
+                line_number
+            )?,
+            Self::Unresolved => write!(f, "Could not resolve current location")?,
+            Self::CacheCorrupt { id } => write!(
+                f,
+                "Could not resolve string with id {:?}. Restarting session might fix this issue",
+                id
+            )?,
+        }
+        Ok(())
+    }
+}
+
 #[derive(Default, Debug)]
 pub struct SourceCodeCache {
     pub entries: FxHashMap<PathBuf, SourceCodeInfo>,
@@ -564,12 +603,31 @@ impl DebugSession {
         self.source_file.create_and_get_line_entry(path, line)
     }
 
-    pub fn get_current_source_file(&mut self) -> Option<&str> {
-        let current_location = self.current_location().copied()?;
-        let path_string = self.interner.get_string(current_location.file)?;
-        let path = Path::new(&path_string);
+    pub fn get_current_source_file(&mut self) -> SourceCodeDisplay<'_> {
+        let Some(current_location) = self.current_location().copied() else {
+            return SourceCodeDisplay::Unresolved;
+        };
 
-        self.get_or_create_source_file(path, current_location.line)
+        let Some(path_string) = self.interner.get_string(current_location.file) else {
+            return SourceCodeDisplay::CacheCorrupt {
+                id: current_location.file,
+            };
+        };
+
+        let path = Path::new(&path_string);
+        let line_number = current_location.line;
+
+        if let Some(source_code) = self.get_or_create_source_file(path, current_location.line) {
+            return SourceCodeDisplay::FullyResolved {
+                source_code,
+                line_number,
+            };
+        }
+
+        SourceCodeDisplay::PartiallyResolved {
+            path: Box::from(path),
+            line_number,
+        }
     }
 
     /// Move forward from the specified stop
