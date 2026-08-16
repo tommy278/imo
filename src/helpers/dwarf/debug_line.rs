@@ -1,4 +1,5 @@
 use crate::session::*;
+use crate::types::{LineRow, SourceLocation, StringId};
 use object::{Object, ObjectSection};
 use rustc_hash::FxHashSet;
 use std::{

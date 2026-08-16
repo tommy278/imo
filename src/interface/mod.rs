@@ -2,7 +2,7 @@ use owo_colors::OwoColorize;
 #[cfg(target_os = "linux")]
 pub mod linux;
 
-use crate::session::PlatformRegStruct;
+use crate::session::os::PlatformRegStruct;
 use std::fmt;
 
 #[derive(Debug, Clone, Copy)]

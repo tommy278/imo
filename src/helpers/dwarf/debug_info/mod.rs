@@ -17,7 +17,7 @@ use crate::helpers::dwarf::debug_info::error::DebugInfoError;
 use crate::helpers::dwarf::debug_info::utils::lookup_vars;
 use crate::helpers::dwarf::evaluate_frame_base_bytes;
 use crate::interface::{DebugStructField, DebugValue, RegisterViewer, to_buffer};
-use crate::session::{ProcessId, error::SystemError, error::VariableParseError, os};
+use crate::session::{error::SystemError, error::VariableParseError, os, os::ProcessId};
 
 pub type Reader<'data> =
     gimli::RelocateReader<gimli::EndianSlice<'data, gimli::RunTimeEndian>, &'data RelocationMap>;

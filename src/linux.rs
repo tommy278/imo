@@ -7,7 +7,7 @@ use rustyline::DefaultEditor;
 use crate::cli::handle_user_debugger_menu;
 use crate::error::DebuggerError;
 use crate::session::linux::LinuxError;
-use crate::session::{CurrentStopCmd, DebugSession};
+use crate::session::{DebugSession, execution::CurrentStopCmd};
 
 macro_rules! wait {
     ($child: expr) => {
