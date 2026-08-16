@@ -111,11 +111,8 @@ fn update_session_cache(
                 // Only perform a heap allocation when the file path changes
                 if current_file_id.is_none() || path != current_raw_path {
                     current_raw_path = path.clone();
-                    current_file_id = Some(
-                        session
-                            .interner
-                            .get_or_intern(path.to_string_lossy().into()),
-                    );
+                    current_file_id =
+                        Some(session.interner.get_or_intern(path.to_str().unwrap_or("")));
                 }
 
                 // Determine line/column. DWARF line/column is never 0, so we use that

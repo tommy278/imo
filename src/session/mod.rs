@@ -285,14 +285,14 @@ pub struct StringInterner {
 }
 
 impl StringInterner {
-    pub fn get_or_intern(&mut self, str: String) -> StringId {
-        if let Some(id) = self.map.get(&str) {
+    pub fn get_or_intern(&mut self, str: &str) -> StringId {
+        if let Some(id) = self.map.get(str) {
             return *id;
         }
 
         let new_id = StringId(self.buffer.len() as u16);
-        self.buffer.push(str.clone());
-        self.map.insert(str, new_id);
+        self.buffer.push(str.to_string());
+        self.map.insert(str.to_string(), new_id);
 
         new_id
     }
