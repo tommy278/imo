@@ -4,7 +4,7 @@ pub mod debug_line;
 pub mod error;
 
 use crate::helpers::dwarf::debug_info::Abi;
-use crate::interface::RegisterViewer;
+use crate::sys::RegisterViewer;
 
 /// Evaluate the frame base from the raw bytes by reading them as a stream of byte code
 pub fn evaluate_frame_base_bytes(bytes: &[u8], registers: &RegisterViewer, abi: &Abi) -> u64 {

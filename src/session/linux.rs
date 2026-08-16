@@ -7,7 +7,7 @@ use std::io::IoSliceMut;
 
 // Define the platform aliases exposed to mod.rs
 pub type ProcessId = nix::unistd::Pid;
-pub type PlatformBreakpoint = crate::interface::linux::BreakPoint;
+pub type PlatformBreakpoint = crate::sys::linux::BreakPoint;
 pub type PlatformRegStruct = user_regs_struct;
 
 /// Get process base address

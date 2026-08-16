@@ -14,9 +14,9 @@ use crate::helpers::dwarf::{
     debug_info::{ActiveVariablesContext, DebuggerMetadataCache},
     error::CacheSetupError,
 };
-use crate::interface::{DebugValue, RegisterViewer};
 use crate::session::error::SystemError;
 use crate::session::interface::{BreakpointData, BreakpointMutationResult, BreakpointTarget};
+use crate::sys::{DebugValue, RegisterViewer};
 use crate::types::{
     LineRow, SourceCodeCache, SourceCodeDisplay, SourceLocation, StringId, StringInterner,
 };
