@@ -5,6 +5,7 @@ pub mod linux;
 pub mod error;
 
 use gimli::UnwindSection;
+use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use std::fs;
 use std::io::{BufRead, BufReader};
@@ -115,18 +116,35 @@ pub enum SourceCodeDisplay<'a> {
     Unresolved,
 }
 
+/// Display the code in a user friendly format
+pub fn display_source_code(f: &mut std::fmt::Formatter<'_>, code: &str) -> std::fmt::Result {
+    for token in code.split_whitespace() {
+        match token {
+            "let" | "fn" | "pub" | "impl" => write!(f, "{} ", token.red())?,
+            "mut" | "return" | "if" => write!(f, "{} ", token.purple())?,
+            "u8" | "i8" | "u16" | "i16" | "u32" | "i32" | "u64" | "i64" | "usize" | "isize"
+            | "f32" | "f64" | "bool" => write!(f, "{} ", token.bright_yellow())?,
+            _ => write!(f, "{token} ")?,
+        }
+    }
+    Ok(())
+}
+
 impl std::fmt::Display for SourceCodeDisplay<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::FullyResolved {
                 source_code,
                 line_number,
-            } => write!(f, "{}\n{}", line_number, source_code)?,
+            } => {
+                write!(f, "{}\t", line_number.cyan())?;
+                display_source_code(f, *source_code)?;
+            }
             Self::PartiallyResolved { path, line_number } => write!(
                 f,
                 "Could not locate {}. Line number: {}.",
-                path.display(),
-                line_number
+                path.display().bright_blue(),
+                line_number.cyan()
             )?,
             Self::Unresolved => write!(f, "Could not resolve current location")?,
             Self::CacheCorrupt { id } => write!(
@@ -507,10 +525,6 @@ impl DebugSession {
     pub fn current_pc(&self) -> Result<u64, SystemError> {
         let pc = self.current_instruction_pointer()? - self.base_address;
         Ok(pc)
-    }
-
-    pub fn id_to_string(&self, id: StringId) -> &str {
-        &self.interner.buffer[id.0 as usize]
     }
 
     /// Continue session from last interrupt
