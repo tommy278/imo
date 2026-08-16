@@ -134,11 +134,9 @@ pub fn extract_subprogram_node<'a>(
 
 pub fn extract_inline_node<'a>(
     entry: &DebuggingInformationEntry<Reader<'a>, usize>,
-    unit: &UnitRef<'a, Reader<'a>>,
 ) -> Option<ScopeCacheNode> {
     let mut low_pc = None;
     let mut high_pc_attr = None;
-    let mut abstract_origin_offset = None;
 
     for attr in entry.attrs() {
         match attr.name() {
@@ -149,11 +147,6 @@ pub fn extract_inline_node<'a>(
             }
             gimli::DW_AT_high_pc => {
                 high_pc_attr = Some(attr.value());
-            }
-            gimli::DW_AT_abstract_origin => {
-                if let gimli::AttributeValue::UnitRef(offset) = attr.value() {
-                    abstract_origin_offset = Some(offset.0);
-                }
             }
             _ => continue,
         }

@@ -29,6 +29,8 @@ fn main() {
         exit(1);
     }
 
+    #[allow(unused_variables)]
+    #[allow(unused_mut)]
     let Ok(mut rl) = DefaultEditor::new() else {
         eprintln!("Failed to create editor instance");
         return;

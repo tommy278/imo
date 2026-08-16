@@ -443,6 +443,7 @@ impl DebugSession {
             return Ok(());
         }
 
+        #[allow(unused_mut)]
         // First time seeing the address
         // Create the breakpoint
         let mut breakpoint = os::PlatformBreakpoint::new(absolute_address);
@@ -460,8 +461,6 @@ impl DebugSession {
     }
 
     pub fn get_register_value(&self, register: gimli::Register) -> Option<u64> {
-        let regs = self.get_regs().ok()?.regs;
-
         #[cfg(target_os = "linux")]
         {
             match register.0 {
@@ -474,6 +473,7 @@ impl DebugSession {
 
         #[cfg(not(target_os = "linux"))]
         {
+            std::hint::black_box(register);
             Some(0)
         }
     }
