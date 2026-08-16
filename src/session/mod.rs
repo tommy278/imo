@@ -463,6 +463,7 @@ impl DebugSession {
     pub fn get_register_value(&self, register: gimli::Register) -> Option<u64> {
         #[cfg(target_os = "linux")]
         {
+            let regs = self.get_regs().ok()?.regs;
             match register.0 {
                 6 => Some(regs.rbp),
                 7 => Some(regs.rsp),
