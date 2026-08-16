@@ -25,6 +25,10 @@ impl RegisterViewer {
     pub fn instruction_pointer(&self) -> u64 {
         self.regs.rip
     }
+
+    pub fn base_pointer(&self) -> u64 {
+        self.regs.rbp
+    }
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -34,6 +38,10 @@ impl RegisterViewer {
     }
 
     pub fn instruction_pointer(&self) -> u64 {
+        0
+    }
+
+    pub fn base_pointer(&self) -> u64 {
         0
     }
 }

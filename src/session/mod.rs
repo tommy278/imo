@@ -31,6 +31,8 @@ pub mod os {
     pub type ProcessId = i32;
     pub type PlatformRegStruct = ();
 
+    use crate::{helpers::dwarf::error::CacheSetupError, session::error::SystemError};
+
     #[derive(Debug, Clone)]
     pub struct PlatformBreakpoint;
 
@@ -38,35 +40,43 @@ pub mod os {
         pub fn new(_absolute_address: u64) -> Self {
             unimplemented!("imo debugger only runs on linux")
         }
-        pub fn enable(&self, _pid: ProcessId) {
+        pub fn enable(&self, _pid: ProcessId) -> Result<(), SystemError> {
             unimplemented!("imo debugger only runs on linux")
         }
-        pub fn disable(&self, _pid: ProcessId) {
+        pub fn disable(&self, _pid: ProcessId) -> Result<(), SystemError> {
             unimplemented!("imo debugger only runs on linux")
         }
     }
 
-    pub fn get_process_base_address(_pid: ProcessId) -> u64 {
+    pub fn send_trap_signal(_pid: ProcessId) -> Result<(), SystemError> {
         unimplemented!("imo debugger only runs on Linux")
     }
 
-    pub fn begin_step_process(_pid: ProcessId) {
-        unimplemented!("imo debugger only runs on linux")
-    }
-
-    pub fn step(_pid: ProcessId) {
-        unimplemented!("imo deb")
-    }
-
-    pub fn continue_session(_pid: ProcessId) {
+    pub fn get_process_base_address(_pid: ProcessId) -> Result<u64, CacheSetupError> {
         unimplemented!("imo debugger only runs on Linux")
     }
 
-    pub fn kill_session(_pid: ProcessId) {
+    pub fn read_bytes(_pid: ProcessId, _ptr: usize, _len: usize) -> Result<Vec<u8>, SystemError> {
         unimplemented!("imo debugger only runs on Linux")
     }
 
-    pub fn get_regs(_pid: ProcessId) -> PlatformRegStruct {
+    pub fn step(_pid: ProcessId) -> Result<(), SystemError> {
+        unimplemented!("imo debugger only runs on Linux")
+    }
+
+    pub fn continue_session(_pid: ProcessId) -> Result<(), SystemError> {
+        unimplemented!("imo debugger only runs on Linux")
+    }
+
+    pub fn kill_session(_pid: ProcessId) -> Result<(), SystemError> {
+        unimplemented!("imo debugger only runs on Linux")
+    }
+
+    pub fn peek_data(_pid: ProcessId, _address: u64) -> Result<i64, SystemError> {
+        unimplemented!("imo debugger only runs on Linux")
+    }
+
+    pub fn get_regs(_pid: ProcessId) -> Result<PlatformRegStruct, SystemError> {
         unimplemented!("imo debugger only runs on Linux")
     }
 }

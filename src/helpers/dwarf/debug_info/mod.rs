@@ -59,20 +59,18 @@ impl Abi {
     /// Get register value using the dw_register index
     /// Use ABI to differentiate between different binary layout
     pub fn get_register_value(&self, dw_reg: u16, registers: &RegisterViewer) -> u64 {
-        let raw_regs = registers.regs;
-
         match self {
             Abi::SystemV => {
                 // Linux, macOS, BSD, Solaris
                 match dw_reg {
-                    6 => raw_regs.rbp,
-                    7 => raw_regs.rsp,
+                    6 => registers.base_pointer(),
+                    7 => registers.stack_pointer(),
                     _ => unimplemented!(),
                 }
             }
             Abi::WindowsMsvc => match dw_reg {
-                13 => raw_regs.rbp,
-                23 => raw_regs.rsp,
+                13 => registers.base_pointer(),
+                23 => registers.stack_pointer(),
                 _ => unimplemented!(),
             },
             _ => unimplemented!("Does not support abi yet"),
