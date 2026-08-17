@@ -17,11 +17,10 @@ use crate::helpers::dwarf::debug_info::error::DebugInfoError;
 use crate::helpers::dwarf::debug_info::utils::lookup_vars;
 use crate::helpers::dwarf::evaluate_frame_base_bytes;
 use crate::session::error::VariableParseError;
+use crate::session::variable::{DebugStructField, DebugValue, to_buffer};
 use crate::sys::SystemError;
 use crate::sys::os;
-use crate::sys::{
-    DebugStructField, DebugValue, os::syscalls, registers::RegisterViewer, to_buffer,
-};
+use crate::sys::{os::syscalls, registers::RegisterViewer};
 
 pub type Reader<'data> =
     gimli::RelocateReader<gimli::EndianSlice<'data, gimli::RunTimeEndian>, &'data RelocationMap>;

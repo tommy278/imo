@@ -2,6 +2,7 @@ pub mod breakpoint;
 pub mod error;
 pub mod execution;
 pub mod interface;
+pub mod variable;
 
 use gimli::UnwindSection;
 use rustc_hash::FxHashMap;
@@ -16,12 +17,13 @@ use crate::helpers::dwarf::{
 use crate::session::interface::{BreakpointData, BreakpointMutationResult, BreakpointTarget};
 use crate::sys::SystemError;
 use crate::sys::os::{self, syscalls};
-use crate::sys::{DebugValue, registers::RegisterViewer};
+use crate::sys::registers::RegisterViewer;
 use crate::types::{
     LineRow, SourceCodeCache, SourceCodeDisplay, SourceLocation, StringId, StringInterner,
 };
 use breakpoint::ManagedBreakpoint;
 use execution::CurrentStopCmd;
+use variable::DebugValue;
 
 /// Cache for entire debug session
 #[derive(Debug)]
