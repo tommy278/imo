@@ -5,7 +5,7 @@ use std::{
 
 use rustc_hash::FxHashSet;
 
-use crate::session::{DebugSession, interface};
+use crate::session::{DebugSession, breakpoint};
 use crate::sys::SystemError;
 use crate::utils::trim_file_path;
 
@@ -21,7 +21,10 @@ pub fn handle_event_by_index<F>(
     func: F,
     action: &str,
 ) where
-    F: FnOnce(&mut DebugSession, usize) -> Result<interface::BreakpointMutationResult, SystemError>,
+    F: FnOnce(
+        &mut DebugSession,
+        usize,
+    ) -> Result<breakpoint::BreakpointMutationResult, SystemError>,
 {
     // Index 0 never exists
     // Index starts at 1
@@ -40,14 +43,14 @@ pub fn handle_event_by_index<F>(
     }
 
     match func(session, vec_index) {
-        Ok(interface::BreakpointMutationResult::Updated) => {
+        Ok(breakpoint::BreakpointMutationResult::Updated) => {
             // Format action into being past tense
             println!("Successfully {}d breakpoint {}", action, user_index);
         }
-        Ok(interface::BreakpointMutationResult::AlreadyInState) => {
+        Ok(breakpoint::BreakpointMutationResult::AlreadyInState) => {
             println!("Breakpoint {} is already {}d", user_index, action);
         }
-        Ok(interface::BreakpointMutationResult::NotFound) => {
+        Ok(breakpoint::BreakpointMutationResult::NotFound) => {
             println!("Could not {} breakpoint", action);
         }
         Err(e) => eprintln!("{e}"),
@@ -76,7 +79,7 @@ pub fn handle_breakpoint_clearing(
 
 pub fn handle_breakpoint_setting(
     session: &mut DebugSession,
-    line_index: &[interface::BreakpointTarget],
+    line_index: &[breakpoint::BreakpointTarget],
     line_number: u32,
 ) {
     if line_index.is_empty() {
@@ -105,11 +108,11 @@ pub fn handle_breakpoint_setting(
         let result = session.create_breakpoint(line_number, default);
 
         match result {
-            Ok(interface::BreakpointMutationResult::Created { count, target }) => {
+            Ok(breakpoint::BreakpointMutationResult::Created { count, target }) => {
                 handle_break_metadata(session, count, target, line_number);
                 return;
             }
-            Ok(interface::BreakpointMutationResult::NotFound) => {
+            Ok(breakpoint::BreakpointMutationResult::NotFound) => {
                 println!("Could not find breakpoint")
             }
             Err(e) => eprintln!("{e}"),
@@ -152,11 +155,11 @@ pub fn handle_breakpoint_setting(
 
     let result = session.create_breakpoint(line_number, chosen_file);
     match result {
-        Ok(interface::BreakpointMutationResult::Created { count, target }) => {
+        Ok(breakpoint::BreakpointMutationResult::Created { count, target }) => {
             handle_break_metadata(session, count, target, line_number);
             return;
         }
-        Ok(interface::BreakpointMutationResult::NotFound) => println!("Could not find breakpoint"),
+        Ok(breakpoint::BreakpointMutationResult::NotFound) => println!("Could not find breakpoint"),
         Err(e) => eprintln!("{e}"),
         _ => unreachable!(),
     }
@@ -166,7 +169,7 @@ pub fn handle_breakpoint_setting(
 fn handle_break_metadata(
     session: &mut DebugSession,
     bp_for_line: u8,
-    first_bp: interface::BreakpointTarget,
+    first_bp: breakpoint::BreakpointTarget,
     line_number: u32,
 ) {
     // Handle metadata correctly

@@ -171,7 +171,7 @@ fn update_session_cache(
                         .line_index
                         .entry(line)
                         .or_insert_with(Vec::new)
-                        .push(interface::BreakpointTarget {
+                        .push(breakpoint::BreakpointTarget {
                             file: path.as_path().into(),
                             relative_address,
                         });

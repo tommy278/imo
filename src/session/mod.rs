@@ -1,7 +1,6 @@
 pub mod breakpoint;
 pub mod error;
 pub mod execution;
-pub mod interface;
 pub mod variable;
 
 use gimli::UnwindSection;
@@ -14,14 +13,13 @@ use crate::dwarf::{
     debug_info::{ActiveVariablesContext, DebuggerMetadataCache},
     error::CacheSetupError,
 };
-use crate::session::interface::{BreakpointData, BreakpointMutationResult, BreakpointTarget};
 use crate::sys::SystemError;
 use crate::sys::os::{self, syscalls};
 use crate::sys::registers::RegisterViewer;
 use crate::types::{
     LineRow, SourceCodeCache, SourceCodeDisplay, SourceLocation, StringId, StringInterner,
 };
-use breakpoint::ManagedBreakpoint;
+use breakpoint::{BreakpointData, BreakpointMutationResult, BreakpointTarget, ManagedBreakpoint};
 use execution::CurrentStopCmd;
 use variable::DebugValue;
 
