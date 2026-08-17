@@ -1,12 +1,11 @@
 use crate::sys::os;
 use std::path::Path;
-use std::rc::Rc;
 
 use crate::utils::trim_file_path;
 
 #[derive(Debug, Clone)]
 pub struct BreakpointTarget {
-    pub file: Rc<Path>,
+    pub file: Box<Path>,
     pub relative_address: u64,
 }
 
