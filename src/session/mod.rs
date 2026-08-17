@@ -16,7 +16,7 @@ use crate::helpers::dwarf::{
 use crate::session::interface::{BreakpointData, BreakpointMutationResult, BreakpointTarget};
 use crate::sys::SystemError;
 use crate::sys::os::{self, syscalls};
-use crate::sys::{DebugValue, RegisterViewer};
+use crate::sys::{DebugValue, registers::RegisterViewer};
 use crate::types::{
     LineRow, SourceCodeCache, SourceCodeDisplay, SourceLocation, StringId, StringInterner,
 };

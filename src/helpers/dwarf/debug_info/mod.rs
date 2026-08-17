@@ -19,7 +19,9 @@ use crate::helpers::dwarf::evaluate_frame_base_bytes;
 use crate::session::error::VariableParseError;
 use crate::sys::SystemError;
 use crate::sys::os;
-use crate::sys::{DebugStructField, DebugValue, RegisterViewer, os::syscalls, to_buffer};
+use crate::sys::{
+    DebugStructField, DebugValue, os::syscalls, registers::RegisterViewer, to_buffer,
+};
 
 pub type Reader<'data> =
     gimli::RelocateReader<gimli::EndianSlice<'data, gimli::RunTimeEndian>, &'data RelocationMap>;

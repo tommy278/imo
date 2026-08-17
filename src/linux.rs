@@ -8,6 +8,7 @@ use crate::cli::handle_user_debugger_menu;
 use crate::error::DebuggerError;
 use crate::session::{DebugSession, execution::CurrentStopCmd};
 use crate::sys::linux::error::LinuxError;
+use crate::sys::registers::RegisterViewer;
 
 macro_rules! wait {
     ($child: expr) => {
@@ -71,7 +72,7 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                     }
                     WaitStatus::Stopped(pid, sig) => {
                         if let Ok(mut regs) = ptrace::getregs(pid) {
-                            session.registers = Some(crate::sys::RegisterViewer { regs });
+                            session.registers = Some(RegisterViewer { regs });
                             // If stop was due to SIGTRAP, do not forward it to the child.
                             // Pass None to let the child continue its execution.
                             if sig == Signal::SIGTRAP {
@@ -194,8 +195,7 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
 
                                         regs.rip = breakpoint_addr;
                                         set_regs!(pid, regs)?;
-                                        session.registers =
-                                            Some(crate::sys::RegisterViewer { regs });
+                                        session.registers = Some(RegisterViewer { regs });
 
                                         if return_address == breakpoint_addr {
                                             // If we are at the specific breakpoint to step out from then continue step over like normal
@@ -284,8 +284,7 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                                         regs.rip = breakpoint_addr;
                                         set_regs!(pid, regs)?;
 
-                                        session.registers =
-                                            Some(crate::sys::RegisterViewer { regs });
+                                        session.registers = Some(RegisterViewer { regs });
                                         if return_address == breakpoint_addr {
                                             // If we are at the specific breakpoint to step out from then continue step over like normal
                                             session.current_cmd = CurrentStopCmd::CompleteFinish {
@@ -348,7 +347,7 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                                                     set_regs!(pid, regs)?;
 
                                                     session.registers =
-                                                        Some(crate::sys::RegisterViewer { regs });
+                                                        Some(RegisterViewer { regs });
 
                                                     // Replace the 0xCC (INT3) back with the previous instruction
                                                     bp.breakpoint.disable(pid)?;
