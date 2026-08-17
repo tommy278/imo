@@ -2,7 +2,6 @@ pub mod breakpoint;
 pub mod error;
 pub mod execution;
 pub mod interface;
-pub mod linux;
 
 use gimli::UnwindSection;
 use rustc_hash::FxHashMap;
@@ -14,20 +13,15 @@ use crate::helpers::dwarf::{
     debug_info::{ActiveVariablesContext, DebuggerMetadataCache},
     error::CacheSetupError,
 };
-use crate::session::error::SystemError;
 use crate::session::interface::{BreakpointData, BreakpointMutationResult, BreakpointTarget};
+use crate::sys::SystemError;
+use crate::sys::os::{self, syscalls};
 use crate::sys::{DebugValue, RegisterViewer};
 use crate::types::{
     LineRow, SourceCodeCache, SourceCodeDisplay, SourceLocation, StringId, StringInterner,
 };
 use breakpoint::ManagedBreakpoint;
 use execution::CurrentStopCmd;
-
-#[cfg(target_os = "linux")]
-pub use linux as os;
-
-#[cfg(not(target_os = "linux"))]
-pub use execution::default_os as os;
 
 /// Cache for entire debug session
 #[derive(Debug)]
@@ -138,13 +132,13 @@ impl DebugSession {
     }
 
     /// Get the live register of the current process
-    pub fn get_regs(&self) -> Result<RegisterViewer, error::SystemError> {
+    pub fn get_regs(&self) -> Result<RegisterViewer, SystemError> {
         if let Some(regs) = self.registers {
             return Ok(regs);
         }
 
         // Backup in case the register was not instantiated for some reason
-        let regs = os::get_regs(self.pid)?;
+        let regs = syscalls::get_regs(self.pid)?;
         Ok(RegisterViewer { regs })
     }
 
@@ -228,7 +222,7 @@ impl DebugSession {
                             gimli::RegisterRule::Offset(offset) => {
                                 let ra_storage_address = (cfa_address as i64 + offset) as u64;
                                 let return_address =
-                                    os::peek_data(self.pid, ra_storage_address).ok()? as u64;
+                                    syscalls::peek_data(self.pid, ra_storage_address).ok()? as u64;
                                 return Some(return_address);
                             }
                             gimli::RegisterRule::Register(saved_reg) => {
@@ -258,12 +252,12 @@ impl DebugSession {
     }
 
     /// Continue session from last interrupt
-    pub fn continue_session(&self) -> Result<(), error::SystemError> {
-        os::continue_session(self.pid)
+    pub fn continue_session(&self) -> Result<(), SystemError> {
+        syscalls::continue_session(self.pid)
     }
 
-    pub fn send_trap_signal(&self) -> Result<(), error::SystemError> {
-        os::send_trap_signal(self.pid)
+    pub fn send_trap_signal(&self) -> Result<(), SystemError> {
+        syscalls::send_trap_signal(self.pid)
     }
 
     // ========================================
@@ -375,18 +369,18 @@ impl DebugSession {
     }
 
     /// Move forward from the specified stop
-    pub fn single_step(&self) -> Result<(), error::SystemError> {
-        os::step(self.pid)
+    pub fn single_step(&self) -> Result<(), SystemError> {
+        syscalls::step(self.pid)
     }
 
     /// Kill the current session
-    pub fn kill_session(&self) -> Result<(), error::SystemError> {
-        os::kill_session(self.pid)
+    pub fn kill_session(&self) -> Result<(), SystemError> {
+        syscalls::kill_session(self.pid)
     }
 
     /// Get and update the process base address
     pub fn update_process_base_address(&mut self) -> Result<(), CacheSetupError> {
-        self.base_address = os::get_process_base_address(self.pid)?;
+        self.base_address = syscalls::get_process_base_address(self.pid)?;
         Ok(())
     }
 

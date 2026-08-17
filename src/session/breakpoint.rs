@@ -1,4 +1,4 @@
-use crate::session::os;
+use crate::sys::os;
 
 #[derive(Debug)]
 pub struct ManagedBreakpoint {

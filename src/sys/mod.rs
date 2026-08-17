@@ -1,17 +1,104 @@
 use owo_colors::OwoColorize;
+
+#[cfg(not(target_os = "linux"))]
+use thiserror::Error;
+
 #[cfg(target_os = "linux")]
 pub mod linux;
 
-use crate::session::os::PlatformRegStruct;
+#[cfg(target_os = "linux")]
+pub use linux as os;
+
+#[cfg(target_os = "linux")]
+pub type SystemError = linux::error::LinuxError;
+
+#[cfg(not(target_os = "linux"))]
+#[derive(Debug, Error)]
+pub enum DefaultError {
+    #[error("Not handled yet")]
+    Error,
+}
+
+#[cfg(not(target_os = "linux"))]
+pub type SystemError = DefaultError;
+
+#[cfg(not(target_os = "linux"))]
+// If not supported yet, add dummy values for compilation
+pub mod os {
+    // Dummy types to satisfy the type aliases
+    pub type ProcessId = i32;
+    pub type PlatformRegStruct = ();
+
+    use crate::sys::SystemError;
+
+    #[derive(Debug, Clone)]
+    pub struct PlatformBreakpoint;
+
+    impl PlatformBreakpoint {
+        pub fn new(_absolute_address: u64) -> Self {
+            unimplemented!("imo debugger only runs on linux")
+        }
+        pub fn enable(&self, _pid: ProcessId) -> Result<(), SystemError> {
+            unimplemented!("imo debugger only runs on linux")
+        }
+        pub fn disable(&self, _pid: ProcessId) -> Result<(), SystemError> {
+            unimplemented!("imo debugger only runs on linux")
+        }
+    }
+
+    pub mod syscalls {
+        pub(super) type ProcessId = i32;
+        pub(super) type PlatformRegStruct = ();
+        use crate::sys::SystemError;
+
+        use crate::helpers::dwarf::error::CacheSetupError;
+        pub fn send_trap_signal(_pid: ProcessId) -> Result<(), SystemError> {
+            unimplemented!("imo debugger only runs on Linux")
+        }
+
+        pub fn get_process_base_address(_pid: ProcessId) -> Result<u64, CacheSetupError> {
+            unimplemented!("imo debugger only runs on Linux")
+        }
+
+        pub fn read_bytes(
+            _pid: ProcessId,
+            _ptr: usize,
+            _len: usize,
+        ) -> Result<Vec<u8>, SystemError> {
+            unimplemented!("imo debugger only runs on Linux")
+        }
+
+        pub fn step(_pid: ProcessId) -> Result<(), SystemError> {
+            unimplemented!("imo debugger only runs on Linux")
+        }
+
+        pub fn continue_session(_pid: ProcessId) -> Result<(), SystemError> {
+            unimplemented!("imo debugger only runs on Linux")
+        }
+
+        pub fn kill_session(_pid: ProcessId) -> Result<(), SystemError> {
+            unimplemented!("imo debugger only runs on Linux")
+        }
+
+        pub fn peek_data(_pid: ProcessId, _address: u64) -> Result<i64, SystemError> {
+            unimplemented!("imo debugger only runs on Linux")
+        }
+
+        pub fn get_regs(_pid: ProcessId) -> Result<PlatformRegStruct, SystemError> {
+            unimplemented!("imo debugger only runs on Linux")
+        }
+    }
+}
+
 use std::fmt;
 
 #[derive(Debug, Clone, Copy)]
 pub struct RegisterViewer {
-    pub regs: PlatformRegStruct,
+    pub regs: os::PlatformRegStruct,
 }
 
 impl RegisterViewer {
-    pub fn new(regs: PlatformRegStruct) -> Self {
+    pub fn new(regs: os::PlatformRegStruct) -> Self {
         Self { regs }
     }
 }

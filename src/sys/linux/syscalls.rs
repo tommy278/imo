@@ -1,14 +1,13 @@
+use nix::sys::ptrace;
 use nix::sys::ptrace::AddressType;
 use nix::sys::signal;
 use nix::sys::uio::{RemoteIoVec, process_vm_readv};
-use nix::{libc::user_regs_struct, sys::ptrace};
 use std::fs::read_to_string;
 use std::io::IoSliceMut;
 
-// Define the platform aliases exposed to mod.rs
-pub type ProcessId = nix::unistd::Pid;
-pub type PlatformBreakpoint = crate::sys::linux::BreakPoint;
-pub type PlatformRegStruct = user_regs_struct;
+use crate::helpers::dwarf::error::CacheSetupError;
+use crate::sys::linux::error::LinuxError;
+use crate::sys::linux::{PlatformRegStruct, ProcessId};
 
 /// Get process base address
 pub fn get_process_base_address(pid: ProcessId) -> Result<u64, CacheSetupError> {
@@ -77,20 +76,4 @@ pub fn read_bytes(
     }
 
     Err(LinuxError::ByteRead)
-}
-
-// Linux specific errors
-
-use thiserror::Error;
-
-use crate::helpers::dwarf::error::CacheSetupError;
-
-#[derive(Debug, Error)]
-pub enum LinuxError {
-    #[error("Failed to execute ptrace command. Errno: {0}")]
-    Ptrace(#[from] nix::errno::Errno),
-    #[error("Failed to read bytes at given address")]
-    ByteRead,
-    #[error("Failed to create C string: {0}")]
-    CString(#[from] std::ffi::NulError),
 }

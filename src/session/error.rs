@@ -1,7 +1,5 @@
+use crate::sys::SystemError;
 use thiserror::Error;
-
-#[cfg(target_os = "linux")]
-pub type SystemError = crate::session::linux::LinuxError;
 
 #[derive(Debug, Error)]
 pub enum VariableParseError {
@@ -19,11 +17,4 @@ pub enum VariableParseError {
 
     #[error("Could not resolve encoding")]
     Encoding,
-}
-
-#[cfg(not(target_os = "linux"))]
-#[derive(Debug, Error)]
-pub enum SystemError {
-    #[error("Not handled yet")]
-    Error,
 }

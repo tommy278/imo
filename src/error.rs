@@ -1,5 +1,5 @@
 use super::helpers::dwarf;
-use super::session::error::SystemError;
+use super::sys::SystemError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]

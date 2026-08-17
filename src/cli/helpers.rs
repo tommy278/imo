@@ -5,8 +5,9 @@ use std::{
 
 use rustc_hash::FxHashSet;
 
+use crate::helpers::trim_file_path;
 use crate::session::{DebugSession, interface};
-use crate::{helpers::trim_file_path, session::error::SystemError};
+use crate::sys::SystemError;
 
 /// Flush so the print statement is immediately displayed on screen
 /// Used for print statement since its not flushed automcatically unlike println

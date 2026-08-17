@@ -1,6 +1,8 @@
-use crate::session::linux::{self, LinuxError};
 use nix::sys::ptrace;
 use nix::unistd::Pid;
+
+use crate::sys::linux::error::LinuxError;
+use crate::sys::os::syscalls;
 
 /// Stores and manages the insertion and removal of the 0xCC (INT3) keyword for the instruction
 #[derive(Debug)]
@@ -23,7 +25,7 @@ impl BreakPoint {
     /// Overwrite the lowest byte with 0xCC (INT3) while saving the original byte
     pub fn enable(&mut self, pid: Pid) -> Result<(), LinuxError> {
         // Read the current memory word
-        let word = linux::peek_data(pid, self.addr)?;
+        let word = syscalls::peek_data(pid, self.addr)?;
 
         // Save the original lowest byte
         self.original_byte = (word & 0xFF) as u8;
@@ -44,7 +46,7 @@ impl BreakPoint {
             return Ok(());
         }
 
-        let word = linux::peek_data(pid, self.addr)?;
+        let word = syscalls::peek_data(pid, self.addr)?;
         let restored_word = (word & !0xFF) | (self.original_byte as i64);
 
         ptrace::write(pid, self.addr as ptrace::AddressType, restored_word)?;

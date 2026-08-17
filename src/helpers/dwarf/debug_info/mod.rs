@@ -16,8 +16,10 @@ use rustc_hash::FxHashMap;
 use crate::helpers::dwarf::debug_info::error::DebugInfoError;
 use crate::helpers::dwarf::debug_info::utils::lookup_vars;
 use crate::helpers::dwarf::evaluate_frame_base_bytes;
-use crate::session::{error::SystemError, error::VariableParseError, os, os::ProcessId};
-use crate::sys::{DebugStructField, DebugValue, RegisterViewer, to_buffer};
+use crate::session::error::VariableParseError;
+use crate::sys::SystemError;
+use crate::sys::os;
+use crate::sys::{DebugStructField, DebugValue, RegisterViewer, os::syscalls, to_buffer};
 
 pub type Reader<'data> =
     gimli::RelocateReader<gimli::EndianSlice<'data, gimli::RunTimeEndian>, &'data RelocationMap>;
@@ -254,7 +256,7 @@ impl DwarfType {
         &self,
         type_index: &FxHashMap<usize, TypeCacheNode>,
         address: u64,
-        pid: ProcessId,
+        pid: os::ProcessId,
     ) -> Result<Option<DebugValue>, SystemError> {
         match self {
             DwarfType::Base {
@@ -262,7 +264,7 @@ impl DwarfType {
                 encoding,
                 byte_size,
             } => {
-                let raw_data = os::peek_data(pid, address)?;
+                let raw_data = syscalls::peek_data(pid, address)?;
 
                 if name == "usize" {
                     return Ok(Some(DebugValue::Usize(raw_data as u64)));
@@ -326,7 +328,7 @@ impl DwarfType {
                 name,
                 target_type_offset,
             } => {
-                let raw_data = os::peek_data(pid, address)?;
+                let raw_data = syscalls::peek_data(pid, address)?;
                 if let Some(name) = name {
                     let ty = get_type!(type_index, target_type_offset);
                     let Some(val) =
@@ -374,7 +376,7 @@ impl DwarfType {
                 byte_size,
                 fields,
             } => {
-                let data = os::peek_data(pid, address)?;
+                let data = syscalls::peek_data(pid, address)?;
 
                 let const_value = match byte_size {
                     1 => data as u8 as u64,
@@ -403,7 +405,7 @@ impl DwarfType {
                 ..
             } => {
                 let tag_byte = if let Some(discr_member_offset) = discr_member_offset {
-                    let tag = os::peek_data(pid, address + discr_member_offset)? as u8;
+                    let tag = syscalls::peek_data(pid, address + discr_member_offset)? as u8;
 
                     Some(tag)
                 } else {
@@ -604,7 +606,7 @@ impl DwarfType {
                     let len = &values[1].value;
 
                     if let (DebugValue::Pointer(ptr), DebugValue::Usize(len)) = (ptr, len) {
-                        let res = os::read_bytes(pid, *ptr as usize, *len as usize)?;
+                        let res = syscalls::read_bytes(pid, *ptr as usize, *len as usize)?;
                         let string = String::from_utf8_lossy(&res).into_owned();
                         return Ok(Some(DebugValue::StringSlice(string)));
                     }
@@ -689,7 +691,7 @@ impl DebugVariable {
         abi: &Abi,
         bytes: &[u8],
         type_index: &FxHashMap<usize, TypeCacheNode>,
-        pid: ProcessId,
+        pid: os::ProcessId,
     ) -> Result<Option<u64>, VariableParseError> {
         let expression = Expression(EndianSlice::new(&self.location, endian));
 
@@ -719,7 +721,7 @@ impl DebugVariable {
 
                     // If offset if 0 then it is a generic and gimli can handle that case
                     if offset == 0 {
-                        let raw_data = os::peek_data(pid, address)? as u64;
+                        let raw_data = syscalls::peek_data(pid, address)? as u64;
                         let value = gimli::Value::U64(raw_data);
                         result = evaluation.resume_with_memory(value)?;
                     } else {
