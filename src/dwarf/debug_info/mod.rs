@@ -1,5 +1,5 @@
+pub mod cache_setup;
 pub mod error;
-pub mod helpers;
 pub mod utils;
 
 /*
@@ -13,8 +13,8 @@ use gimli::{Encoding, EndianSlice, Expression, RunTimeEndian};
 use object::BinaryFormat;
 use rustc_hash::FxHashMap;
 
+use crate::dwarf::debug_info::cache_setup::setup_cache;
 use crate::dwarf::debug_info::error::DebugInfoError;
-use crate::dwarf::debug_info::utils::lookup_vars;
 use crate::dwarf::evaluate_frame_base_bytes;
 use crate::session::error::VariableParseError;
 use crate::session::variable::{DebugStructField, DebugValue, to_buffer};
@@ -843,7 +843,7 @@ impl DebuggerMetadataCache {
         let mut default_cache = Self::default();
 
         // Populate the cache with data
-        lookup_vars(&mut default_cache, object)?;
+        setup_cache(&mut default_cache, object)?;
 
         Ok(default_cache)
     }

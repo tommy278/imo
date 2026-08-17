@@ -1,13 +1,13 @@
-pub mod helpers;
+pub mod utils;
 
 use rustyline::error::ReadlineError;
 use rustyline::{DefaultEditor, Result};
 
-use crate::cli::helpers::{
+use crate::session::DebugSession;
+use utils::{
     handle_breakpoint_clearing, handle_breakpoint_setting, handle_cmd, handle_event_by_index,
     parse_arg, parse_line_arg,
 };
-use crate::session::DebugSession;
 
 /// Display an interactive menu at breakpoints
 pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEditor) -> Result<()> {

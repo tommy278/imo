@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::rc::Rc;
 
-use crate::helpers::trim_file_path;
+use crate::utils::trim_file_path;
 
 #[derive(Debug, Clone)]
 pub struct BreakpointTarget {
