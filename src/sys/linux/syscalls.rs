@@ -5,7 +5,7 @@ use nix::sys::uio::{RemoteIoVec, process_vm_readv};
 use std::fs::read_to_string;
 use std::io::IoSliceMut;
 
-use crate::helpers::dwarf::error::CacheSetupError;
+use crate::dwarf::error::CacheSetupError;
 use crate::sys::linux::error::LinuxError;
 use crate::sys::linux::{PlatformRegStruct, ProcessId};
 

@@ -3,7 +3,7 @@ pub mod debug_info;
 pub mod debug_line;
 pub mod error;
 
-use crate::helpers::dwarf::debug_info::Abi;
+use crate::dwarf::debug_info::Abi;
 use crate::sys::registers::RegisterViewer;
 
 /// Evaluate the frame base from the raw bytes by reading them as a stream of byte code

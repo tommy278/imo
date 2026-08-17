@@ -13,9 +13,9 @@ use gimli::{Encoding, EndianSlice, Expression, RunTimeEndian};
 use object::BinaryFormat;
 use rustc_hash::FxHashMap;
 
-use crate::helpers::dwarf::debug_info::error::DebugInfoError;
-use crate::helpers::dwarf::debug_info::utils::lookup_vars;
-use crate::helpers::dwarf::evaluate_frame_base_bytes;
+use crate::dwarf::debug_info::error::DebugInfoError;
+use crate::dwarf::debug_info::utils::lookup_vars;
+use crate::dwarf::evaluate_frame_base_bytes;
 use crate::session::error::VariableParseError;
 use crate::session::variable::{DebugStructField, DebugValue, to_buffer};
 use crate::sys::SystemError;

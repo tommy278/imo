@@ -1,6 +1,6 @@
 use gimli::{DebuggingInformationEntry, Reader as _, UnitRef};
 
-use crate::helpers::dwarf::debug_info::{
+use crate::dwarf::debug_info::{
     AddressRange, DebugVariable, ExecutionScope, Reader, ScopeCacheNode,
 };
 

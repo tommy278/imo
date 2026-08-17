@@ -1,8 +1,8 @@
 use thiserror::Error;
 
-use crate::helpers::dwarf::debug_frame::DebugFrameError;
-use crate::helpers::dwarf::debug_info::error::DebugInfoError;
-use crate::helpers::dwarf::debug_line::DebugLineError;
+use crate::dwarf::debug_frame::DebugFrameError;
+use crate::dwarf::debug_info::error::DebugInfoError;
+use crate::dwarf::debug_line::DebugLineError;
 
 #[derive(Error, Debug)]
 pub enum CacheSetupError {

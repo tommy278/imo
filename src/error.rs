@@ -1,4 +1,4 @@
-use super::helpers::dwarf;
+use super::dwarf;
 use super::sys::SystemError;
 use thiserror::Error;
 

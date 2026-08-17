@@ -8,7 +8,7 @@ use gimli::UnwindSection;
 use rustc_hash::FxHashMap;
 use std::path::Path;
 
-use crate::helpers::dwarf::{
+use crate::dwarf::{
     self,
     debug_frame::{RawDebugFrame, setup_session_debug_frame},
     debug_info::{ActiveVariablesContext, DebuggerMetadataCache},

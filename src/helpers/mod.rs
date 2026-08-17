@@ -1,5 +1,3 @@
-pub mod dwarf;
-
 use owo_colors::OwoColorize;
 
 // TODO: Make this safe for any OS
