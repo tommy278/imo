@@ -192,22 +192,6 @@ impl DebugSession {
         }
     }
 
-    // pub fn backtrace(&self) {
-    //     let eh_frame = self.get_unwind_table();
-    //     let base_addresses = &self.metadata.base_addresses;
-
-    //     let current_pc = self.current_pc().unwrap();
-
-    //     if let Ok(fde) =
-    //         eh_frame.fde_for_address(base_addresses, current_pc, |sections, bases, offset| {
-    //             sections.cie_from_offset(bases, offset)
-    //         })
-    //     {
-    //         let mut ctx = gimli::UnwindContext::new();
-    //         let mut table = fde.rows(&eh_frame, base_addresses, &mut ctx).unwrap();
-    //     }
-    // }
-
     pub fn get_return_address(&self) -> Option<u64> {
         let eh_frame = self.get_unwind_table();
         let base_addresses = &self.metadata.base_addresses;
@@ -306,7 +290,7 @@ impl DebugSession {
         };
 
         self.current_cmd = CurrentStopCmd::StepInto {
-            start_file: current_location.file.clone(),
+            start_file: current_location.file,
             start_line: current_location.line,
         };
         self.single_step()

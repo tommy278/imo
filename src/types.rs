@@ -84,7 +84,7 @@ impl SourceCodeCache {
             return None;
         }
 
-        let file = std::fs::File::open(path).unwrap();
+        let file = std::fs::File::open(path).ok()?;
         let reader = BufReader::new(file);
 
         let mut source_code: String = String::new();

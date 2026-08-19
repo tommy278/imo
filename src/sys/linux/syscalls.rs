@@ -69,7 +69,7 @@ pub fn read_bytes(
         len,
     };
 
-    let bytes_read = process_vm_readv(pid, &mut [local_iov], &[remote_iov]).unwrap();
+    let bytes_read = process_vm_readv(pid, &mut [local_iov], &[remote_iov])?;
 
     if bytes_read == len {
         return Ok(buffer);
