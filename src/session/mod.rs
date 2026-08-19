@@ -192,19 +192,35 @@ impl DebugSession {
         }
     }
 
+    // pub fn backtrace(&self) {
+    //     let eh_frame = self.get_unwind_table();
+    //     let base_addresses = &self.metadata.base_addresses;
+
+    //     let current_pc = self.current_pc().unwrap();
+
+    //     if let Ok(fde) =
+    //         eh_frame.fde_for_address(base_addresses, current_pc, |sections, bases, offset| {
+    //             sections.cie_from_offset(bases, offset)
+    //         })
+    //     {
+    //         let mut ctx = gimli::UnwindContext::new();
+    //         let mut table = fde.rows(&eh_frame, base_addresses, &mut ctx).unwrap();
+    //     }
+    // }
+
     pub fn get_return_address(&self) -> Option<u64> {
         let eh_frame = self.get_unwind_table();
-        let base_addresses = self.metadata.base_addresses.clone();
+        let base_addresses = &self.metadata.base_addresses;
 
         let current_pc = self.current_pc().ok()?;
 
         if let Ok(fde) =
-            eh_frame.fde_for_address(&base_addresses, current_pc, |sections, bases, offset| {
+            eh_frame.fde_for_address(base_addresses, current_pc, |sections, bases, offset| {
                 sections.cie_from_offset(bases, offset)
             })
         {
             let mut ctx = gimli::UnwindContext::new();
-            let mut table = fde.rows(&eh_frame, &base_addresses, &mut ctx).ok()?;
+            let mut table = fde.rows(&eh_frame, base_addresses, &mut ctx).ok()?;
 
             let ra_register = fde.cie().return_address_register();
             while let Some(row) = table.next_row().ok()? {
