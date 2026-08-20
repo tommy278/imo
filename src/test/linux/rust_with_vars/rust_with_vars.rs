@@ -14,6 +14,13 @@ fn main() {
     let u64_some: Option<u64> = Some(64);
     let mut non: Option<i32> = None;
     let mut g: HashMap<u8, &str> = HashMap::new();
+    g.insert(1, "foo");
+    g.insert(2, "bar");
+    g.insert(3, "baz");
+
+    let cell = std::cell::Cell::new(100);
+    let rc = std::rc::Rc::new("Rc");
+    let arc = std::sync::Arc::new("Arc");
 
     let b = false;
     let mut t = true;

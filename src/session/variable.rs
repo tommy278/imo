@@ -7,6 +7,23 @@ pub struct DebugStructField {
     pub value: DebugValue,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum WrapperKind {
+    Box,
+    Rc,
+    Arc,
+}
+
+impl Into<String> for WrapperKind {
+    fn into(self) -> String {
+        match self {
+            Self::Box => "Box".to_string(),
+            Self::Rc => "Rc".to_string(),
+            Self::Arc => "Arc".to_string(),
+        }
+    }
+}
+
 /// Covers all possible return values for the data found
 /// Add enums
 #[derive(Debug, Clone)]
@@ -24,7 +41,10 @@ pub enum DebugValue {
     Array(Vec<DebugValue>),
     Vec(Vec<DebugValue>),
     Tuple(Vec<DebugValue>),
-    Box(Box<DebugValue>),
+    PointerWrapper {
+        kind: WrapperKind,
+        value: Box<DebugValue>,
+    },
     Enum {
         name: String,
         inner_name: String,
@@ -125,7 +145,10 @@ impl fmt::Display for DebugValue {
                 write!(f, "]")?;
                 Ok(())
             }
-            DebugValue::Box(val) => write!(f, "{}({})", "Box".cyan(), val.magenta()),
+            DebugValue::PointerWrapper { kind, value } => {
+                let name: String = (*kind).into();
+                write!(f, "{}({})", name.cyan(), value.magenta())
+            }
             DebugValue::Tuple(tup) => {
                 if tup.is_empty() {
                     return Ok(());

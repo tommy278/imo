@@ -17,7 +17,7 @@ use crate::dwarf::debug_info::cache_setup::setup_cache;
 use crate::dwarf::debug_info::error::DebugInfoError;
 use crate::dwarf::evaluate_frame_base_bytes;
 use crate::session::error::VariableParseError;
-use crate::session::variable::{DebugStructField, DebugValue, to_buffer};
+use crate::session::variable::{DebugStructField, DebugValue, WrapperKind, to_buffer};
 use crate::sys::SystemError;
 use crate::sys::os;
 use crate::sys::{os::syscalls, registers::RegisterViewer};
@@ -340,8 +340,26 @@ impl DwarfType {
                     };
 
                     if name.starts_with("alloc::boxed::Box<") {
-                        return Ok(Some(DebugValue::Box(Box::new(val))));
+                        return Ok(Some(DebugValue::PointerWrapper {
+                            kind: WrapperKind::Box,
+                            value: Box::new(val),
+                        }));
                     }
+
+                    if name.starts_with("*const alloc::rc::RcInner<") {
+                        return Ok(Some(DebugValue::PointerWrapper {
+                            kind: WrapperKind::Rc,
+                            value: Box::new(val),
+                        }));
+                    }
+
+                    if name.starts_with("*const alloc::sync::ArcInner<") {
+                        return Ok(Some(DebugValue::PointerWrapper {
+                            kind: WrapperKind::Arc,
+                            value: Box::new(val),
+                        }));
+                    }
+
                     if name.contains(";") {
                         return Ok(Some(val));
                     }
