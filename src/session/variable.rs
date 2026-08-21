@@ -48,6 +48,9 @@ pub enum DebugValue {
     HashMap {
         entries: Vec<(DebugValue, DebugValue)>,
     },
+    HashSet {
+        elements: Vec<DebugValue>,
+    },
     Enum {
         name: String,
         inner_name: String,
@@ -159,10 +162,27 @@ impl fmt::Display for DebugValue {
                 for (key, value) in entries {
                     writeln!(f, "")?;
                     write!(f, "    {}", key)?;
-                    write!(f, ":   {}", value)?;
+                    write!(f, ":   {},", value)?;
                 }
 
                 write!(f, "\n}}")?;
+
+                Ok(())
+            }
+            DebugValue::HashSet { elements } => {
+                write!(f, "HashSet (")?;
+
+                let len = elements.len();
+
+                for i in 0..len {
+                    write!(f, "{}", elements[i]);
+
+                    if i != len - 1 {
+                        write!(f, ",")?;
+                    }
+                }
+
+                write!(f, ")")?;
 
                 Ok(())
             }

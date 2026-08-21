@@ -1,5 +1,5 @@
 // NOTE: Compile with rustc -g rust_with_vars.rs
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 fn main() {
     let c: char = 'l';
     let f: f32 = 3.141;
@@ -21,6 +21,11 @@ fn main() {
     let mut simple: HashMap<u8, u8> = HashMap::new();
     simple.insert(1, 2);
     simple.insert(3, 4);
+
+    let mut h = HashSet::new();
+    h.insert(10);
+    h.insert(20);
+    h.insert(30);
 
     let cell = std::cell::Cell::new(100);
     let rc = std::rc::Rc::new("Rc");

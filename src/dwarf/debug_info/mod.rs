@@ -622,6 +622,17 @@ impl DwarfType {
                     }
                 }
 
+                if name.starts_with("HashSet<") && fields.iter().any(|s| s.name == "map") {
+                    let map = get_value!(fields, type_index, "map", address, pid);
+
+                    if let Some(DebugValue::HashMap { entries }) = map {
+                        let elements: Vec<DebugValue> =
+                            entries.iter().map(|e| e.0.clone()).collect();
+
+                        return Ok(Some(DebugValue::HashSet { elements }));
+                    }
+                }
+
                 // There are more versions of Hashmap
                 // Only select the one with the table field and have the other ones resolve naturally
                 if name.starts_with("HashMap<") && fields.iter().any(|s| s.name == "table") {
