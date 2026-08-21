@@ -22,6 +22,13 @@ fn main() {
     let rc = std::rc::Rc::new("Rc");
     let arc = std::sync::Arc::new("Arc");
 
+    let mut deq = std::collections::VecDeque::new();
+    deq.push_back(5);
+    deq.push_front(4);
+    deq.push_front(3);
+    deq.push_front(2);
+    deq.push_back(6);
+
     let b = false;
     let mut t = true;
     let arr: [i32; 6] = [120, -1, 26, 34, -5000, 720];

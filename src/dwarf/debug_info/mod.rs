@@ -339,6 +339,10 @@ impl DwarfType {
                         return Ok(None);
                     };
 
+                    if name.contains(";") {
+                        return Ok(Some(val));
+                    }
+
                     if name.starts_with("alloc::boxed::Box<") {
                         return Ok(Some(DebugValue::PointerWrapper {
                             kind: WrapperKind::Box,
@@ -358,10 +362,6 @@ impl DwarfType {
                             kind: WrapperKind::Arc,
                             value: Box::new(val),
                         }));
-                    }
-
-                    if name.contains(";") {
-                        return Ok(Some(val));
                     }
                 }
                 Ok(Some(DebugValue::Pointer(raw_data as usize)))
@@ -553,6 +553,62 @@ impl DwarfType {
                                 return Ok(None);
                             };
                             buffer.push(data);
+                        }
+                        return Ok(Some(DebugValue::Vec(buffer)));
+                    }
+                }
+
+                if name.starts_with("VecDeque<") {
+                    let len = get_value!(fields, type_index, "len", address, pid);
+                    let buf = get_value!(fields, type_index, "buf", address, pid);
+                    let head = get_value!(fields, type_index, "head", address, pid);
+
+                    let value = get_field!(generics, "T");
+                    let ty = get_type!(type_index, &value.type_offset);
+
+                    let size = get_size!(ty, type_index);
+
+                    if let (
+                        Some(DebugValue::RawVecInner {
+                            heap_pointer_value,
+                            cap,
+                        }),
+                        Some(DebugValue::Usize(len)),
+                        Some(DebugValue::Usize(head)),
+                    ) = (buf, len, head)
+                    {
+                        let mut buffer = Vec::with_capacity(cap as usize);
+
+                        let base_pointer = heap_pointer_value as u64 + (head * size);
+                        let maximum_address = heap_pointer_value as u64 + (cap * size);
+
+                        for i in 0..len {
+                            let current_address = base_pointer + i * size;
+
+                            if current_address < maximum_address {
+                                let Some(data) = ty.dwarf_type.to_debug_value(
+                                    type_index,
+                                    current_address,
+                                    pid,
+                                )?
+                                else {
+                                    return Ok(None);
+                                };
+                                buffer.push(data);
+                            } else {
+                                let offset = current_address - maximum_address;
+                                let current_address = heap_pointer_value as u64 + offset;
+
+                                let Some(data) = ty.dwarf_type.to_debug_value(
+                                    type_index,
+                                    current_address,
+                                    pid,
+                                )?
+                                else {
+                                    return Ok(None);
+                                };
+                                buffer.push(data);
+                            }
                         }
                         return Ok(Some(DebugValue::Vec(buffer)));
                     }

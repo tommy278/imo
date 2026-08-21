@@ -105,8 +105,7 @@ impl fmt::Display for DebugValue {
             DebugValue::StringSlice(slice) => write!(f, "\"{}\"", slice.green()),
             DebugValue::Boolean(bool) => write!(f, "{}", bool.yellow()),
             DebugValue::Pointer(ptr) => {
-                write!(f, "{}", "0x".bright_blue())?;
-                write!(f, "{:016x}", ptr.bright_blue())?;
+                write!(f, "{:#x}", ptr.bright_blue())?;
                 Ok(())
             }
             DebugValue::Array(arr) => {
@@ -174,8 +173,9 @@ impl fmt::Display for DebugValue {
                 cap,
             } => write!(
                 f,
-                "RawVecInner {{\nptr: {}\ncapacity: {}}}",
-                heap_pointer_value, cap
+                "RawVecInner {{\nptr: {:#x}\ncapacity: {}}}",
+                heap_pointer_value.bright_blue(),
+                cap.blue()
             ),
             DebugValue::RawParts {
                 heap_pointer_value,
