@@ -58,6 +58,12 @@ pub enum DebugValue {
         len: u64,
         cap: u64,
     },
+    RawTableInner {
+        bucket_mask: u64,
+        ctrl: usize,
+        growth_left: u64,
+        items: u64,
+    },
     Variant {
         name: String,
         field: Option<Box<DebugValue>>,
@@ -183,9 +189,26 @@ impl fmt::Display for DebugValue {
                 cap,
             } => write!(
                 f,
-                "RawParts {{\nptr: {}\nlen: {}\ncap: {}}}",
-                heap_pointer_value, len, cap
+                "RawParts {{\nptr: {:#x}\nlen: {}\ncap: {}}}",
+                heap_pointer_value.bright_blue(),
+                len,
+                cap
             ),
+            DebugValue::RawTableInner {
+                bucket_mask,
+                ctrl,
+                growth_left,
+                items,
+            } => {
+                write!(
+                    f,
+                    "RawTableInner {{\n bucket_mask: {}\nctrl: {:#x}\ngrowth_left: {}\nitems: {}}}",
+                    bucket_mask.blue(),
+                    ctrl.bright_blue(),
+                    growth_left.blue(),
+                    items.blue()
+                )
+            }
             DebugValue::Variant { name, field } => {
                 if let Some(field) = field {
                     // Avoid double parentheses from tuple and variant

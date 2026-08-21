@@ -510,6 +510,7 @@ impl DwarfType {
                 name,
                 generics,
                 fields,
+                alignment,
                 ..
             } => {
                 // Handle base case for known rust types
@@ -579,12 +580,17 @@ impl DwarfType {
                     {
                         let mut buffer = Vec::with_capacity(cap as usize);
 
+                        // The beginning pointer where the head resides
                         let base_pointer = heap_pointer_value as u64 + (head * size);
+
+                        // The maiximum pointer that is within the bounds of the allocated memory
                         let maximum_address = heap_pointer_value as u64 + (cap * size);
 
                         for i in 0..len {
                             let current_address = base_pointer + i * size;
 
+                            // If current address is still within the bounds of the allocated memory
+                            // Iterate normally like a vector
                             if current_address < maximum_address {
                                 let Some(data) = ty.dwarf_type.to_debug_value(
                                     type_index,
@@ -596,6 +602,8 @@ impl DwarfType {
                                 };
                                 buffer.push(data);
                             } else {
+                                // If the current address is out of bounds then it wrapped around
+                                // In that case get the offset by how far out of bounds it is and restart at the beginning pointer
                                 let offset = current_address - maximum_address;
                                 let current_address = heap_pointer_value as u64 + offset;
 
@@ -624,6 +632,28 @@ impl DwarfType {
                         return Ok(Some(DebugValue::RawVecInner {
                             heap_pointer_value: ptr,
                             cap,
+                        }));
+                    }
+                }
+
+                if name == "RawTableInner" {
+                    let bucket_mask = get_value!(fields, type_index, "bucket_mask", address, pid);
+                    let ctrl = get_value!(fields, type_index, "ctrl", address, pid);
+                    let growth_left = get_value!(fields, type_index, "growth_left", address, pid);
+                    let items = get_value!(fields, type_index, "items", address, pid);
+
+                    if let (
+                        Some(DebugValue::Usize(bucket_mask)),
+                        Some(DebugValue::Pointer(ctrl)),
+                        Some(DebugValue::Usize(growth_left)),
+                        Some(DebugValue::Usize(items)),
+                    ) = (bucket_mask, ctrl, growth_left, items)
+                    {
+                        return Ok(Some(DebugValue::RawTableInner {
+                            bucket_mask,
+                            ctrl,
+                            growth_left,
+                            items,
                         }));
                     }
                 }
