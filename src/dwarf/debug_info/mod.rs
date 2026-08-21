@@ -513,6 +513,7 @@ impl DwarfType {
                 alignment,
                 ..
             } => {
+                println!("{}", name);
                 // Handle base case for known rust types
                 if name == "String" {
                     let buffer = get_value!(fields, type_index, "vec", address, pid);
@@ -821,7 +822,7 @@ impl DwarfType {
                     });
                 }
 
-                if name == "&str" {
+                if name == "&str" || name == "&std::path::Path" {
                     assert!(values.len() == 2);
 
                     let ptr = &values[0].value;
@@ -830,7 +831,12 @@ impl DwarfType {
                     if let (DebugValue::Pointer(ptr), DebugValue::Usize(len)) = (ptr, len) {
                         let res = syscalls::read_bytes(pid, *ptr as usize, *len as usize)?;
                         let string = String::from_utf8_lossy(&res).into_owned();
-                        return Ok(Some(DebugValue::StringSlice(string)));
+
+                        if name == "&str" {
+                            return Ok(Some(DebugValue::StringSlice(string)));
+                        } else {
+                            return Ok(Some(DebugValue::FilePath(string)));
+                        }
                     }
                 }
 

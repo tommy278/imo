@@ -38,6 +38,9 @@ fn main() {
     deq.push_front(2);
     deq.push_back(6);
 
+    let path = std::path::Path::new("/usr/bin/top");
+    let path_buf = path.to_path_buf();
+
     let b = false;
     let mut t = true;
     let arr: [i32; 6] = [120, -1, 26, 34, -5000, 720];

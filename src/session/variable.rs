@@ -1,5 +1,5 @@
 use owo_colors::OwoColorize;
-use std::fmt;
+use std::{fmt, path};
 
 #[derive(Debug, Clone)]
 pub struct DebugStructField {
@@ -36,6 +36,7 @@ pub enum DebugValue {
     Char(char),
     StringSlice(String),
     String(String),
+    FilePath(String),
     Boolean(bool),
     Pointer(usize),
     Array(Vec<DebugValue>),
@@ -115,6 +116,7 @@ impl fmt::Display for DebugValue {
             DebugValue::Char(c) => write!(f, "\'{}\'", c.cyan()),
             DebugValue::String(s) => write!(f, "\"{}\"", s.green()),
             DebugValue::StringSlice(slice) => write!(f, "\"{}\"", slice.green()),
+            DebugValue::FilePath(path) => write!(f, "Path({})", path.green()),
             DebugValue::Boolean(bool) => write!(f, "{}", bool.yellow()),
             DebugValue::Pointer(ptr) => {
                 write!(f, "{:#x}", ptr.bright_blue())?;
