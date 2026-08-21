@@ -630,8 +630,8 @@ impl DwarfType {
                     if let Some(DebugValue::RawTableInner {
                         bucket_mask,
                         ctrl,
-                        growth_left,
                         items,
+                        ..
                     }) = table
                     {
                         let key_field = get_field!(generics, "K");
@@ -643,12 +643,44 @@ impl DwarfType {
                         let key_size = get_size!(key_type, type_index);
                         let value_size = get_size!(value_type, type_index);
 
+                        let total_size = key_size + value_size;
+
                         // Round up to the next memory alignment boundary
-                        let next_key_offset = (key_size + alignment - 1) & !(alignment - 1);
-                        let next_value_offset = (value_size + alignment - 1) & !(alignment - 1);
+                        let next_key_offset = if total_size > *alignment {
+                            (key_size + alignment - 1) & !(alignment - 1)
+                        } else {
+                            if alignment % key_size == 0 {
+                                key_size
+                            } else {
+                                let mut size = key_size;
+
+                                while *alignment % size != 0 {
+                                    size += 1;
+                                }
+
+                                size
+                            }
+                        };
 
                         // Padding for each tuple (key, value)
-                        let total_offset = next_key_offset + next_value_offset;
+                        let total_offset = if total_size > *alignment {
+                            (total_size + alignment - 1) & !(alignment - 1)
+                        } else {
+                            // In case the total size is less than the alignment
+                            // Each entry will be placed side to size if divisible by 8
+                            // Eg. an entry of <u8, u8> can have 4 entries if the aligment of 8 instead of padding directly to 8
+                            if alignment % total_size == 0 {
+                                total_size
+                            } else {
+                                let mut size = total_size;
+
+                                while *alignment % size != 0 {
+                                    size += 1;
+                                }
+
+                                size
+                            }
+                        };
 
                         // Bucket mask is total_buckets - 1
                         let total_buckets = bucket_mask + 1;
