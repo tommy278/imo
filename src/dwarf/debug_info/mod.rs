@@ -112,8 +112,8 @@ macro_rules! get_field {
             Some(field) => field,
             None => {
                 return Ok(Some(DebugValue::Err(format!(
-                    "Failed to get field: {}",
-                    $target_field
+                    "Failed to get field: {}. Available fields: {:?}",
+                    $target_field, $fields
                 ))))
             }
         }
@@ -619,6 +619,80 @@ impl DwarfType {
                             }
                         }
                         return Ok(Some(DebugValue::Vec(buffer)));
+                    }
+                }
+
+                // There are more versions of Hashmap
+                // Only select the one with the table field and have the other ones resolve naturally
+                if name.starts_with("HashMap<") && fields.iter().any(|s| s.name == "table") {
+                    let table = get_value!(fields, type_index, "table", address, pid);
+
+                    if let Some(DebugValue::RawTableInner {
+                        bucket_mask,
+                        ctrl,
+                        growth_left,
+                        items,
+                    }) = table
+                    {
+                        let key_field = get_field!(generics, "K");
+                        let key_type = get_type!(type_index, &key_field.type_offset);
+
+                        let value_field = get_field!(generics, "V");
+                        let value_type = get_type!(type_index, &value_field.type_offset);
+
+                        let key_size = get_size!(key_type, type_index);
+                        let value_size = get_size!(value_type, type_index);
+
+                        // Round up to the next memory alignment boundary
+                        let next_key_offset = (key_size + alignment - 1) & !(alignment - 1);
+                        let next_value_offset = (value_size + alignment - 1) & !(alignment - 1);
+
+                        // Padding for each tuple (key, value)
+                        let total_offset = next_key_offset + next_value_offset;
+
+                        // Bucket mask is total_buckets - 1
+                        let total_buckets = bucket_mask + 1;
+
+                        let mut entries = Vec::with_capacity(items as usize);
+
+                        for i in 0..total_buckets {
+                            let ctrl_byte_address = ctrl + i as usize;
+                            let ctrl_byte = os::syscalls::peek_data(pid, ctrl_byte_address as u64)?;
+
+                            // If ctrl byte is a tombstone then ignore it
+                            if ctrl_byte & 0x80 != 0 {
+                                continue;
+                            }
+
+                            // Formula for finding base address from ctrl
+                            let base_address = ctrl as u64 - (i + 1) * total_offset;
+
+                            // The key is at the current address while the value is right after the key
+                            let key_address = base_address;
+                            let value_address = base_address + next_key_offset;
+
+                            // Compute the values for the valid entries accordingly
+                            let Some(current_key) =
+                                key_type
+                                    .dwarf_type
+                                    .to_debug_value(type_index, key_address, pid)?
+                            else {
+                                return Ok(None);
+                            };
+
+                            let Some(current_value) = value_type.dwarf_type.to_debug_value(
+                                type_index,
+                                value_address,
+                                pid,
+                            )?
+                            else {
+                                return Ok(None);
+                            };
+
+                            entries.push((current_key, current_value));
+                        }
+
+                        return Ok(Some(DebugValue::HashMap { entries }));
                     }
                 }
 

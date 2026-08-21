@@ -18,6 +18,10 @@ fn main() {
     g.insert(2, "bar");
     g.insert(3, "baz");
 
+    let mut simple: HashMap<u8, u8> = HashMap::new();
+    simple.insert(1, 2);
+    simple.insert(3, 4);
+
     let cell = std::cell::Cell::new(100);
     let rc = std::rc::Rc::new("Rc");
     let arc = std::sync::Arc::new("Arc");

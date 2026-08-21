@@ -45,6 +45,9 @@ pub enum DebugValue {
         kind: WrapperKind,
         value: Box<DebugValue>,
     },
+    HashMap {
+        entries: Vec<(DebugValue, DebugValue)>,
+    },
     Enum {
         name: String,
         inner_name: String,
@@ -148,6 +151,19 @@ impl fmt::Display for DebugValue {
                 }
 
                 write!(f, "]")?;
+                Ok(())
+            }
+            DebugValue::HashMap { entries } => {
+                write!(f, "HashMap {{")?;
+
+                for (key, value) in entries {
+                    writeln!(f, "")?;
+                    write!(f, "    {}", key)?;
+                    write!(f, ":   {}", value)?;
+                }
+
+                write!(f, "\n}}")?;
+
                 Ok(())
             }
             DebugValue::PointerWrapper { kind, value } => {
