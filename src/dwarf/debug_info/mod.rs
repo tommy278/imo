@@ -897,6 +897,13 @@ impl ExecutionScope {
         }
     }
 
+    pub fn get_name(&self) -> Option<&str> {
+        match self {
+            ExecutionScope::Function { display_name, .. } => Some(display_name),
+            _ => None,
+        }
+    }
+
     pub fn is_inline(&self) -> bool {
         match self {
             ExecutionScope::Inlined => true,
@@ -1098,6 +1105,20 @@ impl DebuggerMetadataCache {
             }
         }
         true
+    }
+
+    pub fn get_function_name(&self, pc: u64) -> Option<&str> {
+        for scope in self.execution_scopes.iter() {
+            if scope.is_in_scope(pc) {
+                if scope.find_active_scope(pc).is_some() {
+                    if scope.scope.is_func() {
+                        return scope.scope.get_name();
+                    }
+                }
+            }
+        }
+
+        None
     }
 
     /// Find current variables and frame base with the current pc

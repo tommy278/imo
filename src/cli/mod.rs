@@ -193,6 +193,12 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                         }
                         return Ok(());
                     }
+                    "func" => {
+                        let name = session
+                            .metadata
+                            .get_function_name(session.current_pc().unwrap());
+                        println!("{:?}", name);
+                    }
                     _ => {
                         println!("Not handled yet");
                     }
