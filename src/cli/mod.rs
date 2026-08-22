@@ -74,7 +74,10 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                         // eg: break 12
 
                         let line_number = parse_line_arg!(arg, u32);
-                        let line_index = session.get_breakpoint_target(line_number).unwrap();
+                        let Some(line_index) = session.get_breakpoint_target(line_number) else {
+                            eprintln!("Cannot set breakpoint at target");
+                            continue;
+                        };
                         handle_breakpoint_setting(session, &line_index, line_number);
                     }
                     "clear" => {
@@ -146,8 +149,11 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                                 }
                             }
                             "r" | "reg" => {
-                                let regs = session.get_regs().unwrap();
-                                println!("{}", regs);
+                                if let Ok(regs) = session.get_regs() {
+                                    println!("{}", regs);
+                                } else {
+                                    eprintln!("Failed to fetch registers");
+                                }
                             }
                             _ => {
                                 println!("Not handled yet")
@@ -168,7 +174,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                                         if let Some(val) = var {
                                             println!("{} = {}", arg, val);
                                         } else {
-                                            println!(
+                                            eprintln!(
                                                 "Var '{}' not in scope at current breakpoint",
                                                 arg
                                             );
@@ -186,13 +192,6 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                             eprintln!("{err}")
                         }
                         return Ok(());
-                    }
-                    "type" => {
-                        let arg = parse_arg!(parts, "test");
-                        let offset = parse_line_arg!(arg, usize);
-
-                        let typ = session.metadata.type_index.get(&offset);
-                        println!("{:?}", typ);
                     }
                     _ => {
                         println!("Not handled yet");

@@ -103,9 +103,11 @@ pub fn handle_breakpoint_setting(
 
     // All addresses belong to the same file
     if unique_files.len() == 1 {
-        // Input the first file name since they are all the same
-        let default = line_index[0].file.as_ref();
-        let result = session.create_breakpoint(line_number, default);
+        // Safe unwrap since there is one element in the set
+        // Since there is only one file extract it and it is the target file
+        let target_file = unique_files.into_iter().next().unwrap();
+
+        let result = session.create_breakpoint(line_number, target_file);
 
         match result {
             Ok(breakpoint::BreakpointMutationResult::Created { count, target }) => {
@@ -118,6 +120,8 @@ pub fn handle_breakpoint_setting(
             Err(e) => eprintln!("{e}"),
             _ => unreachable!(),
         }
+
+        return;
     }
 
     // All addresses are not the same file
