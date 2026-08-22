@@ -513,7 +513,6 @@ impl DwarfType {
                 alignment,
                 ..
             } => {
-                println!("{}", name);
                 // Handle base case for known rust types
                 if name == "String" {
                     let buffer = get_value!(fields, type_index, "vec", address, pid);

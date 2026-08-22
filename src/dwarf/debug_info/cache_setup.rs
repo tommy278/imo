@@ -18,6 +18,15 @@ use crate::dwarf::debug_info::{
     },
 };
 
+macro_rules! get_global_offset {
+    ($offset:expr, $unit: expr) => {
+        $offset
+            .to_debug_info_offset(&$unit)
+            .ok_or(gimli::Error::NoEntryAtGivenOffset($offset.0 as u64))?
+            .0
+    };
+}
+
 // The section data that will be stored in `DwarfSections` and `DwarfPackageSections`.
 #[derive(Default)]
 struct Section<'data> {
@@ -110,15 +119,6 @@ fn dump_file(
 struct ActiveScope {
     depth: isize,
     node: ScopeCacheNode,
-}
-
-macro_rules! get_global_offset {
-    ($offset:expr, $unit: expr) => {
-        $offset
-            .to_debug_info_offset(&$unit)
-            .ok_or(gimli::Error::NoEntryAtGivenOffset($offset.0 as u64))?
-            .0
-    };
 }
 
 fn dump_unit<'a>(

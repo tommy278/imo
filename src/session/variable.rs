@@ -1,5 +1,5 @@
 use owo_colors::OwoColorize;
-use std::{fmt, path};
+use std::fmt;
 
 #[derive(Debug, Clone)]
 pub struct DebugStructField {
@@ -183,7 +183,7 @@ impl fmt::Display for DebugValue {
                 let len = elements.len();
 
                 for i in 0..len {
-                    write!(f, "{}", elements[i]);
+                    write!(f, "{}", elements[i])?;
 
                     if i != len - 1 {
                         write!(f, ",")?;
