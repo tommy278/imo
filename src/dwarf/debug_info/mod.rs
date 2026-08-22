@@ -259,7 +259,6 @@ impl DwarfType {
         address: u64,
         pid: os::ProcessId,
     ) -> Result<Option<DebugValue>, SystemError> {
-        println!("{:?}", self);
         match self {
             DwarfType::Base {
                 name,
@@ -524,6 +523,17 @@ impl DwarfType {
                         let string = String::from_utf8_lossy(&raw_values).into_owned();
 
                         return Ok(Some(DebugValue::String(string)));
+                    }
+                }
+
+                if name == "PathBuf" {
+                    let inner = get_value!(fields, type_index, "inner", address, pid);
+
+                    if let Some(DebugValue::Vec(buf)) = inner {
+                        let raw_values = to_buffer(&buf);
+                        let string = String::from_utf8_lossy(&raw_values).into_owned();
+
+                        return Ok(Some(DebugValue::FilePathBuf(string)));
                     }
                 }
 

@@ -37,6 +37,7 @@ pub enum DebugValue {
     StringSlice(String),
     String(String),
     FilePath(String),
+    FilePathBuf(String),
     Boolean(bool),
     Pointer(usize),
     Array(Vec<DebugValue>),
@@ -116,7 +117,12 @@ impl fmt::Display for DebugValue {
             DebugValue::Char(c) => write!(f, "\'{}\'", c.cyan()),
             DebugValue::String(s) => write!(f, "\"{}\"", s.green()),
             DebugValue::StringSlice(slice) => write!(f, "\"{}\"", slice.green()),
-            DebugValue::FilePath(path) => write!(f, "Path({})", path.green()),
+            DebugValue::FilePath(path) => {
+                write!(f, "{}(\"{}\")", "Path".bright_yellow(), path.green(),)
+            }
+            DebugValue::FilePathBuf(path_buf) => {
+                write!(f, "{}(\"{}\")", "PathBuf".bright_yellow(), path_buf.green(),)
+            }
             DebugValue::Boolean(bool) => write!(f, "{}", bool.yellow()),
             DebugValue::Pointer(ptr) => {
                 write!(f, "{:#x}", ptr.bright_blue())?;
@@ -159,7 +165,7 @@ impl fmt::Display for DebugValue {
                 Ok(())
             }
             DebugValue::HashMap { entries } => {
-                write!(f, "HashMap {{")?;
+                write!(f, "{} {{", "HashMap".bright_yellow())?;
 
                 for (key, value) in entries {
                     writeln!(f, "")?;
@@ -172,7 +178,7 @@ impl fmt::Display for DebugValue {
                 Ok(())
             }
             DebugValue::HashSet { elements } => {
-                write!(f, "HashSet (")?;
+                write!(f, "{} (", "HashSet".bright_yellow())?;
 
                 let len = elements.len();
 

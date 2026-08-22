@@ -432,7 +432,6 @@ impl DebugSession {
         // If it is that means it has been declared and if not then it hasnt
 
         if let Some(variable) = node.get_variable_with_name(name) {
-            println!("{:?}", variable);
             let current_pc = regs.instruction_pointer() - self.base_address;
 
             if let Some(info) = self.get_location_with_address(current_pc) {
