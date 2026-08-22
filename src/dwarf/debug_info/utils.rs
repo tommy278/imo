@@ -22,7 +22,7 @@ pub fn extract_variable<'a>(
             }
             gimli::DW_AT_type => {
                 if let gimli::AttributeValue::UnitRef(offset) = attr.value() {
-                    target_type_offset = Some(offset.0);
+                    target_type_offset = offset.to_debug_info_offset(unit).map(|o| o.0);
                 }
             }
             gimli::DW_AT_location => {

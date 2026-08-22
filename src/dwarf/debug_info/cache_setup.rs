@@ -112,6 +112,15 @@ struct ActiveScope {
     node: ScopeCacheNode,
 }
 
+macro_rules! get_global_offset {
+    ($offset:expr, $unit: expr) => {
+        $offset
+            .to_debug_info_offset(&$unit)
+            .ok_or(gimli::Error::NoEntryAtGivenOffset($offset.0 as u64))?
+            .0
+    };
+}
+
 fn dump_unit<'a>(
     unit: UnitRef<'a, RelocateReader<EndianSlice<'a, RunTimeEndian>, &'a RelocationMap>>,
     info_cache: &mut DebuggerMetadataCache,
@@ -153,7 +162,7 @@ fn dump_unit<'a>(
             }
         }
 
-        let offset = entry.offset().0;
+        let offset = get_global_offset!(entry.offset(), unit);
 
         // Parse each entries for the needed values while skipping redundant values
         match entry.tag() {
@@ -204,7 +213,7 @@ fn dump_unit<'a>(
                     match attr.name() {
                         gimli::DW_AT_type => {
                             if let gimli::AttributeValue::UnitRef(offset) = attr.value() {
-                                target_type_offset = Some(offset.0);
+                                target_type_offset = Some(get_global_offset!(offset, unit));
                             }
                         }
                         gimli::DW_AT_name => {
@@ -235,7 +244,7 @@ fn dump_unit<'a>(
                     match attr.name() {
                         gimli::DW_AT_type => {
                             if let gimli::AttributeValue::UnitRef(offset) = attr.value() {
-                                target_type_offset = Some(offset.0);
+                                target_type_offset = Some(get_global_offset!(offset, unit));
                             }
                         }
                         _ => continue,
@@ -341,7 +350,7 @@ fn dump_unit<'a>(
                     match attr.name() {
                         gimli::DW_AT_type => {
                             if let gimli::AttributeValue::UnitRef(offset) = attr.value() {
-                                target_type_offset = Some(offset);
+                                target_type_offset = Some(get_global_offset!(offset, unit));
                             }
                         }
                         _ => continue,
@@ -376,7 +385,7 @@ fn dump_unit<'a>(
                         (target_type_offset, element_count)
                     {
                         let array_type = DwarfType::Array {
-                            target_type_offset: target_type_offset.0,
+                            target_type_offset,
                             count,
                         };
 
@@ -457,7 +466,8 @@ fn dump_unit<'a>(
                                             if let gimli::AttributeValue::UnitRef(offset) =
                                                 attr.value()
                                             {
-                                                type_offset = Some(offset.0);
+                                                type_offset =
+                                                    Some(get_global_offset!(offset, unit));
                                             }
                                         }
                                         gimli::DW_AT_data_member_location => {
@@ -497,7 +507,8 @@ fn dump_unit<'a>(
                                             if let gimli::AttributeValue::UnitRef(offset) =
                                                 attr.value()
                                             {
-                                                type_offset = Some(offset.0);
+                                                type_offset =
+                                                    Some(get_global_offset!(offset, unit));
                                             }
                                         }
                                         _ => continue,
@@ -608,7 +619,9 @@ fn dump_unit<'a>(
                                                             offset,
                                                         ) = attr.value()
                                                         {
-                                                            type_offset = Some(offset.0);
+                                                            type_offset = Some(get_global_offset!(
+                                                                offset, unit
+                                                            ));
                                                         }
                                                     }
                                                     gimli::DW_AT_data_member_location => {

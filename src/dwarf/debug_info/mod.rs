@@ -259,6 +259,7 @@ impl DwarfType {
         address: u64,
         pid: os::ProcessId,
     ) -> Result<Option<DebugValue>, SystemError> {
+        println!("{:?}", self);
         match self {
             DwarfType::Base {
                 name,
@@ -971,9 +972,6 @@ impl DebugVariable {
 
                         result = evaluation.resume_with_memory(value)?;
                     }
-                }
-                gimli::EvaluationResult::RequiresRegister { .. } => {
-                    todo!()
                 }
                 _ => todo!("Other result : {:?}", result),
             }

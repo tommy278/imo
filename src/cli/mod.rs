@@ -187,6 +187,13 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                         }
                         return Ok(());
                     }
+                    "type" => {
+                        let arg = parse_arg!(parts, "test");
+                        let offset = parse_line_arg!(arg, usize);
+
+                        let typ = session.metadata.type_index.get(&offset);
+                        println!("{:?}", typ);
+                    }
                     _ => {
                         println!("Not handled yet");
                     }
