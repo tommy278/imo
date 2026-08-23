@@ -2,6 +2,13 @@ use crate::sys::os;
 use std::fmt;
 
 #[derive(Debug, Clone, Copy)]
+pub struct VirtualRegisters {
+    pub stack_pointer: u64,
+    pub base_pointer: u64,
+    pub instruction_pointer: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct RegisterViewer {
     pub regs: os::PlatformRegStruct,
 }
@@ -9,6 +16,16 @@ pub struct RegisterViewer {
 impl RegisterViewer {
     pub fn new(regs: os::PlatformRegStruct) -> Self {
         Self { regs }
+    }
+}
+
+impl Into<VirtualRegisters> for RegisterViewer {
+    fn into(self) -> VirtualRegisters {
+        VirtualRegisters {
+            stack_pointer: self.stack_pointer(),
+            base_pointer: self.base_pointer(),
+            instruction_pointer: self.instruction_pointer(),
+        }
     }
 }
 

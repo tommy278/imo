@@ -7,17 +7,20 @@ use gimli::UnwindSection;
 use rustc_hash::FxHashMap;
 use std::path::Path;
 
-use crate::dwarf::{
-    self,
-    debug_frame::{RawDebugFrame, setup_session_debug_frame},
-    debug_info::{ActiveVariablesContext, DebuggerMetadataCache},
-    error::CacheSetupError,
-};
 use crate::sys::SystemError;
 use crate::sys::os::{self, syscalls};
 use crate::sys::registers::RegisterViewer;
 use crate::types::{
     LineRow, SourceCodeCache, SourceCodeDisplay, SourceLocation, StringId, StringInterner,
+};
+use crate::{
+    dwarf::{
+        self,
+        debug_frame::{RawDebugFrame, setup_session_debug_frame},
+        debug_info::{ActiveVariablesContext, DebuggerMetadataCache},
+        error::CacheSetupError,
+    },
+    sys::registers::VirtualRegisters,
 };
 use breakpoint::{BreakpointData, BreakpointMutationResult, BreakpointTarget, ManagedBreakpoint};
 use execution::CurrentStopCmd;
@@ -173,30 +176,33 @@ impl DebugSession {
             .get_unwind_table_with_endian(self.metadata.endian)
     }
 
-    pub fn get_register_value(&self, register: gimli::Register) -> Option<u64> {
+    pub fn get_register_value(
+        &self,
+        register: gimli::Register,
+        virtual_registers: &VirtualRegisters,
+    ) -> Option<u64> {
         #[cfg(target_os = "linux")]
         {
-            let regs = self.get_regs().ok()?.regs;
             match register.0 {
-                6 => Some(regs.rbp),
-                7 => Some(regs.rsp),
-                16 => Some(regs.rip),
+                6 => Some(virtual_registers.base_pointer),
+                7 => Some(virtual_registers.stack_pointer),
+                16 => Some(virtual_registers.instruction_pointer),
                 _ => todo!("Not implemented yet {}", register.0),
             }
         }
 
         #[cfg(not(target_os = "linux"))]
         {
-            std::hint::black_box(register);
+            std::hint::black_box((virtual_registers, register));
             Some(0)
         }
     }
 
-    pub fn get_return_address(&self) -> Option<u64> {
+    pub fn get_return_address(&self, regs: &mut VirtualRegisters) -> Option<u64> {
         let eh_frame = self.get_unwind_table();
         let base_addresses = &self.metadata.base_addresses;
 
-        let current_pc = self.current_pc().ok()?;
+        let current_pc = regs.instruction_pointer - self.base_address;
 
         if let Ok(fde) =
             eh_frame.fde_for_address(base_addresses, current_pc, |sections, bases, offset| {
@@ -210,7 +216,7 @@ impl DebugSession {
             while let Some(row) = table.next_row().ok()? {
                 let cfa_address = match row.cfa() {
                     gimli::CfaRule::RegisterAndOffset { register, offset } => {
-                        let reg_value = self.get_register_value(*register)?;
+                        let reg_value = self.get_register_value(*register, &regs)?;
                         (reg_value as i64 + offset) as u64
                     }
                     gimli::CfaRule::Expression(_) => todo!(),
@@ -223,10 +229,13 @@ impl DebugSession {
                                 let ra_storage_address = (cfa_address as i64 + offset) as u64;
                                 let return_address =
                                     syscalls::peek_data(self.pid, ra_storage_address).ok()? as u64;
+                                regs.instruction_pointer = return_address;
                                 return Some(return_address);
                             }
                             gimli::RegisterRule::Register(saved_reg) => {
-                                let return_address = self.get_register_value(saved_reg)?;
+                                let return_address = self.get_register_value(saved_reg, &regs)?;
+                                regs.instruction_pointer = return_address;
+                                regs.stack_pointer = cfa_address;
                                 return Some(return_address);
                             }
                             _ => todo!(),
@@ -236,6 +245,11 @@ impl DebugSession {
             }
         }
         None
+    }
+
+    pub fn virtual_registers(&self) -> Result<VirtualRegisters, SystemError> {
+        let full_regs = self.get_regs()?;
+        Ok(full_regs.into())
     }
 
     pub fn current_instruction_pointer(&self) -> Result<u64, SystemError> {

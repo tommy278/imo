@@ -159,8 +159,9 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                                         } else {
                                             // If current rsp is lower then we stepped into a child
                                             // In that case get the return address and continue there
-                                            let Some(return_address) = session.get_return_address()
-                                            else {
+                                            let Some(return_address) = session.get_return_address(
+                                                &mut session.virtual_registers()?,
+                                            ) else {
                                                 session.single_step()?;
                                                 continue;
                                             };
@@ -250,8 +251,9 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                                             }
                                             continue;
                                         } else {
-                                            let Some(return_address) = session.get_return_address()
-                                            else {
+                                            let Some(return_address) = session.get_return_address(
+                                                &mut session.virtual_registers()?,
+                                            ) else {
                                                 session.single_step()?;
                                                 continue;
                                             };
