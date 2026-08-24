@@ -198,6 +198,32 @@ impl DebugSession {
         }
     }
 
+    pub fn backtrace(&self) -> Vec<&str> {
+        let mut function_names = Vec::new();
+        let mut virtual_registers = self.virtual_registers().unwrap();
+
+        loop {
+            if virtual_registers.instruction_pointer < self.base_address {
+                break;
+            }
+
+            let name = self
+                .metadata
+                .get_function_name(virtual_registers.instruction_pointer - self.base_address);
+
+            if let Some(name) = name {
+                function_names.push(name);
+            } else {
+                break;
+            }
+
+            // Update the virtual address\
+            self.get_return_address(&mut virtual_registers);
+        }
+
+        function_names
+    }
+
     pub fn get_return_address(&self, regs: &mut VirtualRegisters) -> Option<u64> {
         let eh_frame = self.get_unwind_table();
         let base_addresses = &self.metadata.base_addresses;
@@ -223,23 +249,32 @@ impl DebugSession {
                 };
 
                 if row.contains(current_pc) {
+                    regs.stack_pointer = cfa_address;
+
+                    // TODO: get base pointer dynamically
+                    // regs.base_pointer = cfa_address - 16;
+
                     if let Some(ra_rule) = row.register(ra_register) {
-                        match ra_rule {
+                        let return_address = match ra_rule {
                             gimli::RegisterRule::Offset(offset) => {
                                 let ra_storage_address = (cfa_address as i64 + offset) as u64;
+
                                 let return_address =
                                     syscalls::peek_data(self.pid, ra_storage_address).ok()? as u64;
-                                regs.instruction_pointer = return_address;
-                                return Some(return_address);
+                                Some(return_address)
                             }
                             gimli::RegisterRule::Register(saved_reg) => {
                                 let return_address = self.get_register_value(saved_reg, &regs)?;
-                                regs.instruction_pointer = return_address;
-                                regs.stack_pointer = cfa_address;
-                                return Some(return_address);
+                                Some(return_address)
                             }
                             _ => todo!(),
+                        };
+
+                        if let Some(addr) = return_address {
+                            regs.instruction_pointer = addr;
                         }
+
+                        return return_address;
                     }
                 }
             }
