@@ -14,7 +14,7 @@ impl std::fmt::Display for StackInfo<'_> {
 
         write!(f, "{}", self.func_name)?;
 
-        if self.func_name != "[inlined]" && !self.func_name.contains("<") {
+        if !self.func_name.contains("<") {
             write!(f, "() ")?;
         } else {
             write!(f, " ")?;

@@ -217,26 +217,21 @@ impl DebugSession {
             if let Some(name) = name {
                 if let Some(location) = self.get_location_with_address(current_pc) {
                     if let Some(resolved_name) = self.interner.get_str(location.file) {
-                        let mut stack_info = StackInfo {
-                            func_name: "[inlined]",
+                        stack_frames.push(StackInfo {
+                            func_name: name,
                             file: resolved_name,
                             rip: virtual_registers.instruction_pointer,
                             line: location.line,
-                        };
-                        if self.metadata.is_in_inline(current_pc) {
-                            stack_frames.push(stack_info);
-                        }
-
-                        stack_info.func_name = name;
-                        stack_frames.push(stack_info);
+                        });
                     }
                 }
             } else {
                 break;
             }
 
-            // Update the virtual address\
-            self.get_return_address(&mut virtual_registers);
+            // Update the virtual register
+            // No need to store return address since its the same as the rip in virtual regs in this case
+            let _ = self.get_return_address(&mut virtual_registers);
         }
 
         Ok(stack_frames)
