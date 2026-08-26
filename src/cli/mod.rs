@@ -186,12 +186,18 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                             Err(err) => eprintln!("Could not resolve current scope: {err}"),
                         }
                     }
-                    "bt" | "backtrace" => {
-                        let function_names = session.backtrace();
-                        function_names.iter().for_each(|n| {
-                            println!("{n}");
-                        });
-                    }
+                    "bt" | "backtrace" => match session.backtrace() {
+                        Ok(stack_frames) => {
+                            let mut frame = 0;
+                            stack_frames.iter().for_each(|f| {
+                                println!("#{}: {}", frame, f);
+                                frame += 1;
+                            });
+                        }
+                        Err(e) => {
+                            eprintln!("{e}")
+                        }
+                    },
                     "q" | "quit" => {
                         // End current debug session
                         if let Err(err) = session.kill_session() {

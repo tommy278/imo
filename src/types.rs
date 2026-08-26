@@ -127,6 +127,10 @@ impl StringInterner {
     pub fn get_string(&self, id: StringId) -> Option<String> {
         self.buffer.get(id.0 as usize).cloned()
     }
+
+    pub fn get_str(&self, id: StringId) -> Option<&str> {
+        self.buffer.get(id.0 as usize).map(|s| s.as_str())
+    }
 }
 
 #[derive(Debug)]

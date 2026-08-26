@@ -3,9 +3,9 @@ use owo_colors::OwoColorize;
 // TODO: Make this safe for any OS
 // For example windows uses backslash instead of forward slash
 /// Trim file path for the main source code
-pub fn trim_file_path(path: &std::path::Path) -> String {
-    let path = path.display().to_string();
-    path.split("/").last().unwrap_or("main").to_owned()
+pub fn trim_file_path<P: AsRef<std::path::Path>>(path: &P) -> &str {
+    let path = path.as_ref().to_str().unwrap();
+    path.split("/").last().unwrap_or("main")
 }
 
 /// Display the code in a user friendly format

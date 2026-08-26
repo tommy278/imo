@@ -1,12 +1,14 @@
 pub mod breakpoint;
 pub mod error;
 pub mod execution;
+pub mod types;
 pub mod variable;
 
 use gimli::UnwindSection;
 use rustc_hash::FxHashMap;
 use std::path::Path;
 
+use crate::session::types::StackInfo;
 use crate::sys::SystemError;
 use crate::sys::os::{self, syscalls};
 use crate::sys::registers::RegisterViewer;
@@ -198,21 +200,37 @@ impl DebugSession {
         }
     }
 
-    pub fn backtrace(&self) -> Vec<&str> {
-        let mut function_names = Vec::new();
-        let mut virtual_registers = self.virtual_registers().unwrap();
+    pub fn backtrace(&self) -> Result<Vec<StackInfo>, SystemError> {
+        let mut stack_frames = Vec::new();
+        let mut virtual_registers = self.virtual_registers()?;
 
         loop {
-            if virtual_registers.instruction_pointer < self.base_address {
+            let Some(current_pc) = virtual_registers
+                .instruction_pointer
+                .checked_sub(self.base_address)
+            else {
                 break;
-            }
+            };
 
-            let name = self
-                .metadata
-                .get_function_name(virtual_registers.instruction_pointer - self.base_address);
+            let name = self.metadata.get_function_name(current_pc);
 
             if let Some(name) = name {
-                function_names.push(name);
+                if let Some(location) = self.get_location_with_address(current_pc) {
+                    if let Some(resolved_name) = self.interner.get_str(location.file) {
+                        let mut stack_info = StackInfo {
+                            func_name: "[inlined]",
+                            file: resolved_name,
+                            rip: virtual_registers.instruction_pointer,
+                            line: location.line,
+                        };
+                        if self.metadata.is_in_inline(current_pc) {
+                            stack_frames.push(stack_info);
+                        }
+
+                        stack_info.func_name = name;
+                        stack_frames.push(stack_info);
+                    }
+                }
             } else {
                 break;
             }
@@ -221,7 +239,7 @@ impl DebugSession {
             self.get_return_address(&mut virtual_registers);
         }
 
-        function_names
+        Ok(stack_frames)
     }
 
     pub fn get_return_address(&self, regs: &mut VirtualRegisters) -> Option<u64> {

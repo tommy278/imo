@@ -178,7 +178,7 @@ fn handle_break_metadata(
 ) {
     // Handle metadata correctly
     let first_bp_relative_address = first_bp.relative_address;
-    let trimmed_path = trim_file_path(first_bp.file.as_ref());
+    let trimmed_path = trim_file_path(&first_bp.file);
 
     let location_detail = if bp_for_line == 1 {
         format!("line {}", line_number)
