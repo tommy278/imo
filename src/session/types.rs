@@ -12,15 +12,21 @@ impl std::fmt::Display for StackInfo<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let trimmed_file = trim_file_path(&self.file);
 
-        write!(f, "{}", self.func_name)?;
-
-        if !self.func_name.contains("<") {
-            write!(f, "() ")?;
+        if let Some((stripped_name, _)) = self.func_name.split_once("<") {
+            write!(
+                f,
+                "{:<36} {:#x} @ {}:{}",
+                stripped_name, self.rip, trimmed_file, self.line
+            )?;
         } else {
-            write!(f, " ")?;
+            let formatted_func_name = format!("{}()", self.func_name);
+            write!(
+                f,
+                "{:<36} {:#x} @ {}:{}",
+                formatted_func_name, self.rip, trimmed_file, self.line
+            )?;
         }
 
-        write!(f, "{:#x} @ {}:{}", self.rip, trimmed_file, self.line)?;
         Ok(())
     }
 }

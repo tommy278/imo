@@ -212,6 +212,11 @@ impl DebugSession {
                 break;
             };
 
+            // TODO: get the actual maximum address of the process
+            if current_pc > 200_000 {
+                break;
+            }
+
             let name = self.metadata.get_function_name(current_pc);
 
             if let Some(name) = name {
@@ -225,8 +230,6 @@ impl DebugSession {
                         });
                     }
                 }
-            } else {
-                break;
             }
 
             // Update the virtual register
