@@ -126,6 +126,8 @@ fn update_session_cache(
                 // This unwrap is safe because we guranteed it has a value above
                 let file_id = current_file_id.unwrap();
 
+                session.file_indices.insert(row.file_index(), file_id);
+
                 // DEDUPLICATION LOGIC
                 // Only push to line index if this row starts a new line or swicthed to a
                 // different file

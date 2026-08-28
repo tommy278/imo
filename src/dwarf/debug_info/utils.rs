@@ -62,6 +62,8 @@ pub fn extract_subprogram_node<'a>(
     let mut high_pc_attr = None;
     let mut display_name = None;
     let mut linkage_name = None;
+    let mut decl_file_idx = None;
+    let mut decl_line = None;
 
     let mut bytes = None;
 
@@ -90,6 +92,16 @@ pub fn extract_subprogram_node<'a>(
                     bytes = Some(expression.0.inner().to_vec());
                 }
             }
+            gimli::DW_AT_decl_file => {
+                if let gimli::AttributeValue::FileIndex(idx) = attr.value() {
+                    decl_file_idx = Some(idx);
+                }
+            }
+            gimli::DW_AT_decl_line => {
+                if let gimli::AttributeValue::Udata(line) = attr.value() {
+                    decl_line = Some(line as u32);
+                }
+            }
             _ => continue,
         }
     }
@@ -108,19 +120,33 @@ pub fn extract_subprogram_node<'a>(
         };
     }
 
-    if let (Some(low_pc), Some(high_pc), Some(display_name), Some(linkage_name)) =
-        (low_pc, high_pc, display_name, linkage_name)
-    {
-        let inlined = ExecutionScope::Function {
+    if let (
+        Some(low_pc),
+        Some(high_pc),
+        Some(display_name),
+        Some(linkage_name),
+        Some(decl_file_idx),
+        Some(decl_line),
+    ) = (
+        low_pc,
+        high_pc,
+        display_name,
+        linkage_name,
+        decl_file_idx,
+        decl_line,
+    ) {
+        let func = ExecutionScope::Function {
             display_name,
             linkage_name,
             bytes,
+            decl_file_idx,
+            decl_line,
         };
 
         let ranges = vec![AddressRange { low_pc, high_pc }];
 
         let node = ScopeCacheNode {
-            scope: inlined,
+            scope: func,
             offset: entry.offset().0,
             variables: Vec::new(),
             ranges,
@@ -129,6 +155,7 @@ pub fn extract_subprogram_node<'a>(
 
         return Some(node);
     }
+
     None
 }
 
@@ -137,6 +164,8 @@ pub fn extract_inline_node<'a>(
 ) -> Option<ScopeCacheNode> {
     let mut low_pc = None;
     let mut high_pc_attr = None;
+    let mut call_file_idx = None;
+    let mut call_line = None;
 
     for attr in entry.attrs() {
         match attr.name() {
@@ -148,6 +177,16 @@ pub fn extract_inline_node<'a>(
             gimli::DW_AT_high_pc => {
                 high_pc_attr = Some(attr.value());
             }
+            gimli::DW_AT_call_file => {
+                if let gimli::AttributeValue::FileIndex(idx) = attr.value() {
+                    call_file_idx = Some(idx);
+                }
+            }
+            gimli::DW_AT_call_line => {
+                if let gimli::AttributeValue::Udata(decl_line) = attr.value() {
+                    call_line = Some(decl_line as u32);
+                }
+            }
             _ => continue,
         }
     }
@@ -166,8 +205,13 @@ pub fn extract_inline_node<'a>(
         };
     }
 
-    if let (Some(low_pc), Some(high_pc)) = (low_pc, high_pc) {
-        let inlined = ExecutionScope::Inlined;
+    if let (Some(low_pc), Some(high_pc), Some(call_file_idx), Some(call_line)) =
+        (low_pc, high_pc, call_file_idx, call_line)
+    {
+        let inlined = ExecutionScope::Inlined {
+            call_file_idx,
+            call_line,
+        };
 
         let ranges = vec![AddressRange { low_pc, high_pc }];
 

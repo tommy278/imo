@@ -879,9 +879,15 @@ pub enum ExecutionScope {
         linkage_name: String,
         // Bytes for the instruction on how to get the frame_base
         bytes: Option<Vec<u8>>,
+
+        decl_file_idx: u64,
+        decl_line: u32,
     },
 
-    Inlined,
+    Inlined {
+        call_file_idx: u64,
+        call_line: u32,
+    },
 
     LexicalBlock,
 }
@@ -893,7 +899,7 @@ impl ExecutionScope {
             ExecutionScope::Function { bytes, .. } => {
                 bytes.as_ref().map_or(None, |bytes| Some(bytes))
             }
-            ExecutionScope::Inlined | ExecutionScope::LexicalBlock => None,
+            ExecutionScope::Inlined { .. } | ExecutionScope::LexicalBlock => None,
         }
     }
 
@@ -906,7 +912,7 @@ impl ExecutionScope {
 
     pub fn is_inline(&self) -> bool {
         match self {
-            ExecutionScope::Inlined => true,
+            ExecutionScope::Inlined { .. } => true,
             _ => false,
         }
     }
@@ -1136,9 +1142,11 @@ impl DebuggerMetadataCache {
 
     /// Get the current function scope with its nearest parent
     /// A length of 1 means the the single scope is a function
-    /// A length of means the first element is an inline, the second can be an inline or a function
+    /// A length greater than 1 means within at least one scope
+    /// The final parent scope has to be a function
+    /// The intermediate scope can also be inlines
     pub fn get_function_trace(&self, pc: u64) -> Vec<&ScopeCacheNode> {
-        let mut scopes = Vec::with_capacity(2);
+        let mut scopes = Vec::new();
 
         for scope in self.execution_scopes.iter() {
             if scope.is_in_scope(pc) {
@@ -1150,10 +1158,6 @@ impl DebuggerMetadataCache {
 
                     if scope.scope.is_inline() {
                         scopes.push(scope);
-
-                        if scopes.len() == 2 {
-                            return scopes;
-                        }
                     }
                 }
             }

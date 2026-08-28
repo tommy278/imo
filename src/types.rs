@@ -105,6 +105,8 @@ impl SourceCodeCache {
     }
 }
 
+pub type FileIndices = FxHashMap<u64, StringId>;
+
 #[derive(Debug, Clone, Default)]
 pub struct StringInterner {
     buffer: Vec<String>,
