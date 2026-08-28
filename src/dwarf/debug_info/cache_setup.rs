@@ -737,7 +737,7 @@ fn dump_unit<'a>(
                 }
             }
             constants::DW_TAG_inlined_subroutine => {
-                if let Some(inlined_node) = extract_inline_node(entry) {
+                if let Some(inlined_node) = extract_inline_node(entry, &unit) {
                     scope_stack.push(ActiveScope {
                         depth: current_depth,
                         node: inlined_node,

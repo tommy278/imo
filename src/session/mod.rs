@@ -246,12 +246,13 @@ impl DebugSession {
                         }
                     }
                     dwarf::debug_info::ExecutionScope::Inlined {
+                        name: inlined_name,
                         call_file_idx,
                         call_line,
                     } => {
                         if let Some(file) = self.file_idx_to_str(*call_file_idx) {
                             stack_frames.push(StackInfo {
-                                func_name: "[inlined]",
+                                func_name: inlined_name,
                                 file,
                                 rip: virtual_registers.instruction_pointer,
                                 line: *call_line,

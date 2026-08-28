@@ -161,11 +161,14 @@ pub fn extract_subprogram_node<'a>(
 
 pub fn extract_inline_node<'a>(
     entry: &DebuggingInformationEntry<Reader<'a>, usize>,
+    unit: &UnitRef<'a, Reader<'a>>,
 ) -> Option<ScopeCacheNode> {
     let mut low_pc = None;
     let mut high_pc_attr = None;
     let mut call_file_idx = None;
     let mut call_line = None;
+
+    let mut abstract_origin = None;
 
     for attr in entry.attrs() {
         match attr.name() {
@@ -187,6 +190,17 @@ pub fn extract_inline_node<'a>(
                     call_line = Some(decl_line as u32);
                 }
             }
+            gimli::DW_AT_abstract_origin => {
+                if let gimli::AttributeValue::DebugInfoRef(offset) = attr.value() {
+                    let unit_off = offset.to_unit_offset(unit);
+
+                    abstract_origin = unit_off;
+                }
+
+                if let gimli::AttributeValue::UnitRef(offset) = attr.value() {
+                    abstract_origin = Some(offset);
+                }
+            }
             _ => continue,
         }
     }
@@ -194,6 +208,18 @@ pub fn extract_inline_node<'a>(
     // Ignore entries where the low_pc is 0
     if low_pc.is_some_and(|pc| pc == 0) {
         return None;
+    }
+
+    let mut name = None;
+
+    if let Some(offset) = abstract_origin {
+        let entry = unit.entry(offset).ok()?;
+
+        let name_attr = entry.attr(gimli::DW_AT_name)?;
+
+        if let Ok(str) = unit.attr_string(name_attr.value()) {
+            name = Some(str.to_string_lossy().ok()?.to_string());
+        }
     }
 
     let mut high_pc = None;
@@ -205,10 +231,11 @@ pub fn extract_inline_node<'a>(
         };
     }
 
-    if let (Some(low_pc), Some(high_pc), Some(call_file_idx), Some(call_line)) =
-        (low_pc, high_pc, call_file_idx, call_line)
+    if let (Some(name), Some(low_pc), Some(high_pc), Some(call_file_idx), Some(call_line)) =
+        (name, low_pc, high_pc, call_file_idx, call_line)
     {
         let inlined = ExecutionScope::Inlined {
+            name,
             call_file_idx,
             call_line,
         };

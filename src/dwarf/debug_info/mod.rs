@@ -885,6 +885,7 @@ pub enum ExecutionScope {
     },
 
     Inlined {
+        name: String,
         call_file_idx: u64,
         call_line: u32,
     },
