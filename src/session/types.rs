@@ -19,7 +19,12 @@ impl std::fmt::Display for StackInfo<'_> {
                 stripped_name, self.rip, trimmed_file, self.line
             )?;
         } else {
-            let formatted_func_name = format!("{}()", self.func_name);
+            // TODO: get the args of the function
+            let formatted_func_name = if self.func_name != "[inlined]" {
+                format!("{}()", self.func_name)
+            } else {
+                String::from(self.func_name)
+            };
             write!(
                 f,
                 "{:<36} {:#x} @ {}:{}",

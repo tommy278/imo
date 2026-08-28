@@ -1039,6 +1039,12 @@ impl ScopeCacheNode {
         // If no children match then the current scope is the best match
         Some(self)
     }
+
+    pub fn get_active_address_range(&self, pc: u64) -> Option<&AddressRange> {
+        self.ranges
+            .iter()
+            .find(|r| r.low_pc <= pc && pc < r.high_pc)
+    }
 }
 
 #[derive(Debug)]
@@ -1108,17 +1114,52 @@ impl DebuggerMetadataCache {
     }
 
     pub fn get_function_name(&self, pc: u64) -> Option<&str> {
+        let mut frames = Vec::new();
         for scope in self.execution_scopes.iter() {
             if scope.is_in_scope(pc) {
                 if scope.find_active_scope(pc).is_some() {
                     if scope.scope.is_func() {
                         return scope.scope.get_name();
                     }
+
+                    if scope.scope.is_func() || scope.scope.is_inline() {
+                        frames.push(scope);
+                    }
                 }
             }
         }
 
+        println!("{:?}", frames);
+
         None
+    }
+
+    /// Get the current function scope with its nearest parent
+    /// A length of 1 means the the single scope is a function
+    /// A length of means the first element is an inline, the second can be an inline or a function
+    pub fn get_function_trace(&self, pc: u64) -> Vec<&ScopeCacheNode> {
+        let mut scopes = Vec::with_capacity(2);
+
+        for scope in self.execution_scopes.iter() {
+            if scope.is_in_scope(pc) {
+                if scope.find_active_scope(pc).is_some() {
+                    if scope.scope.is_func() {
+                        scopes.push(scope);
+                        return scopes;
+                    }
+
+                    if scope.scope.is_inline() {
+                        scopes.push(scope);
+
+                        if scopes.len() == 2 {
+                            return scopes;
+                        }
+                    }
+                }
+            }
+        }
+
+        scopes
     }
 
     /// Find current variables and frame base with the current pc

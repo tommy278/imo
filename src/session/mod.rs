@@ -200,7 +200,7 @@ impl DebugSession {
         }
     }
 
-    pub fn backtrace(&self) -> Result<Vec<StackInfo>, SystemError> {
+    pub fn backtrace(&self) -> Result<Vec<StackInfo<'_>>, SystemError> {
         let mut stack_frames = Vec::new();
         let mut virtual_registers = self.virtual_registers()?;
 
@@ -217,17 +217,57 @@ impl DebugSession {
                 break;
             }
 
-            let name = self.metadata.get_function_name(current_pc);
+            println!("{}", current_pc);
 
-            if let Some(name) = name {
+            let trace = self.metadata.get_function_trace(current_pc);
+
+            if trace.len() == 0 || trace.len() > 2 {
+                break;
+            }
+
+            // If we are directly in a function with no parent
+            if trace.len() == 1 {
+                let scope = trace[0];
+
+                if let Some(name) = scope.scope.get_name() {
+                    if let Some(location) = self.get_location_with_address(current_pc) {
+                        if let Some(resolved_name) = self.interner.get_str(location.file) {
+                            stack_frames.push(StackInfo {
+                                func_name: name,
+                                file: resolved_name,
+                                rip: virtual_registers.instruction_pointer,
+                                line: location.line,
+                            });
+                        }
+                    }
+                }
+            }
+
+            // We are in an inlined function and the parent is uncertain
+            if trace.len() == 2 {
+                let Some(child_range) = trace[0].get_active_address_range(current_pc) else {
+                    break;
+                };
+                // Push the current location with an inlined placeholder
                 if let Some(location) = self.get_location_with_address(current_pc) {
                     if let Some(resolved_name) = self.interner.get_str(location.file) {
                         stack_frames.push(StackInfo {
-                            func_name: name,
+                            func_name: "[inlined]",
                             file: resolved_name,
                             rip: virtual_registers.instruction_pointer,
                             line: location.line,
                         });
+                    }
+                }
+
+                // Advance the instruction pointer to be the parent of the inlined function
+                if let Some(parent_range) = trace[1].get_active_address_range(current_pc) {
+                    // Attempt to find a point where the pc of the active range of the child and the parent does not overlap
+                    let function_signature = (parent_range.high_pc + child_range.high_pc) / 2;
+                    virtual_registers.instruction_pointer = self.base_address + function_signature;
+
+                    if current_pc != function_signature {
+                        continue;
                     }
                 }
             }
