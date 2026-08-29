@@ -10,6 +10,10 @@ pub fn trim_file_path<P: AsRef<std::path::Path>>(path: &P) -> &str {
 
 /// Display the code in a user friendly format
 pub fn display_source_code(f: &mut std::fmt::Formatter<'_>, code: &str) -> std::fmt::Result {
+    if code.starts_with("//") {
+        write!(f, "{}", code.fg_rgb::<118, 118, 118>())?;
+        return Ok(());
+    }
     for token in code.split_whitespace() {
         match token {
             "let" | "fn" | "pub" | "impl" => write!(f, "{} ", token.red())?,

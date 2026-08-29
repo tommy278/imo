@@ -456,7 +456,21 @@ impl DebugSession {
         self.source_file.create_and_get_line_entry(path, line)
     }
 
-    pub fn get_current_source_file(&mut self) -> SourceCodeDisplay<'_> {
+    pub fn get_source_file(&mut self, path: &Path, line_number: u32) -> SourceCodeDisplay {
+        if let Some(source_code) = self.get_or_create_source_file(path, line_number) {
+            return SourceCodeDisplay::FullyResolved {
+                source_code: Box::from(source_code),
+                line_number,
+            };
+        }
+
+        SourceCodeDisplay::PartiallyResolved {
+            path: Box::from(path),
+            line_number,
+        }
+    }
+
+    pub fn get_current_source_file(&mut self) -> SourceCodeDisplay {
         let Some(current_location) = self.current_location().copied() else {
             return SourceCodeDisplay::Unresolved;
         };
@@ -470,17 +484,33 @@ impl DebugSession {
         let path = Path::new(&path_string);
         let line_number = current_location.line;
 
-        if let Some(source_code) = self.get_or_create_source_file(path, current_location.line) {
-            return SourceCodeDisplay::FullyResolved {
-                source_code,
-                line_number,
-            };
+        self.get_source_file(path, line_number)
+    }
+
+    pub fn get_current_list_entry(&mut self) -> Option<Vec<SourceCodeDisplay>> {
+        let mut list = Vec::with_capacity(11);
+
+        let start_location = self.current_location().copied()?;
+        let path_str = self.interner.get_string(start_location.file)?;
+
+        let path = Path::new(&path_str);
+
+        let max_number = self.source_file.get_entry_line_count(path)? as u32;
+
+        let start_line_number = start_location.line.saturating_sub(1);
+
+        let low_range = start_line_number.saturating_sub(5);
+        let high_range = max_number.min(start_line_number + 5);
+
+        let mut current_line = low_range;
+
+        while high_range >= current_line {
+            let line_val = self.get_source_file(path, current_line);
+            list.push(line_val);
+            current_line += 1;
         }
 
-        SourceCodeDisplay::PartiallyResolved {
-            path: Box::from(path),
-            line_number,
-        }
+        Some(list)
     }
 
     /// Move forward from the specified stop

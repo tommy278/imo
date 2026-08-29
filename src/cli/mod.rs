@@ -44,7 +44,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                             }
                             return Ok(());
                         } else {
-                            println!("Session is already running")
+                            println!("Session not started yet")
                         }
                     }
                     // Step a single instruction
@@ -220,6 +220,22 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                             eprintln!("{e}")
                         }
                     },
+                    "list" => {
+                        if !session.is_idle() {
+                            match session.get_current_list_entry() {
+                                Some(list) => {
+                                    list.iter().for_each(|s| {
+                                        println!("{s}");
+                                    });
+                                }
+                                None => {
+                                    println!("Could not resolve path");
+                                }
+                            }
+                        } else {
+                            println!("Session not started yet")
+                        }
+                    }
                     "q" | "quit" => {
                         // End current debug session
                         if let Err(err) = session.kill_session() {

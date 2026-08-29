@@ -19,9 +19,15 @@ pub struct SourceCodeInfo {
     line_offsets: Vec<usize>,
 }
 
-pub enum SourceCodeDisplay<'a> {
+impl SourceCodeInfo {
+    pub fn line_count(&self) -> usize {
+        self.line_offsets.len()
+    }
+}
+
+pub enum SourceCodeDisplay {
     FullyResolved {
-        source_code: &'a str,
+        source_code: Box<str>,
         line_number: u32,
     },
     PartiallyResolved {
@@ -34,7 +40,7 @@ pub enum SourceCodeDisplay<'a> {
     Unresolved,
 }
 
-impl std::fmt::Display for SourceCodeDisplay<'_> {
+impl std::fmt::Display for SourceCodeDisplay {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::FullyResolved {
@@ -42,7 +48,7 @@ impl std::fmt::Display for SourceCodeDisplay<'_> {
                 line_number,
             } => {
                 write!(f, "{}\t", line_number.cyan())?;
-                display_source_code(f, *source_code)?;
+                display_source_code(f, source_code)?;
             }
             Self::PartiallyResolved { path, line_number } => write!(
                 f,
@@ -77,6 +83,10 @@ impl SourceCodeCache {
         }
 
         None
+    }
+
+    pub fn get_entry_line_count(&self, path: &Path) -> Option<usize> {
+        self.entries.get(path).map(|e| e.line_count())
     }
 
     pub fn create_and_get_line_entry(&mut self, path: &Path, line: u32) -> Option<&str> {
