@@ -8,6 +8,7 @@ use gimli::UnwindSection;
 use rustc_hash::FxHashMap;
 use std::path::Path;
 
+use crate::dwarf::debug_info::DebugVariable;
 use crate::session::types::StackInfo;
 use crate::sys::SystemError;
 use crate::sys::os::{self, syscalls};
@@ -523,6 +524,79 @@ impl DebugSession {
         let current_pc = self.current_instruction_pointer()? - self.base_address;
         let context = self.metadata.find_scope_by_pc(current_pc);
         Ok(context)
+    }
+
+    /// Get all variable names and value within the current scope
+    pub fn get_all_local_variables(
+        &self,
+    ) -> Result<Vec<(String, Option<DebugValue>)>, SystemError> {
+        let current_scope = self.find_current_scope()?;
+        let mut local_variables = Vec::with_capacity(current_scope.variables.len());
+
+        for var in current_scope.variables {
+            let value = self.var_to_value(var, current_scope.frame_base);
+            local_variables.push((var.name.clone(), value));
+        }
+
+        Ok(local_variables)
+    }
+
+    /// Attempt to parse the varible to its value
+    /// If any issue occurs down the road, dont throw an error, simply return None
+    pub fn var_to_value(
+        &self,
+        var: &DebugVariable,
+        frame_base: Option<&Vec<u8>>,
+    ) -> Option<DebugValue> {
+        let regs = self.get_regs().ok()?;
+
+        let endian = self.metadata.endian;
+        let abi = &self.metadata.abi;
+        let encoding = self.metadata.encoding?;
+
+        let current_pc = regs.instruction_pointer() - self.base_address;
+
+        if let Some(info) = self.get_location_with_address(current_pc) {
+            let SourceLocation { file, line } = info;
+
+            if let Some(line_order) = self.get_file_decl_order(*file) {
+                if let Some(current_idx) = line_order.iter().position(|&l| l == *line) {
+                    if let Some(var_decl_idx) = line_order.iter().position(|&l| l == var.decl_line)
+                    {
+                        if var_decl_idx >= current_idx {
+                            return Some(DebugValue::Err(
+                                "Variable not initialized yet".to_string(),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+
+        let frame_base = frame_base?;
+
+        let address = var
+            .parse_value(
+                &regs,
+                encoding,
+                endian,
+                abi,
+                frame_base,
+                &self.metadata.type_index,
+                self.pid,
+            )
+            .ok()??;
+
+        if let Some(ty) = self.metadata.type_index.get(&var.target_type_offset) {
+            let result = ty
+                .dwarf_type
+                .to_debug_value(&self.metadata.type_index, address, self.pid)
+                .ok()?;
+
+            return result;
+        }
+
+        None
     }
 
     /// Get the value of a variable with the given name
