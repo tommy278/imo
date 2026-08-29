@@ -1,7 +1,8 @@
 use gimli::{DebuggingInformationEntry, Reader as _, UnitRef};
 
-use crate::dwarf::debug_info::{
-    AddressRange, DebugVariable, ExecutionScope, Reader, ScopeCacheNode,
+use crate::{
+    dwarf::debug_info::{AddressRange, DebugVariable, ExecutionScope, Reader, ScopeCacheNode},
+    types::UniqueFileId,
 };
 
 pub fn extract_variable<'a>(
@@ -139,7 +140,10 @@ pub fn extract_subprogram_node<'a>(
             display_name,
             linkage_name,
             bytes,
-            decl_file_idx,
+            decl_file_id: UniqueFileId {
+                offset: unit.offset().0,
+                file_idx: decl_file_idx,
+            },
             decl_line,
         };
 
@@ -236,7 +240,10 @@ pub fn extract_inline_node<'a>(
     {
         let inlined = ExecutionScope::Inlined {
             name,
-            call_file_idx,
+            call_file_id: UniqueFileId {
+                offset: unit.offset().0,
+                file_idx: call_file_idx,
+            },
             call_line,
         };
 

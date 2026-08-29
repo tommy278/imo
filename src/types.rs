@@ -105,7 +105,13 @@ impl SourceCodeCache {
     }
 }
 
-pub type FileIndices = FxHashMap<u64, StringId>;
+#[derive(Default, Debug, PartialEq, Eq, Hash, Copy, Clone)]
+pub struct UniqueFileId {
+    pub offset: usize,
+    pub file_idx: u64,
+}
+
+pub type FileIndices = FxHashMap<UniqueFileId, StringId>;
 
 #[derive(Debug, Clone, Default)]
 pub struct StringInterner {

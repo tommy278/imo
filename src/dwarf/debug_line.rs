@@ -1,5 +1,5 @@
 use crate::session::*;
-use crate::types::{LineRow, SourceLocation, StringId};
+use crate::types::{LineRow, SourceLocation, StringId, UniqueFileId};
 use object::{Object, ObjectSection};
 use rustc_hash::FxHashSet;
 use std::{
@@ -126,7 +126,13 @@ fn update_session_cache(
                 // This unwrap is safe because we guranteed it has a value above
                 let file_id = current_file_id.unwrap();
 
-                session.file_indices.insert(row.file_index(), file_id);
+                session.file_indices.insert(
+                    UniqueFileId {
+                        offset: unit.offset().0,
+                        file_idx: row.file_index(),
+                    },
+                    file_id,
+                );
 
                 // DEDUPLICATION LOGIC
                 // Only push to line index if this row starts a new line or swicthed to a

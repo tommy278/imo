@@ -232,11 +232,11 @@ impl DebugSession {
                 match &scope.scope {
                     dwarf::debug_info::ExecutionScope::Function {
                         display_name,
-                        decl_file_idx,
+                        decl_file_id,
                         decl_line,
                         ..
                     } => {
-                        if let Some(file) = self.file_idx_to_str(*decl_file_idx) {
+                        if let Some(file) = self.file_idx_to_str(decl_file_id) {
                             stack_frames.push(StackInfo {
                                 func_name: display_name,
                                 file,
@@ -247,10 +247,10 @@ impl DebugSession {
                     }
                     dwarf::debug_info::ExecutionScope::Inlined {
                         name: inlined_name,
-                        call_file_idx,
+                        call_file_id,
                         call_line,
                     } => {
-                        if let Some(file) = self.file_idx_to_str(*call_file_idx) {
+                        if let Some(file) = self.file_idx_to_str(call_file_id) {
                             stack_frames.push(StackInfo {
                                 func_name: inlined_name,
                                 file,
@@ -269,8 +269,8 @@ impl DebugSession {
         Ok(stack_frames)
     }
 
-    pub fn file_idx_to_str(&self, file_idx: u64) -> Option<&str> {
-        let id = self.file_indices.get(&file_idx)?;
+    pub fn file_idx_to_str(&self, file_idx: &crate::types::UniqueFileId) -> Option<&str> {
+        let id = self.file_indices.get(file_idx)?;
         self.interner.get_str(*id)
     }
 

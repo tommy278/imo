@@ -21,6 +21,7 @@ use crate::session::variable::{DebugStructField, DebugValue, WrapperKind, to_buf
 use crate::sys::SystemError;
 use crate::sys::os;
 use crate::sys::{os::syscalls, registers::RegisterViewer};
+use crate::types::UniqueFileId;
 
 pub type Reader<'data> =
     gimli::RelocateReader<gimli::EndianSlice<'data, gimli::RunTimeEndian>, &'data RelocationMap>;
@@ -880,13 +881,13 @@ pub enum ExecutionScope {
         // Bytes for the instruction on how to get the frame_base
         bytes: Option<Vec<u8>>,
 
-        decl_file_idx: u64,
+        decl_file_id: UniqueFileId,
         decl_line: u32,
     },
 
     Inlined {
         name: String,
-        call_file_idx: u64,
+        call_file_id: UniqueFileId,
         call_line: u32,
     },
 
