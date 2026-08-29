@@ -887,8 +887,13 @@ pub enum ExecutionScope {
 
     Inlined {
         name: String,
+
+        // TODO: Combine the unique field into one and reconstruct when needed
         call_file_id: UniqueFileId,
         call_line: u32,
+
+        decl_file_id: UniqueFileId,
+        decl_line: u32,
     },
 
     LexicalBlock,

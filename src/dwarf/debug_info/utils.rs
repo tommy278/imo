@@ -190,8 +190,8 @@ pub fn extract_inline_node<'a>(
                 }
             }
             gimli::DW_AT_call_line => {
-                if let gimli::AttributeValue::Udata(decl_line) = attr.value() {
-                    call_line = Some(decl_line as u32);
+                if let gimli::AttributeValue::Udata(cl) = attr.value() {
+                    call_line = Some(cl as u32);
                 }
             }
             gimli::DW_AT_abstract_origin => {
@@ -215,6 +215,8 @@ pub fn extract_inline_node<'a>(
     }
 
     let mut name = None;
+    let mut decl_file = None;
+    let mut decl_line = None;
 
     if let Some(offset) = abstract_origin {
         let entry = unit.entry(offset).ok()?;
@@ -223,6 +225,18 @@ pub fn extract_inline_node<'a>(
 
         if let Ok(str) = unit.attr_string(name_attr.value()) {
             name = Some(str.to_string_lossy().ok()?.to_string());
+        }
+
+        let decl_file_attr = entry.attr(gimli::DW_AT_decl_file)?;
+
+        if let gimli::AttributeValue::FileIndex(idx) = decl_file_attr.value() {
+            decl_file = Some(idx);
+        }
+
+        let decl_line_attr = entry.attr(gimli::DW_AT_decl_line)?;
+
+        if let gimli::AttributeValue::Udata(dl) = decl_line_attr.value() {
+            decl_line = Some(dl as u32);
         }
     }
 
@@ -235,16 +249,35 @@ pub fn extract_inline_node<'a>(
         };
     }
 
-    if let (Some(name), Some(low_pc), Some(high_pc), Some(call_file_idx), Some(call_line)) =
-        (name, low_pc, high_pc, call_file_idx, call_line)
-    {
+    if let (
+        Some(name),
+        Some(low_pc),
+        Some(high_pc),
+        Some(call_file_idx),
+        Some(call_line),
+        Some(decl_file_idx),
+        Some(decl_line),
+    ) = (
+        name,
+        low_pc,
+        high_pc,
+        call_file_idx,
+        call_line,
+        decl_file,
+        decl_line,
+    ) {
         let inlined = ExecutionScope::Inlined {
             name,
             call_file_id: UniqueFileId {
                 offset: unit.offset().0,
                 file_idx: call_file_idx,
             },
+            decl_file_id: UniqueFileId {
+                offset: unit.offset().0,
+                file_idx: decl_file_idx,
+            },
             call_line,
+            decl_line,
         };
 
         let ranges = vec![AddressRange { low_pc, high_pc }];

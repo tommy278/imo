@@ -237,7 +237,7 @@ impl DebugSession {
                         ..
                     } => {
                         if let Some(file) = self.file_idx_to_str(decl_file_id) {
-                            stack_frames.push(StackInfo {
+                            stack_frames.push(StackInfo::Function {
                                 func_name: display_name,
                                 file,
                                 rip: virtual_registers.instruction_pointer,
@@ -248,15 +248,21 @@ impl DebugSession {
                     dwarf::debug_info::ExecutionScope::Inlined {
                         name: inlined_name,
                         call_file_id,
+                        decl_file_id,
+                        decl_line,
                         call_line,
                     } => {
-                        if let Some(file) = self.file_idx_to_str(call_file_id) {
-                            stack_frames.push(StackInfo {
-                                func_name: inlined_name,
-                                file,
-                                rip: virtual_registers.instruction_pointer,
-                                line: *call_line,
-                            });
+                        if let Some(call_file) = self.file_idx_to_str(call_file_id) {
+                            if let Some(decl_file) = self.file_idx_to_str(decl_file_id) {
+                                stack_frames.push(StackInfo::Inlined {
+                                    func_name: inlined_name,
+                                    decl_file,
+                                    call_file,
+                                    rip: virtual_registers.instruction_pointer,
+                                    call_line: *call_line,
+                                    decl_line: *decl_line,
+                                });
+                            }
                         }
                     }
                     _ => unreachable!(),
