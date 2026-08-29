@@ -14,7 +14,7 @@ use crate::sys::os::{self, syscalls};
 use crate::sys::registers::RegisterViewer;
 use crate::types::{
     FileIndices, LineRow, SourceCodeCache, SourceCodeDisplay, SourceLocation, StringId,
-    StringInterner,
+    StringInterner, UniqueFileId,
 };
 use crate::{
     dwarf::{
@@ -247,13 +247,22 @@ impl DebugSession {
                     }
                     dwarf::debug_info::ExecutionScope::Inlined {
                         name: inlined_name,
-                        call_file_id,
-                        decl_file_id,
+                        unit_offset,
+                        call_file_idx,
+                        decl_file_idx,
                         decl_line,
                         call_line,
                     } => {
-                        if let Some(call_file) = self.file_idx_to_str(call_file_id) {
-                            if let Some(decl_file) = self.file_idx_to_str(decl_file_id) {
+                        let call_file_id = UniqueFileId {
+                            offset: *unit_offset,
+                            file_idx: *call_file_idx,
+                        };
+                        if let Some(call_file) = self.file_idx_to_str(&call_file_id) {
+                            let decl_file_id = UniqueFileId {
+                                offset: *unit_offset,
+                                file_idx: *decl_file_idx,
+                            };
+                            if let Some(decl_file) = self.file_idx_to_str(&decl_file_id) {
                                 stack_frames.push(StackInfo::Inlined {
                                     func_name: inlined_name,
                                     decl_file,

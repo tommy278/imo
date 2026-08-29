@@ -888,11 +888,12 @@ pub enum ExecutionScope {
     Inlined {
         name: String,
 
-        // TODO: Combine the unique field into one and reconstruct when needed
-        call_file_id: UniqueFileId,
-        call_line: u32,
+        unit_offset: usize,
 
-        decl_file_id: UniqueFileId,
+        call_file_idx: u64,
+        decl_file_idx: u64,
+
+        call_line: u32,
         decl_line: u32,
     },
 

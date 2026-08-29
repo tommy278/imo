@@ -268,14 +268,9 @@ pub fn extract_inline_node<'a>(
     ) {
         let inlined = ExecutionScope::Inlined {
             name,
-            call_file_id: UniqueFileId {
-                offset: unit.offset().0,
-                file_idx: call_file_idx,
-            },
-            decl_file_id: UniqueFileId {
-                offset: unit.offset().0,
-                file_idx: decl_file_idx,
-            },
+            unit_offset: unit.offset().0,
+            call_file_idx,
+            decl_file_idx,
             call_line,
             decl_line,
         };

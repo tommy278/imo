@@ -188,6 +188,10 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                     }
                     "bt" | "backtrace" => match session.backtrace() {
                         Ok(stack_frames) => {
+                            if stack_frames.is_empty() {
+                                println!("Could not find stack frame info for current location");
+                            }
+
                             let mut frame = 0;
                             stack_frames.iter().for_each(|f| {
                                 println!("#{}: {}", frame, f);
@@ -204,12 +208,6 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                             eprintln!("{err}")
                         }
                         return Ok(());
-                    }
-                    "func" => {
-                        let name = session
-                            .metadata
-                            .get_function_name(session.current_pc().unwrap());
-                        println!("{:?}", name);
                     }
                     _ => {
                         println!("Not handled yet");
