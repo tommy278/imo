@@ -40,9 +40,6 @@ pub struct DebugSession {
 
     pub line_row: Vec<LineRow>,
 
-    // Used to find out the actual order in while files were declared
-    pub file_declaration_order: FxHashMap<StringId, Vec<u32>>,
-
     // A global arena to consolidate repetitive string allocations into one location
     pub interner: StringInterner,
 
@@ -75,7 +72,6 @@ impl DebugSession {
             base_address: 0,
             breakpoint_index_tracker: Vec::new(),
             line_index: FxHashMap::default(),
-            file_declaration_order: FxHashMap::default(),
             metadata: DebuggerMetadataCache::default(),
             raw_debug_frame: RawDebugFrame::default(),
             current_cmd: CurrentStopCmd::default(),
@@ -538,12 +534,6 @@ impl DebugSession {
         self.find_line_range(relative_address).map(|l| &l.location)
     }
 
-    /// Get the exact order in which the compiler actually initialized the variables
-    /// Rust does not always initialize variables sequentially
-    pub fn get_file_decl_order(&self, file: StringId) -> Option<&Vec<u32>> {
-        self.file_declaration_order.get(&file)
-    }
-
     /// Get the relative address from absolute address
     pub fn get_relative_address(&self, absolute_address: u64) -> u64 {
         absolute_address - self.base_address
@@ -587,25 +577,6 @@ impl DebugSession {
         let endian = self.metadata.endian;
         let abi = &self.metadata.abi;
         let encoding = self.metadata.encoding?;
-
-        let current_pc = regs.instruction_pointer() - self.base_address;
-
-        if let Some(info) = self.get_location_with_address(current_pc) {
-            let SourceLocation { file, line } = info;
-
-            if let Some(line_order) = self.get_file_decl_order(*file) {
-                if let Some(current_idx) = line_order.iter().position(|&l| l == *line) {
-                    if let Some(var_decl_idx) = line_order.iter().position(|&l| l == var.decl_line)
-                    {
-                        if var_decl_idx >= current_idx {
-                            return Some(DebugValue::Err(
-                                "Variable not initialized yet".to_string(),
-                            ));
-                        }
-                    }
-                }
-            }
-        }
 
         let frame_base = frame_base?;
 
@@ -654,28 +625,6 @@ impl DebugSession {
         // If it is that means it has been declared and if not then it hasnt
 
         if let Some(param) = node.get_param_with_name(name) {
-            let current_pc = regs.instruction_pointer() - self.base_address;
-
-            if let Some(info) = self.get_location_with_address(current_pc) {
-                let SourceLocation { file, line } = info;
-
-                if let Some(line_order) = self.get_file_decl_order(*file) {
-                    if let Some(current_idx) = line_order.iter().position(|&l| l == *line) {
-                        if let Some(var_decl_idx) =
-                            line_order.iter().position(|&l| l == param.decl_line)
-                        {
-                            if var_decl_idx >= current_idx {
-                                return Ok(Some(DebugValue::Err(
-                                    "Variable not initialized yet".to_string(),
-                                )));
-                            }
-                        }
-                    }
-                }
-            } else {
-                return Ok(None);
-            }
-
             let Some(frame_base) = node.frame_base else {
                 return Err(error::VariableParseError::FrameBase);
             };
