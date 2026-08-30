@@ -104,33 +104,6 @@ fn main() {
     let slice = &string[1..];
 }
 
-fn fib(n: u128) -> u128 {
-    if n == 0 || n == 1 {
-        return n;
-    }
-
-    fib(n - 1) + fib(n - 2)
-}
-
-fn add(x: i32, y: i32) -> i32 {
-    let t = div(x, y);
-    x + y
-}
-
-fn div(x: i32, y: i32) -> i32 {
-    let x = mul(x, y);
-    x / y
-}
-
-fn mul(x: i32, y: i32) -> i32 {
-    let x = sub(x, y);
-    x * y
-}
-
-fn sub(x: i32, y: i32) -> i32 {
-    x - y
-}
-
 pub enum StackedStatus {
     Active(bool),
     Pending,
@@ -173,4 +146,31 @@ pub struct CustomStruct {
 
 pub enum EdgeCaseEnum {
     LayoutTrap(u8, u64, bool),
+}
+
+fn fib(n: u128) -> u128 {
+    if n == 0 || n == 1 {
+        return n;
+    }
+
+    fib(n - 1) + fib(n - 2)
+}
+
+fn add(x: i32, y: i32) -> i32 {
+    let t = div(x, y);
+    x + y
+}
+
+fn div(x: i32, y: i32) -> i32 {
+    let x = mul(x, y);
+    x / y
+}
+
+fn mul(x: i32, y: i32) -> i32 {
+    let x = sub(x, y);
+    x * y
+}
+
+fn sub(x: i32, y: i32) -> i32 {
+    x - y
 }

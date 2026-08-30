@@ -75,10 +75,20 @@ pub struct SourceCodeCache {
 impl SourceCodeCache {
     pub fn get_line_entry(&self, path: &Path, line: u32) -> Option<&str> {
         if let Some(entry) = self.entries.get(path) {
-            let index = line.saturating_sub(1) as usize;
-            let line_offset = entry.line_offsets.get(index)?;
-            let next_line_offset = entry.line_offsets.get(index + 1)?;
+            let max_idx = entry.line_count() - 1;
 
+            // Clamp index and make sure it never goes past the max line entries available
+            let index = max_idx.min(line.saturating_sub(1) as usize);
+            let line_offset = entry.line_offsets.get(index)?;
+
+            // If the current index already approached max then we cannot get the next offset
+            // In this case simply go to the end of the source code
+            if index >= max_idx {
+                return Some(&entry.source_code[*line_offset..]);
+            }
+
+            // Get next offset after ensuring it is not past the end of the file
+            let next_line_offset = entry.line_offsets.get(index + 1)?;
             return Some(&entry.source_code[*line_offset..*next_line_offset]);
         }
 
