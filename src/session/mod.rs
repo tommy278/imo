@@ -8,7 +8,7 @@ use gimli::UnwindSection;
 use rustc_hash::FxHashMap;
 use std::path::Path;
 
-use crate::dwarf::debug_info::DebugVariable;
+use crate::dwarf::debug_info::{DebugVariable, ParamType};
 use crate::session::types::StackInfo;
 use crate::sys::SystemError;
 use crate::sys::os::{self, syscalls};
@@ -21,7 +21,7 @@ use crate::{
     dwarf::{
         self,
         debug_frame::{RawDebugFrame, setup_session_debug_frame},
-        debug_info::{ActiveVariablesContext, DebuggerMetadataCache},
+        debug_info::{ActiveParamsContext, DebuggerMetadataCache},
         error::CacheSetupError,
     },
     sys::registers::VirtualRegisters,
@@ -550,20 +550,24 @@ impl DebugSession {
     }
 
     /// Find current scope with internal pc
-    pub fn find_current_scope(&self) -> Result<ActiveVariablesContext<'_>, SystemError> {
+    pub fn find_specified_param(
+        &self,
+        param_type: ParamType,
+    ) -> Result<ActiveParamsContext<'_>, SystemError> {
         let current_pc = self.current_instruction_pointer()? - self.base_address;
-        let context = self.metadata.find_scope_by_pc(current_pc);
+        let context = self.metadata.find_scope_by_pc(current_pc, param_type);
         Ok(context)
     }
 
     /// Get all variable names and value within the current scope
-    pub fn get_all_local_variables(
+    pub fn get_all_values_for_specified_param(
         &self,
+        param_type: ParamType,
     ) -> Result<Vec<(String, Option<DebugValue>)>, SystemError> {
-        let current_scope = self.find_current_scope()?;
-        let mut local_variables = Vec::with_capacity(current_scope.variables.len());
+        let current_scope = self.find_specified_param(param_type)?;
+        let mut local_variables = Vec::with_capacity(current_scope.params.len());
 
-        for var in current_scope.variables {
+        for var in current_scope.params {
             let value = self.var_to_value(var, current_scope.frame_base);
             local_variables.push((var.name.clone(), value));
         }
@@ -631,9 +635,9 @@ impl DebugSession {
 
     /// Get the value of a variable with the given name
     /// Requires current scope to evaluate the value
-    pub fn get_var_value(
+    pub fn get_param_value(
         &self,
-        node: &ActiveVariablesContext,
+        node: &ActiveParamsContext,
         name: &str,
     ) -> Result<Option<DebugValue>, error::VariableParseError> {
         let regs = self.get_regs()?;
@@ -649,7 +653,7 @@ impl DebugSession {
         // We use this to check if the decl_line is before our current index
         // If it is that means it has been declared and if not then it hasnt
 
-        if let Some(variable) = node.get_variable_with_name(name) {
+        if let Some(param) = node.get_param_with_name(name) {
             let current_pc = regs.instruction_pointer() - self.base_address;
 
             if let Some(info) = self.get_location_with_address(current_pc) {
@@ -658,7 +662,7 @@ impl DebugSession {
                 if let Some(line_order) = self.get_file_decl_order(*file) {
                     if let Some(current_idx) = line_order.iter().position(|&l| l == *line) {
                         if let Some(var_decl_idx) =
-                            line_order.iter().position(|&l| l == variable.decl_line)
+                            line_order.iter().position(|&l| l == param.decl_line)
                         {
                             if var_decl_idx >= current_idx {
                                 return Ok(Some(DebugValue::Err(
@@ -677,7 +681,7 @@ impl DebugSession {
             };
 
             // Get the variable's address
-            let Some(address) = variable.parse_value(
+            let Some(address) = param.parse_value(
                 &regs,
                 encoding,
                 endian,
@@ -691,7 +695,7 @@ impl DebugSession {
             };
 
             // Resolve the variable's live value with address and current pid
-            if let Some(ty) = self.metadata.type_index.get(&variable.target_type_offset) {
+            if let Some(ty) = self.metadata.type_index.get(&param.target_type_offset) {
                 let result =
                     ty.dwarf_type
                         .to_debug_value(&self.metadata.type_index, address, self.pid)?;

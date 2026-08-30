@@ -728,6 +728,15 @@ fn dump_unit<'a>(
                     }
                 }
             }
+            constants::DW_TAG_formal_parameter => {
+                if let Some(arg) = extract_variable(entry, &unit) {
+                    if let Some(current_scope) = scope_stack.last_mut() {
+                        current_scope.node.args.push(arg);
+                    } else {
+                        root_variables.push(arg);
+                    }
+                }
+            }
             constants::DW_TAG_subprogram => {
                 if let Some(function_node) = extract_subprogram_node(entry, &unit) {
                     scope_stack.push(ActiveScope {

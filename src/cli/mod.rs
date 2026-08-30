@@ -3,6 +3,7 @@ pub mod utils;
 use rustyline::error::ReadlineError;
 use rustyline::{DefaultEditor, Result};
 
+use crate::dwarf::debug_info::ParamType;
 use crate::session::DebugSession;
 use utils::{
     handle_breakpoint_clearing, handle_breakpoint_setting, handle_cmd, handle_event_by_index,
@@ -155,24 +156,28 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                                     eprintln!("Failed to fetch registers");
                                 }
                             }
-                            "lo" | "local" => match session.get_all_local_variables() {
-                                Ok(field) => {
-                                    if field.is_empty() {
-                                        println!("No variable in scope");
-                                    }
+                            "lo" | "local" => {
+                                match session
+                                    .get_all_values_for_specified_param(ParamType::Variable)
+                                {
+                                    Ok(field) => {
+                                        if field.is_empty() {
+                                            println!("No variable in scope");
+                                        }
 
-                                    for (name, val) in field.iter() {
-                                        print!("{} = ", name);
+                                        for (name, val) in field.iter() {
+                                            print!("{} = ", name);
 
-                                        if let Some(val) = val {
-                                            println!("{}", val);
-                                        } else {
-                                            println!("<Could not parse variable>")
+                                            if let Some(val) = val {
+                                                println!("{}", val);
+                                            } else {
+                                                println!("<Could not parse variable>")
+                                            }
                                         }
                                     }
+                                    Err(e) => eprintln!("{e}"),
                                 }
-                                Err(e) => eprintln!("{e}"),
-                            },
+                            }
                             _ => {
                                 println!("Not handled yet")
                             }
@@ -181,15 +186,14 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                     "p" | "print" => {
                         let arg = parse_arg!(parts, "print");
 
-                        let scope_result = session.find_current_scope();
-
+                        let scope_result = session.find_specified_param(ParamType::All);
                         match scope_result {
                             Ok(scope) => {
-                                let var_result = session.get_var_value(&scope, arg);
+                                let param_result = session.get_param_value(&scope, arg);
 
-                                match var_result {
-                                    Ok(var) => {
-                                        if let Some(val) = var {
+                                match param_result {
+                                    Ok(param) => {
+                                        if let Some(val) = param {
                                             println!("{} = {}", arg, val);
                                         } else {
                                             eprintln!(

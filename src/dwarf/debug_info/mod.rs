@@ -1021,7 +1021,11 @@ pub struct AddressRange {
 pub struct ScopeCacheNode {
     pub scope: ExecutionScope,
     pub offset: usize,
+
+    // A list of all active local variables
     pub variables: Vec<DebugVariable>,
+
+    pub args: Vec<DebugVariable>,
 
     pub ranges: Vec<AddressRange>,
     pub children: Vec<ScopeCacheNode>,
@@ -1085,16 +1089,22 @@ pub struct DebuggerMetadataCache {
     pub abi: Abi,
 }
 
+pub enum ParamType {
+    Variable,
+    Argument,
+    All,
+}
+
 #[derive(Debug, Default)]
-pub struct ActiveVariablesContext<'a> {
-    pub variables: Vec<&'a DebugVariable>,
+pub struct ActiveParamsContext<'a> {
+    pub params: Vec<&'a DebugVariable>,
     pub frame_base: Option<&'a Vec<u8>>,
 }
 
-impl ActiveVariablesContext<'_> {
+impl ActiveParamsContext<'_> {
     /// Search for the first instance of the variable
-    pub fn get_variable_with_name(&self, name: &str) -> Option<&DebugVariable> {
-        self.variables.iter().find(|n| n.name == name).map(|&v| v)
+    pub fn get_param_with_name(&self, name: &str) -> Option<&DebugVariable> {
+        self.params.iter().find(|n| n.name == name).map(|&v| v)
     }
 }
 
@@ -1127,27 +1137,6 @@ impl DebuggerMetadataCache {
         true
     }
 
-    pub fn get_function_name(&self, pc: u64) -> Option<&str> {
-        let mut frames = Vec::new();
-        for scope in self.execution_scopes.iter() {
-            if scope.is_in_scope(pc) {
-                if scope.find_active_scope(pc).is_some() {
-                    if scope.scope.is_func() {
-                        return scope.scope.get_name();
-                    }
-
-                    if scope.scope.is_func() || scope.scope.is_inline() {
-                        frames.push(scope);
-                    }
-                }
-            }
-        }
-
-        println!("{:?}", frames);
-
-        None
-    }
-
     /// Get the current function scope with its nearest parent
     /// A length of 1 means the the single scope is a function
     /// A length greater than 1 means within at least one scope
@@ -1175,8 +1164,8 @@ impl DebuggerMetadataCache {
     }
 
     /// Find current variables and frame base with the current pc
-    pub fn find_scope_by_pc(&self, pc: u64) -> ActiveVariablesContext<'_> {
-        let mut context = ActiveVariablesContext::default();
+    pub fn find_scope_by_pc(&self, pc: u64, param_type: ParamType) -> ActiveParamsContext<'_> {
+        let mut context = ActiveParamsContext::default();
 
         for scope in self.execution_scopes.iter() {
             if scope.is_in_scope(pc) {
@@ -1184,8 +1173,23 @@ impl DebuggerMetadataCache {
                     context.frame_base = Some(bytes);
                 }
                 if scope.find_active_scope(pc).is_some() {
-                    let refs = scope.variables.iter();
-                    context.variables.extend(refs);
+                    match param_type {
+                        ParamType::Variable => {
+                            let refs = scope.variables.iter();
+                            context.params.extend(refs);
+                        }
+                        ParamType::Argument => {
+                            let refs = scope.args.iter();
+                            context.params.extend(refs);
+                        }
+                        ParamType::All => {
+                            let var_ref = scope.variables.iter();
+                            let arg_ref = scope.args.iter();
+
+                            context.params.extend(var_ref);
+                            context.params.extend(arg_ref);
+                        }
+                    }
                 }
             }
         }

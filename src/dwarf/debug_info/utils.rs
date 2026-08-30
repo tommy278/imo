@@ -153,6 +153,7 @@ pub fn extract_subprogram_node<'a>(
             scope: func,
             offset: entry.offset().0,
             variables: Vec::new(),
+            args: Vec::new(),
             ranges,
             children: Vec::new(),
         };
@@ -281,6 +282,7 @@ pub fn extract_inline_node<'a>(
             scope: inlined,
             offset: entry.offset().0,
             variables: Vec::new(),
+            args: Vec::new(),
             ranges,
             children: Vec::new(),
         };
@@ -340,6 +342,7 @@ pub fn extract_lexical_block_node<'a>(
             scope: lexical_block,
             offset: entry.offset().0,
             variables: Vec::new(),
+            args: Vec::new(),
             ranges: block_ranges,
             children: Vec::new(),
         };
@@ -365,6 +368,7 @@ pub fn extract_lexical_block_node<'a>(
             scope: lexical_block,
             offset: entry.offset().0,
             variables: Vec::new(),
+            args: Vec::new(),
             ranges,
             children: Vec::new(),
         };
