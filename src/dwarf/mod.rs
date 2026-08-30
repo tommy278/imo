@@ -34,7 +34,7 @@ pub fn evaluate_frame_base_bytes(bytes: &[u8], registers: &RegisterViewer, abi: 
             0x1C => {
                 let b = stack.pop().unwrap();
                 let a = stack.pop().unwrap();
-                stack.push(a.wrapping_sub(b));
+                stack.push(b.wrapping_sub(a));
             }
 
             _ => panic!("Unsupported opcode: 0x{:x}", op),

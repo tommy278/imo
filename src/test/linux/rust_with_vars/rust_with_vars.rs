@@ -92,7 +92,7 @@ fn main() {
         println!("Hello World");
     }
 
-    let add = add(fib(2) as i32, fib(3) as i32);
+    let add = add(20, 30);
     let x = fib(20);
 
     let vec = vec![1, 2, 3, 4, 5];
