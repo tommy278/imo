@@ -173,6 +173,7 @@ pub fn extract_inline_node<'a>(
     let mut call_file_idx = None;
     let mut call_line = None;
 
+    let mut range_list_offset = None;
     let mut abstract_origin = None;
 
     for attr in entry.attrs() {
@@ -206,6 +207,11 @@ pub fn extract_inline_node<'a>(
                     abstract_origin = Some(offset);
                 }
             }
+            gimli::DW_AT_ranges => {
+                if let gimli::AttributeValue::RangeListsRef(offset) = attr.value() {
+                    range_list_offset = Some(offset);
+                }
+            }
             _ => continue,
         }
     }
@@ -222,22 +228,50 @@ pub fn extract_inline_node<'a>(
     if let Some(offset) = abstract_origin {
         let entry = unit.entry(offset).ok()?;
 
-        let name_attr = entry.attr(gimli::DW_AT_name)?;
+        for attr in entry.attrs() {
+            match attr.name() {
+                gimli::DW_AT_specification => {
+                    if let gimli::AttributeValue::UnitRef(offset) = attr.value() {
+                        let entry = unit.entry(offset).ok()?;
 
-        if let Ok(str) = unit.attr_string(name_attr.value()) {
-            name = Some(str.to_string_lossy().ok()?.to_string());
-        }
+                        let name_attr = entry.attr(gimli::DW_AT_name)?;
 
-        let decl_file_attr = entry.attr(gimli::DW_AT_decl_file)?;
+                        if let Ok(str) = unit.attr_string(name_attr.value()) {
+                            name = Some(str.to_string_lossy().ok()?.to_string());
+                        }
 
-        if let gimli::AttributeValue::FileIndex(idx) = decl_file_attr.value() {
-            decl_file = Some(idx);
-        }
+                        let decl_file_attr = entry.attr(gimli::DW_AT_decl_file)?;
 
-        let decl_line_attr = entry.attr(gimli::DW_AT_decl_line)?;
+                        if let gimli::AttributeValue::FileIndex(idx) = decl_file_attr.value() {
+                            decl_file = Some(idx);
+                        }
 
-        if let gimli::AttributeValue::Udata(dl) = decl_line_attr.value() {
-            decl_line = Some(dl as u32);
+                        let decl_line_attr = entry.attr(gimli::DW_AT_decl_line)?;
+
+                        if let gimli::AttributeValue::Udata(dl) = decl_line_attr.value() {
+                            decl_line = Some(dl as u32);
+                        }
+
+                        break;
+                    }
+                }
+                gimli::DW_AT_name => {
+                    if let Ok(str) = unit.attr_string(attr.value()) {
+                        name = Some(str.to_string_lossy().ok()?.to_string());
+                    }
+                }
+                gimli::DW_AT_decl_file => {
+                    if let gimli::AttributeValue::FileIndex(idx) = attr.value() {
+                        decl_file = Some(idx);
+                    }
+                }
+                gimli::DW_AT_decl_line => {
+                    if let gimli::AttributeValue::Udata(dl) = attr.value() {
+                        decl_line = Some(dl as u32);
+                    }
+                }
+                _ => continue,
+            }
         }
     }
 
@@ -248,6 +282,48 @@ pub fn extract_inline_node<'a>(
             gimli::AttributeValue::Udata(offset) => Some(low + offset),
             _ => None,
         };
+    }
+
+    let mut block_ranges = Vec::new();
+    if let Some(range_list_offset) = range_list_offset {
+        let offset = unit.ranges_offset_from_raw(range_list_offset);
+        if let Ok(mut range_iter) = unit.ranges(offset) {
+            while let Ok(Some(range)) = range_iter.next() {
+                block_ranges.push(AddressRange {
+                    low_pc: range.begin,
+                    high_pc: range.end,
+                });
+            }
+        }
+
+        if let (
+            Some(name),
+            Some(call_file_idx),
+            Some(call_line),
+            Some(decl_file_idx),
+            Some(decl_line),
+        ) = (name.clone(), call_file_idx, call_line, decl_file, decl_line)
+        {
+            let inlined = ExecutionScope::Inlined {
+                name,
+                unit_offset: unit.offset().0,
+                call_file_idx,
+                decl_file_idx,
+                call_line,
+                decl_line,
+            };
+
+            let node = ScopeCacheNode {
+                scope: inlined,
+                offset: entry.offset().0,
+                variables: Vec::new(),
+                args: Vec::new(),
+                ranges: block_ranges,
+                children: Vec::new(),
+            };
+
+            return Some(node);
+        }
     }
 
     if let (

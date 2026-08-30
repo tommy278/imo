@@ -222,7 +222,8 @@ impl DebugSession {
             let trace = self.metadata.get_function_trace(current_pc);
 
             if trace.is_empty() {
-                break;
+                let _ = self.get_return_address(&mut virtual_registers);
+                continue;
             }
 
             for scope in trace {

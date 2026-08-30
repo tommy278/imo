@@ -1148,12 +1148,12 @@ impl DebuggerMetadataCache {
         for scope in self.execution_scopes.iter() {
             if scope.is_in_scope(pc) {
                 if scope.find_active_scope(pc).is_some() {
-                    if scope.scope.is_func() {
-                        scopes.push(scope);
-                        return scopes;
+                    if scopes.is_empty() && !scope.scope.is_func() {
+                        println!("{:?}", scope);
                     }
-
                     if scope.scope.is_inline() {
+                        scopes.push(scope);
+                    } else if scope.scope.is_func() {
                         scopes.push(scope);
                     }
                 }
