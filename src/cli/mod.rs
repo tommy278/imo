@@ -156,7 +156,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                                     eprintln!("Failed to fetch registers");
                                 }
                             }
-                            "lo" | "local" => {
+                            "lo" | "local" | "locals" => {
                                 match session
                                     .get_all_values_for_specified_param(ParamType::Variable)
                                 {
@@ -178,7 +178,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                                     Err(e) => eprintln!("{e}"),
                                 }
                             }
-                            "args" => {
+                            "arg" | "args" => {
                                 match session
                                     .get_all_values_for_specified_param(ParamType::Argument)
                                 {
@@ -246,7 +246,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                             eprintln!("{e}")
                         }
                     },
-                    "list" => {
+                    "l" | "list" => {
                         if !session.is_idle() {
                             match session.get_current_list_entry() {
                                 Some(list) => {
