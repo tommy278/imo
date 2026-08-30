@@ -92,10 +92,9 @@ fn main() {
         println!("Hello World");
     }
 
-    add(arr[2], arr[3]);
+    let add = add(fib(2) as i32, fib(3) as i32);
     let x = fib(20);
 
-    // NOTE: Debugger does not recognize these types yet
     let vec = vec![1, 2, 3, 4, 5];
     let nested_vec = vec![vec![2]];
     let box_type = Box::new(12);

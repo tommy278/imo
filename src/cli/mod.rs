@@ -178,6 +178,28 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                                     Err(e) => eprintln!("{e}"),
                                 }
                             }
+                            "args" => {
+                                match session
+                                    .get_all_values_for_specified_param(ParamType::Argument)
+                                {
+                                    Ok(field) => {
+                                        if field.is_empty() {
+                                            println!("No argument in scope");
+                                        }
+
+                                        for (name, val) in field.iter() {
+                                            print!("{} = ", name);
+
+                                            if let Some(val) = val {
+                                                println!("{}", val);
+                                            } else {
+                                                println!("<Could not parse argument>")
+                                            }
+                                        }
+                                    }
+                                    Err(e) => eprintln!("{e}"),
+                                }
+                            }
                             _ => {
                                 println!("Not handled yet")
                             }
