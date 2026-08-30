@@ -65,6 +65,7 @@ pub fn extract_subprogram_node<'a>(
     let mut linkage_name = None;
     let mut decl_file_idx = None;
     let mut decl_line = None;
+    let mut specification = None;
 
     let mut bytes = None;
 
@@ -103,6 +104,11 @@ pub fn extract_subprogram_node<'a>(
                     decl_line = Some(line as u32);
                 }
             }
+            gimli::DW_AT_specification => {
+                if let gimli::AttributeValue::UnitRef(offset) = attr.value() {
+                    specification = Some(offset);
+                }
+            }
             _ => continue,
         }
     }
@@ -119,6 +125,34 @@ pub fn extract_subprogram_node<'a>(
             gimli::AttributeValue::Udata(offset) => Some(low + offset),
             _ => None,
         };
+    }
+
+    if let Some(offset) = specification {
+        let entry = unit.entry(offset).ok()?;
+
+        let name_attr = entry.attr(gimli::DW_AT_name)?;
+
+        if let Ok(str) = unit.attr_string(name_attr.value()) {
+            display_name = Some(str.to_string_lossy().ok()?.to_string());
+        }
+
+        let linkage_attr = entry.attr(gimli::DW_AT_linkage_name)?;
+
+        if let Ok(str) = unit.attr_string(linkage_attr.value()) {
+            linkage_name = Some(str.to_string_lossy().ok()?.to_string());
+        }
+
+        let decl_file_attr = entry.attr(gimli::DW_AT_decl_file)?;
+
+        if let gimli::AttributeValue::FileIndex(idx) = decl_file_attr.value() {
+            decl_file_idx = Some(idx);
+        }
+
+        let decl_line_attr = entry.attr(gimli::DW_AT_decl_line)?;
+
+        if let gimli::AttributeValue::Udata(dl) = decl_line_attr.value() {
+            decl_line = Some(dl as u32);
+        }
     }
 
     if let (
