@@ -11,10 +11,32 @@ pub use linux as os;
 
 
 #[derive(Debug, Default)]
+pub struct ProcessAddressRanges {
+    ranges: Vec<ProcessAddressRange>
+}
+
+impl ProcessAddressRanges {
+    pub fn from(ranges: Vec<ProcessAddressRange>) -> Self {
+        Self { ranges }
+    }
+    pub fn within_range(&self, address: u64) -> bool {
+        self.ranges.iter().any(|r| r.base_address <= address && address < r.max_address)
+    }
+}
+
+#[derive(Debug, Default)]
 pub struct ProcessAddressRange {
     pub base_address: u64,
     pub max_address: u64
 }
+
+impl ProcessAddressRange {
+    pub fn within_range(&self, address: u64) -> bool {
+        println!("{:?}", (self, address));
+       self.base_address <= address && address < self.max_address 
+    }
+}
+
 
 #[cfg(target_os = "linux")]
 pub type SystemError = linux::error::LinuxError;

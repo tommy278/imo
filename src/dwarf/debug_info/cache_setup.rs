@@ -45,8 +45,8 @@ pub fn setup_cache(
         section.ok_or(DebugInfoError::ReadingSection(name.to_string()))
     };
 
-    // TODO: Considering storing these values in a struct that can be copied and reconstructing base address each time
     let text_address = read_section(".text")?;
+
     let got_address = read_section(".got")?;
     let eh_frame_address = read_section(".eh_frame")?;
 

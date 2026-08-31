@@ -10,7 +10,7 @@ use std::path::Path;
 
 use crate::dwarf::debug_info::{DebugVariable, ParamType};
 use crate::session::types::StackInfo;
-use crate::sys::{ProcessAddressRange, SystemError};
+use crate::sys::{ProcessAddressRanges, SystemError};
 use crate::sys::os::{self, syscalls};
 use crate::sys::registers::RegisterViewer;
 use crate::types::{
@@ -30,16 +30,20 @@ use breakpoint::{BreakpointData, BreakpointMutationResult, BreakpointTarget, Man
 use execution::CurrentStopCmd;
 use variable::DebugValue;
 
+
+
+
 /// Cache for entire debug session
 #[derive(Debug)]
 pub struct DebugSession {
     // Breakpoint data
     pub line_index: FxHashMap<u32, Vec<BreakpointTarget>>,
-    pub address_range: ProcessAddressRange,
+    pub address_ranges: ProcessAddressRanges,
     pub breakpoint_index_tracker: Vec<Option<BreakpointData>>,
 
     pub line_row: Vec<LineRow>,
 
+    pub base_address: u64,
     // A global arena to consolidate repetitive string allocations into one location
     pub interner: StringInterner,
 
@@ -69,7 +73,8 @@ impl DebugSession {
     /// Instantiate the struct with default values
     fn from_pid(pid: os::ProcessId) -> Self {
         Self {
-            address_range: ProcessAddressRange::default(),
+            address_ranges: ProcessAddressRanges::default(),
+            base_address: 0,
             breakpoint_index_tracker: Vec::new(),
             line_index: FxHashMap::default(),
             metadata: DebuggerMetadataCache::default(),
@@ -101,7 +106,7 @@ impl DebugSession {
         let mmap = unsafe { memmap2::Mmap::map(&file)? };
         let object = object::File::parse(&*mmap)?;
 
-        session.update_process_address_range()?;
+        session.update_process_addresses()?;
 
         session.metadata = DebuggerMetadataCache::new(&object)?;
 
@@ -207,17 +212,11 @@ impl DebugSession {
         let mut virtual_registers = self.virtual_registers()?;
 
         loop {
-            let Some(current_pc) = virtual_registers
-                .instruction_pointer
-                .checked_sub(self.address_range.base_address)
-            else {
-                break;
-            };
-
-            // TODO: get the actual maximum address of the process
-            if current_pc > 200_000 {
-                break;
+            if !self.address_ranges.within_range(virtual_registers.instruction_pointer) {
+                 break;
             }
+
+            let current_pc = virtual_registers.instruction_pointer - self.base_address;
 
             let trace = self.metadata.get_function_trace(current_pc);
 
@@ -291,7 +290,7 @@ impl DebugSession {
         let eh_frame = self.get_unwind_table();
         let base_addresses = &self.metadata.base_addresses;
 
-        let current_pc = regs.instruction_pointer - self.address_range.base_address;
+        let current_pc = regs.instruction_pointer - self.base_address;
 
         if let Ok(fde) =
             eh_frame.fde_for_address(base_addresses, current_pc, |sections, bases, offset| {
@@ -359,7 +358,7 @@ impl DebugSession {
     }
 
     pub fn current_pc(&self) -> Result<u64, SystemError> {
-        let pc = self.current_instruction_pointer()? - self.address_range.base_address;
+        let pc = self.current_instruction_pointer()? - self.base_address;
         Ok(pc)
     }
 
@@ -521,9 +520,8 @@ impl DebugSession {
     }
 
     /// Get and update the process base address
-    pub fn update_process_address_range(&mut self) -> Result<(), CacheSetupError> {
-        self.address_range = syscalls::get_process_address_range(self.pid)?;
-        Ok(())
+    pub fn update_process_addresses(&mut self) -> Result<(), CacheSetupError> {
+        syscalls::update_process_addresses(self, self.pid)
     }
 
     // =================================================================
@@ -537,7 +535,7 @@ impl DebugSession {
 
     /// Get the relative address from absolute address
     pub fn get_relative_address(&self, absolute_address: u64) -> u64 {
-        absolute_address - self.address_range.base_address
+        absolute_address - self.base_address
     }
 
     /// Find current scope with internal pc
@@ -545,7 +543,7 @@ impl DebugSession {
         &self,
         param_type: ParamType,
     ) -> Result<ActiveParamsContext<'_>, SystemError> {
-        let current_pc = self.current_instruction_pointer()? - self.address_range.base_address;
+        let current_pc = self.current_instruction_pointer()? - self.base_address;
         let context = self.metadata.find_scope_by_pc(current_pc, param_type);
         Ok(context)
     }
@@ -566,7 +564,7 @@ impl DebugSession {
         Ok(local_variables)
     }
 
-    /// Attempt to parse the varible to its value
+    /// Attempt to parse the variable to its value
     /// If any issue occurs down the road, dont throw an error, simply return None
     pub fn var_to_value(
         &self,
@@ -590,13 +588,18 @@ impl DebugSession {
                 frame_base,
                 &self.metadata.type_index,
                 self.pid,
+                &self.address_ranges
             )
             .ok()??;
+
+        if !self.address_ranges.within_range(address) {
+             return None;
+        }
 
         if let Some(ty) = self.metadata.type_index.get(&var.target_type_offset) {
             let result = ty
                 .dwarf_type
-                .to_debug_value(&self.metadata.type_index, address, self.pid)
+                .to_debug_value(&self.metadata.type_index, address, self.pid, &self.address_ranges)
                 .ok()?;
 
             return result;
@@ -639,6 +642,7 @@ impl DebugSession {
                 frame_base,
                 &self.metadata.type_index,
                 self.pid,
+                &self.address_ranges
             )?
             else {
                 return Err(error::VariableParseError::Address);
@@ -648,7 +652,7 @@ impl DebugSession {
             if let Some(ty) = self.metadata.type_index.get(&param.target_type_offset) {
                 let result =
                     ty.dwarf_type
-                        .to_debug_value(&self.metadata.type_index, address, self.pid)?;
+                        .to_debug_value(&self.metadata.type_index, address, self.pid, &self.address_ranges)?;
 
                 return Ok(result);
             }
@@ -844,7 +848,7 @@ impl DebugSession {
 
     /// Get absolute address ( the sum of base address and absolute address )
     pub fn get_absolute_address(&self, relative_address: u64) -> u64 {
-        self.address_range.base_address + relative_address
+        self.base_address + relative_address
     }
 
     /// Get breakpoint target (file name and relative address ) from line number and file name
