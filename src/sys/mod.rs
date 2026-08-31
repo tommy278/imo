@@ -11,28 +11,34 @@ pub use linux as os;
 
 
 #[derive(Debug, Default)]
-pub struct ProcessAddressRanges {
-    ranges: Vec<ProcessAddressRange>
+pub struct ProcessMemoryMap {
+    ranges: Vec<MemoryRegion>
 }
 
-impl ProcessAddressRanges {
-    pub fn from(ranges: Vec<ProcessAddressRange>) -> Self {
+impl ProcessMemoryMap {
+    pub fn from(ranges: Vec<MemoryRegion>) -> Self {
         Self { ranges }
     }
-    pub fn within_range(&self, address: u64) -> bool {
-        self.ranges.iter().any(|r| r.within_range(address))
+    pub fn is_ip_valid(&self, ip: u64) -> bool {
+        self.ranges.iter().any(|r| r.within_range(ip) && r.is_executable)
+    }
+    pub fn is_address_readable(&self, address: u64) -> bool {
+        self.ranges.iter().any(|r| r.within_range(address) && r.is_readable)
     }
 }
 
 #[derive(Debug, Default)]
-pub struct ProcessAddressRange {
-    pub base_address: u64,
-    pub max_address: u64
+pub struct MemoryRegion {
+    pub start_address: u64,
+    pub end_address: u64,
+    pub is_readable: bool,
+    pub is_executable: bool,
+    pub is_writable: bool
 }
 
-impl ProcessAddressRange {
+impl MemoryRegion {
     pub fn within_range(&self, address: u64) -> bool {
-       self.base_address <= address && address < self.max_address 
+       self.start_address <= address && address < self.end_address 
     }
 }
 

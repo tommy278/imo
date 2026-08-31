@@ -10,7 +10,7 @@ use std::path::Path;
 
 use crate::dwarf::debug_info::{DebugVariable, ParamType};
 use crate::session::types::StackInfo;
-use crate::sys::{ProcessAddressRanges, SystemError};
+use crate::sys::{ProcessMemoryMap, SystemError};
 use crate::sys::os::{self, syscalls};
 use crate::sys::registers::RegisterViewer;
 use crate::types::{
@@ -30,15 +30,12 @@ use breakpoint::{BreakpointData, BreakpointMutationResult, BreakpointTarget, Man
 use execution::CurrentStopCmd;
 use variable::DebugValue;
 
-
-
-
 /// Cache for entire debug session
 #[derive(Debug)]
 pub struct DebugSession {
     // Breakpoint data
     pub line_index: FxHashMap<u32, Vec<BreakpointTarget>>,
-    pub address_ranges: ProcessAddressRanges,
+    pub process_map: ProcessMemoryMap,     
     pub breakpoint_index_tracker: Vec<Option<BreakpointData>>,
 
     pub line_row: Vec<LineRow>,
@@ -73,7 +70,7 @@ impl DebugSession {
     /// Instantiate the struct with default values
     fn from_pid(pid: os::ProcessId) -> Self {
         Self {
-            address_ranges: ProcessAddressRanges::default(),
+            process_map: ProcessMemoryMap::default(),
             base_address: 0,
             breakpoint_index_tracker: Vec::new(),
             line_index: FxHashMap::default(),
@@ -212,7 +209,7 @@ impl DebugSession {
         let mut virtual_registers = self.virtual_registers()?;
 
         loop {
-            if !self.address_ranges.within_range(virtual_registers.instruction_pointer) {
+            if !self.process_map.is_ip_valid(virtual_registers.instruction_pointer) {
                  break;
             }
 
@@ -588,14 +585,14 @@ impl DebugSession {
                 frame_base,
                 &self.metadata.type_index,
                 self.pid,
-                &self.address_ranges
+                &self.process_map
             )
             .ok()??;
 
         if let Some(ty) = self.metadata.type_index.get(&var.target_type_offset) {
             let result = ty
                 .dwarf_type
-                .to_debug_value(&self.metadata.type_index, address, self.pid, &self.address_ranges)
+                .to_debug_value(&self.metadata.type_index, address, self.pid, &self.process_map)
                 .ok()?;
 
             return result;
@@ -638,7 +635,7 @@ impl DebugSession {
                 frame_base,
                 &self.metadata.type_index,
                 self.pid,
-                &self.address_ranges
+                &self.process_map
             )?
             else {
                 return Err(error::VariableParseError::Address);
@@ -648,7 +645,7 @@ impl DebugSession {
             if let Some(ty) = self.metadata.type_index.get(&param.target_type_offset) {
                 let result =
                     ty.dwarf_type
-                        .to_debug_value(&self.metadata.type_index, address, self.pid, &self.address_ranges)?;
+                        .to_debug_value(&self.metadata.type_index, address, self.pid, &self.process_map)?;
 
                 return Ok(result);
             }

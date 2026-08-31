@@ -18,7 +18,7 @@ use crate::dwarf::debug_info::error::DebugInfoError;
 use crate::dwarf::evaluate_frame_base_bytes;
 use crate::session::error::VariableParseError;
 use crate::session::variable::{DebugStructField, DebugValue, WrapperKind, to_buffer};
-use crate::sys::{SystemError, ProcessAddressRanges };
+use crate::sys::{SystemError, ProcessMemoryMap};
 use crate::sys::os;
 use crate::sys::{os::syscalls, registers::RegisterViewer};
 use crate::types::UniqueFileId;
@@ -259,7 +259,7 @@ impl DwarfType {
         type_index: &FxHashMap<usize, TypeCacheNode>,
         address: u64,
         pid: os::ProcessId,
-        process_range: &ProcessAddressRanges 
+        process_range: &ProcessMemoryMap
     ) -> Result<Option<DebugValue>, SystemError> {
         match self {
             DwarfType::Base {
@@ -559,10 +559,6 @@ impl DwarfType {
                     {
                         let mut buffer = Vec::with_capacity(cap as usize);
 
-                        if !process_range.within_range(heap_pointer_value as u64) {
-                            return Ok(Some(DebugValue::Err("Variable not initialized".to_string())))
-                        }
-
                         for i in 0..len {
                             let Some(data) = ty.dwarf_type.to_debug_value(
                                 type_index,
@@ -602,10 +598,6 @@ impl DwarfType {
 
                         // The beginning pointer where the head resides
                         let base_pointer = heap_pointer_value as u64 + (head * size);
-
-                        if !process_range.within_range(base_pointer as u64) {
-                            return Ok(Some(DebugValue::Err("Variable not initialized".to_string())))
-                        }
 
                         // The maiximum pointer that is within the bounds of the allocated memory
                         let maximum_address = heap_pointer_value as u64 + (cap * size);
@@ -670,9 +662,11 @@ impl DwarfType {
                         items,
                         ..
                     }) = table
-                    {   
-                        if !process_range.within_range(ctrl as u64) {
-                            return Ok(Some(DebugValue::Err("Variable not initialized".to_string())))
+                    { 
+                        // Address is out of the bounds of the program
+                        // Another instance of variable probably not initialized
+                        if process_range.is_address_readable(ctrl as u64) {
+                            return Ok(Some(DebugValue::Err("Variable not initialized".to_string())));
                         }
 
                         let key_field = get_field!(generics, "K");
@@ -853,25 +847,24 @@ impl DwarfType {
                     });
                 }
 
-                if name == "&str" || name == "&std::path::Path" {
-                    assert!(values.len() == 2);
-
+                if name == "&str" ||  name == "&std::path::Path" {
                     let ptr = &values[0].value;
                     let len = &values[1].value;
 
                     if let (DebugValue::Pointer(ptr), DebugValue::Usize(len)) = (ptr, len) {
-                        if !process_range.within_range(*ptr as u64) {
-                            return Ok(Some(DebugValue::Err("Variable not initialized".to_string())))
+                        // Pointing at NULL, probably not initialized
+                        if *ptr == 0x0 {
+                            return Ok(Some(DebugValue::Err("Variable not initialized yet".to_string())));
                         }
 
                         let res = syscalls::read_bytes(pid, *ptr as usize, *len as usize)?;
                         let string = String::from_utf8_lossy(&res).into_owned();
 
                         if name == "&str" {
-                            return Ok(Some(DebugValue::StringSlice(string)));
-                        } else {
-                            return Ok(Some(DebugValue::FilePath(string)));
+                            return Ok(Some(DebugValue::StringSlice(string))); 
                         }
+
+                        return Ok(Some(DebugValue::FilePath(string)));
                     }
                 }
 
@@ -975,7 +968,7 @@ impl DebugVariable {
         bytes: &[u8],
         type_index: &FxHashMap<usize, TypeCacheNode>,
         pid: os::ProcessId,
-        process_range: &crate::sys::ProcessAddressRanges
+        process_range: &ProcessMemoryMap
     ) -> Result<Option<u64>, VariableParseError> {
         let expression = Expression(EndianSlice::new(&self.location, endian));
 
