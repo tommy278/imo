@@ -10,7 +10,7 @@ use std::path::Path;
 
 use crate::dwarf::debug_info::{DebugVariable, ParamType};
 use crate::session::types::StackInfo;
-use crate::sys::SystemError;
+use crate::sys::{ProcessAddressRange, SystemError};
 use crate::sys::os::{self, syscalls};
 use crate::sys::registers::RegisterViewer;
 use crate::types::{
@@ -35,7 +35,7 @@ use variable::DebugValue;
 pub struct DebugSession {
     // Breakpoint data
     pub line_index: FxHashMap<u32, Vec<BreakpointTarget>>,
-    pub base_address: u64,
+    pub address_range: ProcessAddressRange,
     pub breakpoint_index_tracker: Vec<Option<BreakpointData>>,
 
     pub line_row: Vec<LineRow>,
@@ -69,7 +69,7 @@ impl DebugSession {
     /// Instantiate the struct with default values
     fn from_pid(pid: os::ProcessId) -> Self {
         Self {
-            base_address: 0,
+            address_range: ProcessAddressRange::default(),
             breakpoint_index_tracker: Vec::new(),
             line_index: FxHashMap::default(),
             metadata: DebuggerMetadataCache::default(),
@@ -101,7 +101,7 @@ impl DebugSession {
         let mmap = unsafe { memmap2::Mmap::map(&file)? };
         let object = object::File::parse(&*mmap)?;
 
-        session.update_process_base_address()?;
+        session.update_process_address_range()?;
 
         session.metadata = DebuggerMetadataCache::new(&object)?;
 
@@ -209,7 +209,7 @@ impl DebugSession {
         loop {
             let Some(current_pc) = virtual_registers
                 .instruction_pointer
-                .checked_sub(self.base_address)
+                .checked_sub(self.address_range.base_address)
             else {
                 break;
             };
@@ -291,7 +291,7 @@ impl DebugSession {
         let eh_frame = self.get_unwind_table();
         let base_addresses = &self.metadata.base_addresses;
 
-        let current_pc = regs.instruction_pointer - self.base_address;
+        let current_pc = regs.instruction_pointer - self.address_range.base_address;
 
         if let Ok(fde) =
             eh_frame.fde_for_address(base_addresses, current_pc, |sections, bases, offset| {
@@ -359,7 +359,7 @@ impl DebugSession {
     }
 
     pub fn current_pc(&self) -> Result<u64, SystemError> {
-        let pc = self.current_instruction_pointer()? - self.base_address;
+        let pc = self.current_instruction_pointer()? - self.address_range.base_address;
         Ok(pc)
     }
 
@@ -521,8 +521,8 @@ impl DebugSession {
     }
 
     /// Get and update the process base address
-    pub fn update_process_base_address(&mut self) -> Result<(), CacheSetupError> {
-        self.base_address = syscalls::get_process_base_address(self.pid)?;
+    pub fn update_process_address_range(&mut self) -> Result<(), CacheSetupError> {
+        self.address_range = syscalls::get_process_address_range(self.pid)?;
         Ok(())
     }
 
@@ -537,7 +537,7 @@ impl DebugSession {
 
     /// Get the relative address from absolute address
     pub fn get_relative_address(&self, absolute_address: u64) -> u64 {
-        absolute_address - self.base_address
+        absolute_address - self.address_range.base_address
     }
 
     /// Find current scope with internal pc
@@ -545,7 +545,7 @@ impl DebugSession {
         &self,
         param_type: ParamType,
     ) -> Result<ActiveParamsContext<'_>, SystemError> {
-        let current_pc = self.current_instruction_pointer()? - self.base_address;
+        let current_pc = self.current_instruction_pointer()? - self.address_range.base_address;
         let context = self.metadata.find_scope_by_pc(current_pc, param_type);
         Ok(context)
     }
@@ -844,7 +844,7 @@ impl DebugSession {
 
     /// Get absolute address ( the sum of base address and absolute address )
     pub fn get_absolute_address(&self, relative_address: u64) -> u64 {
-        self.base_address + relative_address
+        self.address_range.base_address + relative_address
     }
 
     /// Get breakpoint target (file name and relative address ) from line number and file name

@@ -118,7 +118,7 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                                         else if current_rsp == start_stack_pointer {
                                             // We need location so keep stepping until we find a valid one
                                             let Some(line_row) = session
-                                                .find_line_range(regs.rip - session.base_address)
+                                                .find_line_range(regs.rip - session.address_range.base_address)
                                             else {
                                                 session.single_step()?;
                                                 continue;
@@ -131,7 +131,7 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
 
                                             let current_location = &line_row.location;
 
-                                            // If its not an inline function just step till we are back in same file but not same line
+                                            // If its not an inline function just step till we areaddress_range. back in same file but not same line
                                             if !started_from_inline {
                                                 if start_file == current_location.file
                                                     && start_line != current_location.line
@@ -145,7 +145,7 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                                                 // If we are in an inline function, behave exactly like a
                                                 // normal stepover with the inclusion
                                                 // that it can now step out to a function that is not inlined
-                                                let pc = regs.rip - session.base_address;
+                                                let pc = regs.rip - session.address_range.base_address;
                                                 if (start_file == current_location.file
                                                     && start_line != current_location.line)
                                                     || !session.metadata.is_in_inline(pc)
@@ -243,7 +243,7 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                                         } else if started_from_inline
                                             && start_stack_pointer == current_rsp
                                         {
-                                            let pc = regs.rip - session.base_address;
+                                            let pc = regs.rip - session.address_range.base_address;
                                             if !session.metadata.is_in_inline(pc) {
                                                 session.current_cmd = CurrentStopCmd::Completed;
                                             } else {

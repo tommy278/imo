@@ -8,18 +8,30 @@ use std::io::IoSliceMut;
 use crate::dwarf::error::CacheSetupError;
 use crate::sys::linux::error::LinuxError;
 use crate::sys::linux::{PlatformRegStruct, ProcessId};
+use crate::sys::ProcessAddressRange;
 
 /// Get process base address
-pub fn get_process_base_address(pid: ProcessId) -> Result<u64, CacheSetupError> {
+pub fn get_process_address_range(pid: ProcessId) -> Result<ProcessAddressRange, CacheSetupError> {
     let maps_path = format!("/proc/{}/maps", pid);
     if let Ok(content) = read_to_string(maps_path) {
         if let Some(first_line) = content.lines().next() {
-            if let Some(base_str) = first_line.split('-').next() {
-                return u64::from_str_radix(base_str, 16).map_err(|_| CacheSetupError::BaseAddress);
+            let mut target_line = first_line.split('-');
+            if let Some(base_str) = target_line.next() {
+                if let Some(max_str) = target_line.next() {
+                    let Ok(base_address) = u64::from_str_radix(base_str, 16) else {
+                        return Err(CacheSetupError::AddressRange);
+                    };
+
+                    let Ok(max_address) = u64::from_str_radix(&max_str[..1], 16) else {
+                        return Err(CacheSetupError::AddressRange);
+                    };
+
+                    return Ok(ProcessAddressRange { base_address, max_address });
+                }
             }
         }
     }
-    Err(CacheSetupError::BaseAddress)
+    Err(CacheSetupError::AddressRange)
 }
 
 /// Continue debug session

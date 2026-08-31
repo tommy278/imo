@@ -9,6 +9,13 @@ pub mod linux;
 #[cfg(target_os = "linux")]
 pub use linux as os;
 
+
+#[derive(Debug, Default)]
+pub struct ProcessAddressRange {
+    pub base_address: u64,
+    pub max_address: u64
+}
+
 #[cfg(target_os = "linux")]
 pub type SystemError = linux::error::LinuxError;
 
@@ -21,6 +28,7 @@ pub enum DefaultError {
 
 #[cfg(not(target_os = "linux"))]
 pub type SystemError = DefaultError;
+
 
 #[cfg(not(target_os = "linux"))]
 // If not supported yet, add dummy values for compilation

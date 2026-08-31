@@ -24,6 +24,6 @@ pub enum CacheSetupError {
     #[error("Failed to read debug frame section")]
     DebugFrame(#[from] DebugFrameError),
 
-    #[error("Failed to read base address")]
-    BaseAddress,
+    #[error("Failed to read process address range")]
+    AddressRange,
 }
