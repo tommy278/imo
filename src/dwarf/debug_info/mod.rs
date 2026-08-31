@@ -559,6 +559,10 @@ impl DwarfType {
                     {
                         let mut buffer = Vec::with_capacity(cap as usize);
 
+                        if !process_range.within_range(heap_pointer_value as u64) {
+                            return Ok(Some(DebugValue::Err("Variable not initialized".to_string())))
+                        }
+
                         for i in 0..len {
                             let Some(data) = ty.dwarf_type.to_debug_value(
                                 type_index,
@@ -598,6 +602,10 @@ impl DwarfType {
 
                         // The beginning pointer where the head resides
                         let base_pointer = heap_pointer_value as u64 + (head * size);
+
+                        if !process_range.within_range(base_pointer as u64) {
+                            return Ok(Some(DebugValue::Err("Variable not initialized".to_string())))
+                        }
 
                         // The maiximum pointer that is within the bounds of the allocated memory
                         let maximum_address = heap_pointer_value as u64 + (cap * size);
@@ -662,7 +670,11 @@ impl DwarfType {
                         items,
                         ..
                     }) = table
-                    {
+                    {   
+                        if !process_range.within_range(ctrl as u64) {
+                            return Ok(Some(DebugValue::Err("Variable not initialized".to_string())))
+                        }
+
                         let key_field = get_field!(generics, "K");
                         let key_type = get_type!(type_index, &key_field.type_offset);
 
@@ -848,6 +860,10 @@ impl DwarfType {
                     let len = &values[1].value;
 
                     if let (DebugValue::Pointer(ptr), DebugValue::Usize(len)) = (ptr, len) {
+                        if !process_range.within_range(*ptr as u64) {
+                            return Ok(Some(DebugValue::Err("Variable not initialized".to_string())))
+                        }
+
                         let res = syscalls::read_bytes(pid, *ptr as usize, *len as usize)?;
                         let string = String::from_utf8_lossy(&res).into_owned();
 

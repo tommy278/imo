@@ -20,7 +20,7 @@ impl ProcessAddressRanges {
         Self { ranges }
     }
     pub fn within_range(&self, address: u64) -> bool {
-        self.ranges.iter().any(|r| r.base_address <= address && address < r.max_address)
+        self.ranges.iter().any(|r| r.within_range(address))
     }
 }
 
@@ -32,7 +32,6 @@ pub struct ProcessAddressRange {
 
 impl ProcessAddressRange {
     pub fn within_range(&self, address: u64) -> bool {
-        println!("{:?}", (self, address));
        self.base_address <= address && address < self.max_address 
     }
 }

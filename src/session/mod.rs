@@ -592,10 +592,6 @@ impl DebugSession {
             )
             .ok()??;
 
-        if !self.address_ranges.within_range(address) {
-             return None;
-        }
-
         if let Some(ty) = self.metadata.type_index.get(&var.target_type_offset) {
             let result = ty
                 .dwarf_type
