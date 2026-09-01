@@ -1,7 +1,7 @@
 use nix::sys::ptrace;
 use nix::sys::ptrace::AddressType;
 use nix::sys::signal;
-use nix::sys::uio::{RemoteIoVec, process_vm_readv};
+use nix::sys::uio::{process_vm_readv, RemoteIoVec};
 use std::fs::read_to_string;
 use std::io::IoSliceMut;
 
@@ -12,9 +12,9 @@ use crate::sys::{MemoryRegion, ProcessMemoryMap};
 
 /// Get process base address
 pub fn update_process_addresses(
-    session: &mut crate::session::DebugSession, 
-    pid: ProcessId
-    ) -> Result<(), CacheSetupError> {
+    session: &mut crate::session::DebugSession,
+    pid: ProcessId,
+) -> Result<(), CacheSetupError> {
     let maps_path = format!("/proc/{}/maps", pid);
     if let Ok(content) = read_to_string(maps_path) {
         let mut content_iter = content.lines();
@@ -22,25 +22,22 @@ pub fn update_process_addresses(
         let mut regions = Vec::new();
 
         while let Some(line) = content_iter.next() {
-            let target_line = line.split_once('-');
-            
             let mut is_executable = false;
             let mut is_writable = false;
             let mut is_readable = false;
 
             if let Some((base_str, end_str)) = line.split_once('-') {
-                    let Ok(base_address) = u64::from_str_radix(base_str, 16) else {
-                        return Err(CacheSetupError::AddressRange);
-                    };
+                let Ok(base_address) = u64::from_str_radix(base_str, 16) else {
+                    return Err(CacheSetupError::AddressRange);
+                };
 
-                    if session.base_address == 0 {
-                        session.base_address = base_address;
-                    }
+                if session.base_address == 0 {
+                    session.base_address = base_address;
+                }
 
-                    let mut other_end = end_str.split_whitespace();
+                let mut other_end = end_str.split_whitespace();
 
-                    if let Some(stripped_end_str) = other_end.next() {
-
+                if let Some(stripped_end_str) = other_end.next() {
                     if let Some(perm) = other_end.next() {
                         if perm.contains("r") {
                             is_readable = true;
@@ -53,10 +50,10 @@ pub fn update_process_addresses(
                         if perm.contains("w") {
                             is_writable = true;
                         }
-                    } 
+                    }
 
-                    let Ok(end_address) = u64::from_str_radix(stripped_end_str, 16) else { 
-                       return Err(CacheSetupError::AddressRange) 
+                    let Ok(end_address) = u64::from_str_radix(stripped_end_str, 16) else {
+                        return Err(CacheSetupError::AddressRange);
                     };
 
                     regions.push(MemoryRegion {
@@ -67,10 +64,11 @@ pub fn update_process_addresses(
                         is_executable,
                     });
                 }
-            }}
-
-            session.process_map = ProcessMemoryMap::from(regions);
+            }
         }
+
+        session.process_map = ProcessMemoryMap::from(regions);
+    }
 
     Ok(())
 }
