@@ -14,7 +14,7 @@ use crate::sys::{ProcessMemoryMap, SystemError};
 use crate::sys::os::{self, syscalls};
 use crate::sys::registers::RegisterViewer;
 use crate::types::{
-    FileIndices, LineRow, SourceCodeCache, SourceCodeDisplay, SourceLocation, StringId,
+    FileIndices, LineRow, SourceCodeCache, SourceCodeDisplay, SourceLocation,
     StringInterner, UniqueFileId,
 };
 use crate::{

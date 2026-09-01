@@ -22,7 +22,7 @@ pub fn update_process_addresses(
         let mut regions = Vec::new();
 
         while let Some(line) = content_iter.next() {
-            let mut target_line = line.split_once('-');
+            let target_line = line.split_once('-');
             
             let mut is_executable = false;
             let mut is_writable = false;
@@ -68,9 +68,6 @@ pub fn update_process_addresses(
                     });
                 }
             }}
-            regions.iter().for_each(|r| {
-                println!("{:?}", r);
-            });
 
             session.process_map = ProcessMemoryMap::from(regions);
         }
