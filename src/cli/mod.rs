@@ -71,6 +71,17 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                             continue;
                         }
 
+                        if let Some(breakpoint_addr) = session.get_func_low_pc(arg) {
+                            match session.create_specific_breakpoint(breakpoint_addr) {
+                                Ok(_) => println!(
+                                    "Breakpoint succesfully created @ {} ({:#x})",
+                                    arg, breakpoint_addr
+                                ),
+                                Err(e) => eprintln!("{e}"),
+                            }
+                            continue;
+                        }
+
                         // Handle setting breakpoint if only line_number is provided
                         // eg: break 12
 
@@ -89,6 +100,17 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                         if let Some((file_name, line_number)) = arg.split_once(":") {
                             let line_number = parse_line_arg!(line_number, u32);
                             handle_breakpoint_clearing(session, line_number, Some(file_name));
+                            continue;
+                        }
+
+                        if let Some(breakpoint_addr) = session.get_func_low_pc(arg) {
+                            match session.clear_specific_breakpoint(breakpoint_addr) {
+                                Ok(_) => println!(
+                                    "Breakpoint succesfully cleared @ {} ({:#x})",
+                                    arg, breakpoint_addr
+                                ),
+                                Err(e) => eprintln!("{e}"),
+                            }
                             continue;
                         }
 

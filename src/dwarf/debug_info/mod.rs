@@ -1254,4 +1254,17 @@ impl DebuggerMetadataCache {
         }
         context
     }
+
+    /// Find the low_pc for the target function
+    pub fn get_func_low_pc(&self, name: &str) -> Option<u64> {
+        for scope in self.execution_scopes.iter() {
+            if let Some(func_name) = scope.scope.get_name() {
+                assert!(scope.ranges.len() == 1);
+                if func_name == name {
+                    return scope.ranges.first().map(|r| r.low_pc);
+                }
+            }
+        }
+        None
+    }
 }

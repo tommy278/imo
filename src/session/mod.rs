@@ -10,17 +10,17 @@ use std::path::Path;
 
 use crate::dwarf::debug_info::{DebugVariable, ParamType};
 use crate::session::types::StackInfo;
-use crate::sys::{ProcessMemoryMap, SystemError};
 use crate::sys::os::{self, syscalls};
 use crate::sys::registers::RegisterViewer;
+use crate::sys::{ProcessMemoryMap, SystemError};
 use crate::types::{
-    FileIndices, LineRow, SourceCodeCache, SourceCodeDisplay, SourceLocation,
-    StringInterner, UniqueFileId,
+    FileIndices, LineRow, SourceCodeCache, SourceCodeDisplay, SourceLocation, StringInterner,
+    UniqueFileId,
 };
 use crate::{
     dwarf::{
         self,
-        debug_frame::{RawDebugFrame, setup_session_debug_frame},
+        debug_frame::{setup_session_debug_frame, RawDebugFrame},
         debug_info::{ActiveParamsContext, DebuggerMetadataCache},
         error::CacheSetupError,
     },
@@ -35,7 +35,7 @@ use variable::DebugValue;
 pub struct DebugSession {
     // Breakpoint data
     pub line_index: FxHashMap<u32, Vec<BreakpointTarget>>,
-    pub process_map: ProcessMemoryMap,     
+    pub process_map: ProcessMemoryMap,
     pub breakpoint_index_tracker: Vec<Option<BreakpointData>>,
 
     pub line_row: Vec<LineRow>,
@@ -209,8 +209,11 @@ impl DebugSession {
         let mut virtual_registers = self.virtual_registers()?;
 
         loop {
-            if !self.process_map.is_ip_valid(virtual_registers.instruction_pointer) {
-                 break;
+            if !self
+                .process_map
+                .is_ip_valid(virtual_registers.instruction_pointer)
+            {
+                break;
             }
 
             let current_pc = virtual_registers.instruction_pointer - self.base_address;
@@ -585,14 +588,19 @@ impl DebugSession {
                 frame_base,
                 &self.metadata.type_index,
                 self.pid,
-                &self.process_map
+                &self.process_map,
             )
             .ok()??;
 
         if let Some(ty) = self.metadata.type_index.get(&var.target_type_offset) {
             let result = ty
                 .dwarf_type
-                .to_debug_value(&self.metadata.type_index, address, self.pid, &self.process_map)
+                .to_debug_value(
+                    &self.metadata.type_index,
+                    address,
+                    self.pid,
+                    &self.process_map,
+                )
                 .ok()?;
 
             return result;
@@ -635,7 +643,7 @@ impl DebugSession {
                 frame_base,
                 &self.metadata.type_index,
                 self.pid,
-                &self.process_map
+                &self.process_map,
             )?
             else {
                 return Err(error::VariableParseError::Address);
@@ -643,9 +651,12 @@ impl DebugSession {
 
             // Resolve the variable's live value with address and current pid
             if let Some(ty) = self.metadata.type_index.get(&param.target_type_offset) {
-                let result =
-                    ty.dwarf_type
-                        .to_debug_value(&self.metadata.type_index, address, self.pid, &self.process_map)?;
+                let result = ty.dwarf_type.to_debug_value(
+                    &self.metadata.type_index,
+                    address,
+                    self.pid,
+                    &self.process_map,
+                )?;
 
                 return Ok(result);
             }
@@ -699,6 +710,10 @@ impl DebugSession {
         }
 
         Ok(bp_idx)
+    }
+
+    pub fn get_func_low_pc(&self, name: &str) -> Option<u64> {
+        self.metadata.get_func_low_pc(name)
     }
 
     /// Enable breakpoint at a specific index in the tracker
