@@ -80,6 +80,7 @@ pub enum DebugValue {
         name: String,
         fields: Vec<DebugStructField>,
     },
+    InvalidAddress,
     Err(String),
 }
 
@@ -282,6 +283,11 @@ impl fmt::Display for DebugValue {
                 write!(f, "\n}}")?;
                 Ok(())
             }
+            DebugValue::InvalidAddress => write!(
+                f,
+                "{}",
+                "Variable not initialized. (Located at invalid address)".red()
+            ),
             DebugValue::Err(err) => write!(f, "{}", err.red()),
         }
     }

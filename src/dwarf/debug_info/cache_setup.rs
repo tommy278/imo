@@ -5,17 +5,17 @@
  * and integrated into the project's native debugger architecture.
  */
 
-use gimli::{EndianSlice, Reader as _, RelocateReader, RunTimeEndian, UnitRef, constants};
+use gimli::{constants, EndianSlice, Reader as _, RelocateReader, RunTimeEndian, UnitRef};
 use object::{Object, ObjectSection};
 use std::borrow;
 
 use crate::dwarf::debug_info::{
-    Abi, DebuggerMetadataCache, DwarfType, EnumVariant, Enumerator, GenericField, Reader,
-    RelocationMap, ScopeCacheNode, StructField, TypeCacheNode,
     error::DebugInfoError,
     utils::{
         extract_inline_node, extract_lexical_block_node, extract_subprogram_node, extract_variable,
     },
+    Abi, DebuggerMetadataCache, DwarfType, EnumVariant, Enumerator, GenericField, Reader,
+    RelocationMap, ScopeCacheNode, StructField, TypeCacheNode,
 };
 
 macro_rules! get_global_offset {

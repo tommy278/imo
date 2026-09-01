@@ -17,11 +17,14 @@ use crate::dwarf::debug_info::cache_setup::setup_cache;
 use crate::dwarf::debug_info::error::DebugInfoError;
 use crate::dwarf::evaluate_frame_base_bytes;
 use crate::session::error::VariableParseError;
-use crate::session::variable::{DebugStructField, DebugValue, WrapperKind, to_buffer};
-use crate::sys::{SystemError, ProcessMemoryMap};
+use crate::session::variable::{to_buffer, DebugStructField, DebugValue, WrapperKind};
 use crate::sys::os;
 use crate::sys::{os::syscalls, registers::RegisterViewer};
+use crate::sys::{ProcessMemoryMap, SystemError};
 use crate::types::UniqueFileId;
+
+// The max allocation allowed for parsing each variable (100 MB)
+const MAX_ALLOCATION_SIZE: u64 = 100 * 1024 * 1024;
 
 pub type Reader<'data> =
     gimli::RelocateReader<gimli::EndianSlice<'data, gimli::RunTimeEndian>, &'data RelocationMap>;
@@ -154,9 +157,12 @@ macro_rules! get_value {
         let field = get_field!($fields, $target_field);
         let ty = get_type!($type_index, &field.type_offset);
 
-        let value = ty
-            .dwarf_type
-            .to_debug_value($type_index, $address + field.location, $pid, $process_range)?;
+        let value = ty.dwarf_type.to_debug_value(
+            $type_index,
+            $address + field.location,
+            $pid,
+            $process_range,
+        )?;
 
         value
     }};
@@ -259,7 +265,7 @@ impl DwarfType {
         type_index: &FxHashMap<usize, TypeCacheNode>,
         address: u64,
         pid: os::ProcessId,
-        process_range: &ProcessMemoryMap
+        process_range: &ProcessMemoryMap,
     ) -> Result<Option<DebugValue>, SystemError> {
         match self {
             DwarfType::Base {
@@ -334,9 +340,12 @@ impl DwarfType {
                 let raw_data = syscalls::peek_data(pid, address)?;
                 if let Some(name) = name {
                     let ty = get_type!(type_index, target_type_offset);
-                    let Some(val) =
-                        ty.dwarf_type
-                            .to_debug_value(type_index, raw_data as u64, pid, process_range)?
+                    let Some(val) = ty.dwarf_type.to_debug_value(
+                        type_index,
+                        raw_data as u64,
+                        pid,
+                        process_range,
+                    )?
                     else {
                         return Ok(None);
                     };
@@ -383,7 +392,7 @@ impl DwarfType {
                         type_index,
                         address + offset_num * i as u64,
                         pid,
-                        process_range
+                        process_range,
                     )?
                     else {
                         return Ok(None);
@@ -456,7 +465,7 @@ impl DwarfType {
                             type_index,
                             address + field_def.location,
                             pid,
-                            process_range
+                            process_range,
                         )?
                         else {
                             return Ok(None);
@@ -501,7 +510,7 @@ impl DwarfType {
                         }));
                     } else {
                         return Ok(Some(DebugValue::Err(
-                            "Could not find active field".to_string(),
+                            "Could not find active field variant".to_string(),
                         )));
                     }
                 } else {
@@ -530,7 +539,8 @@ impl DwarfType {
                 }
 
                 if name == "PathBuf" {
-                    let inner = get_value!(fields, type_index, "inner", address, pid, process_range);
+                    let inner =
+                        get_value!(fields, type_index, "inner", address, pid, process_range);
 
                     if let Some(DebugValue::Vec(buf)) = inner {
                         let raw_values = to_buffer(&buf);
@@ -557,6 +567,11 @@ impl DwarfType {
                         Some(DebugValue::Usize(len)),
                     ) = (buf, len)
                     {
+                        // Len greater than cap is a sign that it might be garbage value
+                        if len > cap || cap > MAX_ALLOCATION_SIZE || len > MAX_ALLOCATION_SIZE {
+                            return Ok(Some(DebugValue::InvalidAddress));
+                        }
+
                         let mut buffer = Vec::with_capacity(cap as usize);
 
                         for i in 0..len {
@@ -564,7 +579,7 @@ impl DwarfType {
                                 type_index,
                                 heap_pointer_value as u64 + i * size,
                                 pid,
-                                process_range
+                                process_range,
                             )?
                             else {
                                 return Ok(None);
@@ -594,6 +609,10 @@ impl DwarfType {
                         Some(DebugValue::Usize(head)),
                     ) = (buf, len, head)
                     {
+                        if len > cap || cap > MAX_ALLOCATION_SIZE || len > MAX_ALLOCATION_SIZE {
+                            return Ok(Some(DebugValue::InvalidAddress));
+                        }
+
                         let mut buffer = Vec::with_capacity(cap as usize);
 
                         // The beginning pointer where the head resides
@@ -612,7 +631,7 @@ impl DwarfType {
                                     type_index,
                                     current_address,
                                     pid,
-                                    process_range
+                                    process_range,
                                 )?
                                 else {
                                     return Ok(None);
@@ -628,7 +647,7 @@ impl DwarfType {
                                     type_index,
                                     current_address,
                                     pid,
-                                    process_range
+                                    process_range,
                                 )?
                                 else {
                                     return Ok(None);
@@ -654,7 +673,8 @@ impl DwarfType {
                 // There are more versions of Hashmap
                 // Only select the one with the table field and have the other ones resolve naturally
                 if name.starts_with("HashMap<") && fields.iter().any(|s| s.name == "table") {
-                    let table = get_value!(fields, type_index, "table", address, pid, process_range);
+                    let table =
+                        get_value!(fields, type_index, "table", address, pid, process_range);
 
                     if let Some(DebugValue::RawTableInner {
                         bucket_mask,
@@ -662,11 +682,9 @@ impl DwarfType {
                         items,
                         ..
                     }) = table
-                    { 
-                        // Address is out of the bounds of the program
-                        // Another instance of variable probably not initialized
-                        if process_range.is_address_readable(ctrl as u64) {
-                            return Ok(Some(DebugValue::Err("Variable not initialized".to_string())));
+                    {
+                        if items > MAX_ALLOCATION_SIZE {
+                            return Ok(Some(DebugValue::InvalidAddress));
                         }
 
                         let key_field = get_field!(generics, "K");
@@ -739,10 +757,12 @@ impl DwarfType {
                             let value_address = base_address + next_key_offset;
 
                             // Compute the values for the valid entries accordingly
-                            let Some(current_key) =
-                                key_type
-                                    .dwarf_type
-                                    .to_debug_value(type_index, key_address, pid, process_range)?
+                            let Some(current_key) = key_type.dwarf_type.to_debug_value(
+                                type_index,
+                                key_address,
+                                pid,
+                                process_range,
+                            )?
                             else {
                                 return Ok(None);
                             };
@@ -751,7 +771,7 @@ impl DwarfType {
                                 type_index,
                                 value_address,
                                 pid,
-                                process_range
+                                process_range,
                             )?
                             else {
                                 return Ok(None);
@@ -765,8 +785,10 @@ impl DwarfType {
                 }
 
                 if name == "RawVecInner<alloc::alloc::Global>" {
-                    let heap_pointer = get_value!(fields, type_index, "ptr", address, pid, process_range);
-                    let capacity = get_value!(fields, type_index, "cap", address, pid, process_range);
+                    let heap_pointer =
+                        get_value!(fields, type_index, "ptr", address, pid, process_range);
+                    let capacity =
+                        get_value!(fields, type_index, "cap", address, pid, process_range);
 
                     if let (Some(DebugValue::Pointer(ptr)), Some(DebugValue::Usize(cap))) =
                         (heap_pointer, capacity)
@@ -779,10 +801,25 @@ impl DwarfType {
                 }
 
                 if name == "RawTableInner" {
-                    let bucket_mask = get_value!(fields, type_index, "bucket_mask", address, pid, process_range);
+                    let bucket_mask = get_value!(
+                        fields,
+                        type_index,
+                        "bucket_mask",
+                        address,
+                        pid,
+                        process_range
+                    );
                     let ctrl = get_value!(fields, type_index, "ctrl", address, pid, process_range);
-                    let growth_left = get_value!(fields, type_index, "growth_left", address, pid, process_range);
-                    let items = get_value!(fields, type_index, "items", address, pid, process_range);
+                    let growth_left = get_value!(
+                        fields,
+                        type_index,
+                        "growth_left",
+                        address,
+                        pid,
+                        process_range
+                    );
+                    let items =
+                        get_value!(fields, type_index, "items", address, pid, process_range);
 
                     if let (
                         Some(DebugValue::Usize(bucket_mask)),
@@ -824,7 +861,7 @@ impl DwarfType {
                             type_index,
                             address + single_field.location,
                             pid,
-                            process_range
+                            process_range,
                         );
                     }
                 }
@@ -834,9 +871,12 @@ impl DwarfType {
                 for field in fields {
                     let ty = get_type!(type_index, &field.type_offset);
 
-                    let Some(value) =
-                        ty.dwarf_type
-                            .to_debug_value(type_index, address + field.location, pid, process_range)?
+                    let Some(value) = ty.dwarf_type.to_debug_value(
+                        type_index,
+                        address + field.location,
+                        pid,
+                        process_range,
+                    )?
                     else {
                         return Ok(None);
                     };
@@ -847,21 +887,21 @@ impl DwarfType {
                     });
                 }
 
-                if name == "&str" ||  name == "&std::path::Path" {
+                if name == "&str" || name == "&std::path::Path" {
                     let ptr = &values[0].value;
                     let len = &values[1].value;
 
                     if let (DebugValue::Pointer(ptr), DebugValue::Usize(len)) = (ptr, len) {
                         // Pointing at NULL, probably not initialized
-                        if *ptr == 0x0 {
-                            return Ok(Some(DebugValue::Err("Variable not initialized yet".to_string())));
+                        if *ptr == 0x0 || *len > MAX_ALLOCATION_SIZE {
+                            return Ok(Some(DebugValue::InvalidAddress));
                         }
 
                         let res = syscalls::read_bytes(pid, *ptr as usize, *len as usize)?;
                         let string = String::from_utf8_lossy(&res).into_owned();
 
                         if name == "&str" {
-                            return Ok(Some(DebugValue::StringSlice(string))); 
+                            return Ok(Some(DebugValue::StringSlice(string)));
                         }
 
                         return Ok(Some(DebugValue::FilePath(string)));
@@ -968,7 +1008,7 @@ impl DebugVariable {
         bytes: &[u8],
         type_index: &FxHashMap<usize, TypeCacheNode>,
         pid: os::ProcessId,
-        process_range: &ProcessMemoryMap
+        process_range: &ProcessMemoryMap,
     ) -> Result<Option<u64>, VariableParseError> {
         let expression = Expression(EndianSlice::new(&self.location, endian));
 
@@ -1006,8 +1046,12 @@ impl DebugVariable {
                         let Some(ty) = type_index.get(&offset) else {
                             return Ok(None);
                         };
-                        let Some(raw_value) =
-                            ty.dwarf_type.to_debug_value(type_index, address, pid, process_range)?
+                        let Some(raw_value) = ty.dwarf_type.to_debug_value(
+                            type_index,
+                            address,
+                            pid,
+                            process_range,
+                        )?
                         else {
                             return Ok(None);
                         };
