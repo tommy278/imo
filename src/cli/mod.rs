@@ -5,9 +5,10 @@ use rustyline::{DefaultEditor, Result};
 
 use crate::dwarf::debug_info::ParamType;
 use crate::session::DebugSession;
+use owo_colors::OwoColorize;
 use utils::{
-    handle_breakpoint_clearing, handle_breakpoint_setting, handle_cmd, handle_event_by_index,
-    parse_arg, parse_line_arg,
+    display_error, handle_breakpoint_clearing, handle_breakpoint_setting, handle_cmd,
+    handle_event_by_index, parse_arg, parse_line_arg,
 };
 
 /// Display an interactive menu at breakpoints
@@ -77,7 +78,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                                     "Breakpoint succesfully created @ {} ({:#x})",
                                     arg, breakpoint_addr
                                 ),
-                                Err(e) => eprintln!("{e}"),
+                                Err(e) => display_error!("{}", e),
                             }
                             continue;
                         }
@@ -87,7 +88,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
 
                         let line_number = parse_line_arg!(arg, u32);
                         let Some(line_index) = session.get_breakpoint_target(line_number) else {
-                            eprintln!("Cannot set breakpoint at target");
+                            display_error!("Cannot set breakpoint at target");
                             continue;
                         };
                         handle_breakpoint_setting(session, &line_index, line_number);
@@ -109,7 +110,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                                     "Breakpoint succesfully cleared @ {} ({:#x})",
                                     arg, breakpoint_addr
                                 ),
-                                Err(e) => eprintln!("{e}"),
+                                Err(e) => display_error!("{}", e),
                             }
                             continue;
                         }
@@ -175,7 +176,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                                 if let Ok(regs) = session.get_regs() {
                                     println!("{}", regs);
                                 } else {
-                                    eprintln!("Failed to fetch registers");
+                                    display_error!("Failed to fetch registers");
                                 }
                             }
                             "lo" | "local" | "locals" => {
@@ -197,7 +198,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                                             }
                                         }
                                     }
-                                    Err(e) => eprintln!("{e}"),
+                                    Err(e) => display_error!("{}", e),
                                 }
                             }
                             "arg" | "args" => {
@@ -219,7 +220,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                                             }
                                         }
                                     }
-                                    Err(e) => eprintln!("{e}"),
+                                    Err(e) => display_error!("{}", e),
                                 }
                             }
                             _ => {
@@ -240,16 +241,18 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                                         if let Some(val) = param {
                                             println!("{} = {}", arg, val);
                                         } else {
-                                            eprintln!(
+                                            display_error!(
                                                 "Var '{}' not in scope at current breakpoint",
                                                 arg
                                             );
                                         }
                                     }
-                                    Err(err) => eprintln!("Error occured parsing variable: {err}"),
+                                    Err(err) => {
+                                        display_error!("Error occured parsing variable: {}", err)
+                                    }
                                 }
                             }
-                            Err(err) => eprintln!("Could not resolve current scope: {err}"),
+                            Err(err) => display_error!("Could not resolve current scope: {}", err),
                         }
                     }
                     "bt" | "backtrace" => match session.backtrace() {
@@ -265,7 +268,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                             });
                         }
                         Err(e) => {
-                            eprintln!("{e}")
+                            display_error!("{}", e)
                         }
                     },
                     "l" | "list" => {
@@ -286,8 +289,8 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                     }
                     "q" | "quit" => {
                         // End current debug session
-                        if let Err(err) = session.kill_session() {
-                            eprintln!("{err}")
+                        if let Err(e) = session.kill_session() {
+                            display_error!("{}", e)
                         }
                         return Ok(());
                     }
@@ -299,7 +302,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
             Err(ReadlineError::Interrupted) => {
                 println!("Use 'q' to quit current session")
             }
-            Err(e) => eprintln!("{e}"),
+            Err(e) => display_error!("{}", e),
         }
     }
 }

@@ -3,6 +3,7 @@ use std::{
     path::Path,
 };
 
+use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
 
 use crate::session::{breakpoint, DebugSession};
@@ -29,7 +30,7 @@ pub fn handle_event_by_index<F>(
     // Index 0 never exists
     // Index starts at 1
     if user_index == 0 {
-        println!("No such index");
+        display_error!("No such index");
         return;
     }
 
@@ -38,7 +39,7 @@ pub fn handle_event_by_index<F>(
 
     // Index out of bounds or already deleted
     if vec_index >= session.current_index() {
-        println!("No such index");
+        display_error!("No such index");
         return;
     }
 
@@ -51,9 +52,9 @@ pub fn handle_event_by_index<F>(
             println!("Breakpoint {} is already {}d", user_index, action);
         }
         Ok(breakpoint::BreakpointMutationResult::NotFound) => {
-            println!("Could not {} breakpoint", action);
+            display_error!("Could not {} breakpoint", action);
         }
-        Err(e) => eprintln!("{e}"),
+        Err(e) => display_error!("{}", e),
 
         // This is for creation which is not index based
         _ => unreachable!(),
@@ -68,12 +69,12 @@ pub fn handle_breakpoint_clearing(
     match session.clear_breakpoint(line_number, file) {
         Ok(bp) => {
             if bp.is_empty() {
-                println!("No breakpoint cleared");
+                display_error!("No breakpoint cleared");
                 return;
             }
             println!("{:?}", bp)
         }
-        Err(e) => eprintln!("{e}"),
+        Err(e) => display_error!("{}", e),
     }
 }
 
@@ -83,7 +84,7 @@ pub fn handle_breakpoint_setting(
     line_number: u32,
 ) {
     if line_index.is_empty() {
-        println!("Cannot set breakpoint at target");
+        display_error!("Cannot set breakpoint at target");
         return;
     }
 
@@ -97,7 +98,7 @@ pub fn handle_breakpoint_setting(
         .collect();
 
     if unique_files.is_empty() {
-        println!("Cannot set breakpoint at target");
+        display_error!("Cannot set breakpoint at target");
         return;
     }
 
@@ -115,9 +116,9 @@ pub fn handle_breakpoint_setting(
                 return;
             }
             Ok(breakpoint::BreakpointMutationResult::NotFound) => {
-                println!("Could not find breakpoint")
+                display_error!("Could not find breakpoint")
             }
-            Err(e) => eprintln!("{e}"),
+            Err(e) => display_error!("{}", e),
             _ => unreachable!(),
         }
 
@@ -147,7 +148,7 @@ pub fn handle_breakpoint_setting(
 
         if let Ok(idx) = buffer.trim().parse::<usize>() {
             if idx >= file_choices.len() {
-                println!("{} is not a valid option", idx);
+                display_error!("{} is not a valid option", idx);
                 continue;
             }
 
@@ -163,8 +164,10 @@ pub fn handle_breakpoint_setting(
             handle_break_metadata(session, count, target, line_number);
             return;
         }
-        Ok(breakpoint::BreakpointMutationResult::NotFound) => println!("Could not find breakpoint"),
-        Err(e) => eprintln!("{e}"),
+        Ok(breakpoint::BreakpointMutationResult::NotFound) => {
+            display_error!("Could not find breakpoint")
+        }
+        Err(e) => display_error!("{}", e),
         _ => unreachable!(),
     }
 }
@@ -202,7 +205,7 @@ macro_rules! handle_cmd {
             println!("Session not started yet");
         } else {
             if let Err(err) = $cmd_call {
-                println!("{err}");
+                display_error!("{}", err);
             }
             return Ok(());
         }
@@ -215,10 +218,10 @@ macro_rules! parse_line_arg {
         match $line_str.parse::<$target_type>() {
             Ok(num) => num,
             Err(_) => {
-                println!(
+                eprintln!(
                     "Error: '{}' is not a valid {} value",
-                    $line_str,
-                    stringify!($target_type)
+                    $line_str.red(),
+                    stringify!($target_type).yellow()
                 );
                 continue;
             }
@@ -232,13 +235,21 @@ macro_rules! parse_arg {
         match $parts.next() {
             Some(arg) => arg,
             None => {
-                eprintln!("Error: '{}' requires a location", $cmd);
+                display_error!("Error: '{}' requires a location", $cmd);
                 continue;
             }
         }
     };
 }
 
-pub use crate::handle_cmd;
-pub use crate::parse_arg;
-pub use crate::parse_line_arg;
+#[macro_export]
+macro_rules! display_error {
+    ($error:expr) => {
+        eprintln!("{}", $error.red())
+    };
+    ($error:expr, $arg:expr) => {
+        eprintln!($error, $arg.red())
+    };
+}
+
+pub use crate::{display_error, handle_cmd, parse_arg, parse_line_arg};
