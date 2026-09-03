@@ -227,6 +227,7 @@ impl DebugSession {
                 continue;
             }
 
+            // Dont break immediately, just in case it is a temporary dead zone
             if should_break {
                 break;
             }

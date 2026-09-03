@@ -260,7 +260,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
 
                             let mut frame = 0;
                             stack_frames.iter().for_each(|f| {
-                                println!("#{}: {}", frame, f);
+                                println!("#{:<1}: {}", frame, f);
                                 frame += 1;
                             });
                         }

@@ -1,4 +1,5 @@
 use crate::utils::trim_file_path;
+use owo_colors::OwoColorize;
 
 #[derive(Debug, Copy, Clone)]
 pub enum StackInfo<'a> {
@@ -8,7 +9,6 @@ pub enum StackInfo<'a> {
         rip: u64,
         line: u32,
     },
-
     Inlined {
         func_name: &'a str,
         decl_file: &'a str,
@@ -30,20 +30,32 @@ impl std::fmt::Display for StackInfo<'_> {
             } => {
                 let trimmed_file = trim_file_path(file);
 
-                if let Some((stripped_name, _)) = func_name.split_once("<") {
+                let (cleaned_name, is_normal_func) = match func_name.split_once("<") {
+                    Some((stripped_name, _)) => (stripped_name, false),
+                    None => (*func_name, true),
+                };
+
+                if is_normal_func {
+                    // Get the padding by figuring out our length after the parentheses
+                    // This is the len of the string + 2 (size of parentheses)
+                    // Subtract by 36 and fill the space up to match the other branch
+                    let base_len = cleaned_name.len() + 2;
+                    let padding = 36_usize.saturating_sub(base_len);
                     write!(
                         f,
-                        "{:<36} {:#x} @ {}:{}",
-                        stripped_name, rip, trimmed_file, line
+                        "{}{}{:<width$}",
+                        cleaned_name.blue(),
+                        "()",
+                        "",
+                        width = padding
                     )?;
                 } else {
-                    let formatted_func_name = format!("{}()", func_name);
-                    write!(
-                        f,
-                        "{:<36} {:#x} @ {}:{}",
-                        formatted_func_name, rip, trimmed_file, line
-                    )?;
-                }
+                    write!(f, "{:<36}", cleaned_name.blue())?;
+                };
+
+                write!(f, "{:#x} @ {}:{}", rip, trimmed_file.green(), line)?;
+
+                Ok(())
             }
             Self::Inlined {
                 func_name,
@@ -56,27 +68,26 @@ impl std::fmt::Display for StackInfo<'_> {
                 let trimmed_decl_file = trim_file_path(decl_file);
                 let trimmed_call_file = trim_file_path(call_file);
 
-                if let Some((stripped_name, _)) = func_name.split_once("<") {
-                    write!(
-                        f,
-                        "{:<36} {:#x} [INLINED]\n\tDeclared @ {}:{} \n\tCalled @ {}:{} ",
-                        stripped_name,
-                        rip,
-                        trimmed_decl_file,
-                        decl_line,
-                        trimmed_call_file,
-                        call_line
-                    )?;
-                } else {
-                    write!(
-                        f,
-                        "{:<36} {:#x} [INLINED]\n\tDeclared @ {}:{} \n\tCalled @ {}:{} ",
-                        func_name, rip, trimmed_decl_file, decl_line, trimmed_call_file, call_line
-                    )?;
-                }
+                let cleaned_name = match func_name.split_once("<") {
+                    Some((stripped_name, _)) => stripped_name,
+                    None => *func_name,
+                };
+
+                write!(
+                    f,
+                    "{:<36}{:#x} [INLINED]\n\t{:<12} @ {}:{} \n\t{:<12} @ {}:{}",
+                    cleaned_name.fg_rgb::<180, 180, 180>(),
+                    rip,
+                    "Declared",
+                    trimmed_decl_file.green(),
+                    decl_line,
+                    "Called",
+                    trimmed_call_file.green(),
+                    call_line
+                )?;
+
+                Ok(())
             }
         }
-
-        Ok(())
     }
 }
