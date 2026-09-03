@@ -31,7 +31,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                         if session.is_idle() {
                             session.toggle_running();
                             if let Err(err) = session.continue_session() {
-                                println!("{err}")
+                                eprintln!("{err}")
                             }
                             return Ok(());
                         } else {
@@ -42,7 +42,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                         if !session.is_idle() {
                             session.toggle_running();
                             if let Err(err) = session.continue_session() {
-                                println!("{err}")
+                                eprintln!("{err}")
                             }
                             return Ok(());
                         } else {
@@ -107,8 +107,10 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                         if let Some(breakpoint_addr) = session.get_func_low_pc(arg) {
                             match session.clear_specific_breakpoint(breakpoint_addr) {
                                 Ok(_) => println!(
-                                    "Breakpoint succesfully cleared @ {} ({:#x})",
-                                    arg, breakpoint_addr
+                                    "{} @ {} ({:#x})",
+                                    "Breakpoint successfully created".green(),
+                                    arg.green(),
+                                    breakpoint_addr.green()
                                 ),
                                 Err(e) => display_error!("{}", e),
                             }
@@ -216,7 +218,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                                             if let Some(val) = val {
                                                 println!("{}", val);
                                             } else {
-                                                println!("<Could not parse argument>")
+                                                display_error!("<Could not parse argument>")
                                             }
                                         }
                                     }
@@ -224,7 +226,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                                 }
                             }
                             _ => {
-                                println!("Not handled yet")
+                                display_error!("Unsupported command")
                             }
                         }
                     }
@@ -258,12 +260,14 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                     "bt" | "backtrace" => match session.backtrace() {
                         Ok(stack_frames) => {
                             if stack_frames.is_empty() {
-                                println!("Could not find stack frame info for current location");
+                                display_error!(
+                                    "Could not find stack frame info for current location"
+                                );
                             }
 
                             let mut frame = 0;
                             stack_frames.iter().for_each(|f| {
-                                println!("#{:<1}: {}", frame, f);
+                                println!("#{:<4} {}", frame, f);
                                 frame += 1;
                             });
                         }
@@ -280,7 +284,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                                     });
                                 }
                                 None => {
-                                    println!("Could not resolve path");
+                                    display_error!("Could not resolve path");
                                 }
                             }
                         } else {
@@ -295,7 +299,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                         return Ok(());
                     }
                     _ => {
-                        println!("Not handled yet");
+                        display_error!("Unsupported command");
                     }
                 }
             }

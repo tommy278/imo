@@ -46,7 +46,7 @@ pub fn handle_event_by_index<F>(
     match func(session, vec_index) {
         Ok(breakpoint::BreakpointMutationResult::Updated) => {
             // Format action into being past tense
-            println!("Successfully {}d breakpoint {}", action, user_index);
+            println!("{}d breakpoint {}", action, user_index);
         }
         Ok(breakpoint::BreakpointMutationResult::AlreadyInState) => {
             println!("Breakpoint {} is already {}d", user_index, action);
@@ -252,4 +252,14 @@ macro_rules! display_error {
     };
 }
 
-pub use crate::{display_error, handle_cmd, parse_arg, parse_line_arg};
+#[macro_export]
+macro_rules! display_success {
+    ($error:expr) => {
+        println!("{}", $error.green())
+    };
+    ($error:expr, $arg:expr) => {
+        println!($error, $arg.green())
+    };
+}
+
+pub use crate::{display_error, display_success, handle_cmd, parse_arg, parse_line_arg};
