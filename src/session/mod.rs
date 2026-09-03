@@ -207,6 +207,7 @@ impl DebugSession {
     pub fn backtrace(&self) -> Result<Vec<StackInfo<'_>>, SystemError> {
         let mut stack_frames = Vec::new();
         let mut virtual_registers = self.virtual_registers()?;
+        let mut should_break = false;
 
         loop {
             if !self
@@ -222,7 +223,12 @@ impl DebugSession {
 
             if trace.is_empty() {
                 let _ = self.get_return_address(&mut virtual_registers);
+                should_break = true;
                 continue;
+            }
+
+            if should_break {
+                break;
             }
 
             for scope in trace {
@@ -276,6 +282,7 @@ impl DebugSession {
             }
 
             let _ = self.get_return_address(&mut virtual_registers);
+            should_break = false;
         }
 
         Ok(stack_frames)

@@ -19,7 +19,7 @@ pub fn display_source_code(f: &mut std::fmt::Formatter<'_>, code: &str) -> std::
             "let" | "fn" | "pub" | "impl" => write!(f, "{} ", token.red())?,
             "mut" | "return" | "if" => write!(f, "{} ", token.purple())?,
             "u8" | "i8" | "u16" | "i16" | "u32" | "i32" | "u64" | "i64" | "usize" | "isize"
-            | "f32" | "f64" | "bool" => write!(f, "{} ", token.bright_yellow())?,
+            | "f32" | "f64" | "bool" | "char" => write!(f, "{} ", token.bright_yellow())?,
             _ => write!(f, "{token} ")?,
         }
     }
