@@ -14,7 +14,7 @@ use utils::{
 /// Display an interactive menu at breakpoints
 pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEditor) -> Result<()> {
     loop {
-        let read_line = rl.readline("(imo) ");
+        let read_line = rl.readline("(\x1b[36mimo\x1b[0m) ");
 
         match read_line {
             Ok(line) => {
@@ -275,7 +275,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                             display_error!("{}", e)
                         }
                     },
-                    "l" | "list" => {
+                    "l" | "ls" | "list" => {
                         if !session.is_idle() {
                             match session.get_current_list_entry() {
                                 Some(list) => {

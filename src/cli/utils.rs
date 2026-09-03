@@ -190,7 +190,7 @@ fn handle_break_metadata(
     };
 
     println!(
-        "Breakpoint {} at 0x{:X}: file {}, {}",
+        "Breakpoint {} at {:#x}: file {}, {}",
         session.current_index(),
         first_bp_relative_address,
         trimmed_path,
