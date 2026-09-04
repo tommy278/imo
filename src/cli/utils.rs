@@ -191,9 +191,9 @@ fn handle_break_metadata(
 
     println!(
         "Breakpoint {} at {:#x}: file {}, {}",
-        session.current_index(),
-        first_bp_relative_address,
-        trimmed_path,
+        session.current_index().cyan(),
+        first_bp_relative_address.bright_blue(),
+        trimmed_path.green(),
         location_detail
     );
 }

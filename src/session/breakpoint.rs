@@ -1,4 +1,5 @@
 use crate::sys::os;
+use owo_colors::OwoColorize;
 use std::path::Path;
 
 use crate::utils::trim_file_path;
@@ -38,8 +39,11 @@ impl std::fmt::Display for BreakpointData {
 
             write!(
                 f,
-                "breakpoint\tkeep {}\t0x{:016x} at {}:{}",
-                enabled, target.relative_address, file_path, self.line
+                "breakpoint\tkeep {}\t{:#x} at {}:{}",
+                enabled,
+                target.relative_address.bright_blue(),
+                file_path.green(),
+                self.line
             )?;
         } else {
             writeln!(f, "breakpoint\tkeep {}\t<MULTIPLE>", enabled)?;
@@ -48,11 +52,11 @@ impl std::fmt::Display for BreakpointData {
                 let user_idx = idx + 1;
                 write!(
                     f,
-                    "  .{}\t\t     {}\t0x{:016x} at {}:{}",
-                    user_idx,
+                    "  .{}\t\t     {}\t{:#x} at {}:{}",
+                    user_idx.cyan(),
                     enabled,
-                    target.relative_address,
-                    target.file.display(),
+                    target.relative_address.blue(),
+                    trim_file_path(&target.file).green(),
                     self.line
                 )?;
 
