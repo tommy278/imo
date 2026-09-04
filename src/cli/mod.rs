@@ -196,7 +196,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                                             if let Some(val) = val {
                                                 println!("{}", val);
                                             } else {
-                                                println!("<Could not parse variable>")
+                                                display_error!("<Could not parse variable>")
                                             }
                                         }
                                     }
