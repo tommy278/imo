@@ -46,10 +46,23 @@ pub fn handle_event_by_index<F>(
     match func(session, vec_index) {
         Ok(breakpoint::BreakpointMutationResult::Updated) => {
             // Format action into being past tense
-            println!("{}d breakpoint {}", action, user_index);
+            println!(
+                "{} {}{} {}",
+                "Successfully".green(),
+                action.green(),
+                "d breakpoint".green(),
+                user_index.cyan()
+            );
         }
         Ok(breakpoint::BreakpointMutationResult::AlreadyInState) => {
-            println!("Breakpoint {} is already {}d", user_index, action);
+            println!(
+                "{} {} {} {}{}",
+                "Breakpoint".yellow(),
+                user_index.cyan(),
+                "is already".yellow(),
+                action.yellow(),
+                "d".yellow()
+            );
         }
         Ok(breakpoint::BreakpointMutationResult::NotFound) => {
             display_error!("Could not {} breakpoint", action);
