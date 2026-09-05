@@ -1,5 +1,4 @@
-use std::io::Write;
-fn main {
-let name = "Hello World";
-let x = 14;
+fn main() {
+    let name = "Hello World";
+    let x = 14;
 }
