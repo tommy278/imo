@@ -529,4 +529,71 @@ macro_rules! display_success {
     };
 }
 
-pub use crate::{display_error, display_success, handle_cmd, parse_arg, parse_line_arg};
+#[macro_export]
+macro_rules! get_breakpoint_address {
+    ($arg: expr) => {{
+        let breakpoint_addr = if *(&$arg[1..].starts_with("0x")) {
+            match u64::from_str_radix(&$arg[3..], 16) {
+                Ok(addr) => addr,
+                Err(_) => {
+                    eprintln!("Could not convert hexadecimal address");
+                    continue;
+                }
+            }
+        } else {
+            match u64::from_str_radix(&$arg[1..], 10) {
+                Ok(addr) => addr,
+                Err(_) => {
+                    eprintln!("Could not convert decimal address");
+                    continue;
+                }
+            }
+        };
+        breakpoint_addr
+    }};
+}
+
+#[macro_export]
+macro_rules! handle_breakpoint_with_addr {
+    (create, $session: expr, $bp_addr:expr) => {
+        match $session.create_specific_breakpoint($bp_addr) {
+            Ok(_) => {
+                if let Some(location) = $session.get_location_with_address($bp_addr) {
+                    let Some(path) = $session.interner.get_str(location.file) else {
+                        display_error!("Could not find corresponding file to given address");
+                        continue;
+                    };
+                    let line_index =
+                        $session.get_specific_breakpoint_target(path.into(), location.line);
+                    handle_breakpoint_setting($session, &line_index, location.line);
+                } else {
+                    display_error!("Could not find corresponding location to address");
+                    continue;
+                }
+            }
+            Err(e) => display_error!("{}", e),
+        }
+    };
+    (clear, $session: expr, $bp_addr:expr) => {
+        match $session.create_specific_breakpoint($bp_addr) {
+            Ok(_) => {
+                if let Some(location) = $session.get_location_with_address($bp_addr) {
+                    let Some(path) = $session.interner.get_string(location.file) else {
+                        display_error!("Could not find corresponding file to given address");
+                        continue;
+                    };
+                    handle_breakpoint_clearing($session, location.line, Some(path.as_str().into()));
+                } else {
+                    display_error!("Could not find corresponding location to address");
+                    continue;
+                }
+            }
+            Err(e) => display_error!("{}", e),
+        }
+    };
+}
+
+pub use crate::{
+    display_error, display_success, get_breakpoint_address, handle_breakpoint_with_addr,
+    handle_cmd, parse_arg, parse_line_arg,
+};

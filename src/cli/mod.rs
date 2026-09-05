@@ -11,8 +11,8 @@ use utils::{
     display_delete_help, display_disable_help, display_enable_help, display_error,
     display_finish_help, display_help, display_info_help, display_list_help, display_next_help,
     display_print_help, display_quit_help, display_single_step_help, display_step_help,
-    handle_breakpoint_clearing, handle_breakpoint_setting, handle_cmd, handle_event_by_index,
-    parse_arg, parse_line_arg,
+    get_breakpoint_address, handle_breakpoint_clearing, handle_breakpoint_setting,
+    handle_breakpoint_with_addr, handle_cmd, handle_event_by_index, parse_arg, parse_line_arg,
 };
 
 /// Display an interactive menu at breakpoints
@@ -65,6 +65,13 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                     "b" | "break" => {
                         let arg = parse_arg!(parts, "break");
 
+                        // Breaking at raw addresses
+                        if arg.starts_with('*') {
+                            let breakpoint_addr = get_breakpoint_address!(arg);
+                            handle_breakpoint_with_addr!(create, session, breakpoint_addr);
+                            continue;
+                        }
+
                         // Handle setting breakpoint if filename and line_number are provided
                         // eg: break running_task:6
                         if let Some((file_name, line_num)) = arg.split_once(":") {
@@ -77,13 +84,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                         }
 
                         if let Some(breakpoint_addr) = session.get_func_low_pc(arg) {
-                            match session.create_specific_breakpoint(breakpoint_addr) {
-                                Ok(_) => println!(
-                                    "Breakpoint succesfully created @ {} ({:#x})",
-                                    arg, breakpoint_addr
-                                ),
-                                Err(e) => display_error!("{}", e),
-                            }
+                            handle_breakpoint_with_addr!(create, session, breakpoint_addr);
                             continue;
                         }
 
@@ -109,15 +110,13 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                         }
 
                         if let Some(breakpoint_addr) = session.get_func_low_pc(arg) {
-                            match session.clear_specific_breakpoint(breakpoint_addr) {
-                                Ok(_) => println!(
-                                    "{} @ {} ({:#x})",
-                                    "Breakpoint successfully created".green(),
-                                    arg.green(),
-                                    breakpoint_addr.green()
-                                ),
-                                Err(e) => display_error!("{}", e),
-                            }
+                            handle_breakpoint_with_addr!(clear, session, breakpoint_addr);
+                            continue;
+                        }
+
+                        if arg.starts_with('*') {
+                            let breakpoint_addr = get_breakpoint_address!(arg);
+                            handle_breakpoint_with_addr!(clear, session, breakpoint_addr);
                             continue;
                         }
 
