@@ -239,7 +239,7 @@ pub fn display_help() {
 pub fn display_break_help() {
     println!(
         r#" Command: break
-    Usage: break <line> | <file:line> | <function>
+    Usage: break <line> | <file:line> | <function> | *<addr>
     Aliases: b
 
     Create a breakpoint at specified location.
@@ -248,6 +248,7 @@ pub fn display_break_help() {
         <line>              Break at the line within the current running program
         <file:line>         Break at the the line within the specified file
         <function>          Break at the beginning of the specified function
+        *<addr>             Break at the exact address 
     "#
     );
 }
@@ -256,7 +257,7 @@ pub fn display_break_help() {
 pub fn display_clear_help() {
     println!(
         r#" Command: clear 
-    Usage: clear <line> | <file:line> | <function>
+    Usage: clear <line> | <file:line> | <function> | *<addr>
     Aliases: [NONE] 
 
     Clear breakpoint at specific location. 
@@ -264,7 +265,8 @@ pub fn display_clear_help() {
     Options: 
         <line>              Clear breakpoint(s) that match the line number 
         <file:line>         Clear breakpoint(s) that match line number within specified file 
-        <function>          Clear breakpoint(s) at the beginning of specified function 
+        <function>          Clear breakpoint(s) at the beginning of specified function
+        *<addr>             Clear breakpoint at the exact address
     "#
     );
 }

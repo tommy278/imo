@@ -163,7 +163,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                         let arg = parse_arg!(parts, "info");
 
                         match arg {
-                            "b" | "breakpoints" => {
+                            "b" | "break" | "breakpoints" => {
                                 if session.breakpoint_index_tracker.is_empty() {
                                     println!("No breakpoint found");
                                     continue;
@@ -177,7 +177,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                                     }
                                 }
                             }
-                            "r" | "reg" => {
+                            "r" | "reg" | "regs" | "register" | "registers" => {
                                 if let Ok(regs) = session.get_regs() {
                                     println!("{}", regs);
                                 } else {
@@ -206,7 +206,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                                     Err(e) => display_error!("{}", e),
                                 }
                             }
-                            "arg" | "args" => {
+                            "a" | "arg" | "args" | "argument" | "arguments" => {
                                 match session
                                     .get_all_values_for_specified_param(ParamType::Argument)
                                 {
@@ -229,7 +229,9 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                                 }
                             }
                             _ => {
-                                display_error!("Unsupported command")
+                                display_error!(
+                                    "Unsupported command: Use help for valid valid commands"
+                                )
                             }
                         }
                     }
