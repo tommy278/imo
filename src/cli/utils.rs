@@ -12,6 +12,7 @@ use crate::utils::trim_file_path;
 
 /// Flush so the print statement is immediately displayed on screen
 /// Used for print statement since its not flushed automcatically unlike println
+#[inline]
 pub fn flush_output() {
     io::stdout().flush().unwrap();
 }

@@ -11,7 +11,7 @@ use utils::{
     display_delete_help, display_disable_help, display_enable_help, display_error,
     display_finish_help, display_help, display_info_help, display_list_help, display_next_help,
     display_print_help, display_quit_help, display_single_step_help, display_step_help,
-    get_breakpoint_address, handle_breakpoint_clearing, handle_breakpoint_setting,
+    flush_output, get_breakpoint_address, handle_breakpoint_clearing, handle_breakpoint_setting,
     handle_breakpoint_with_addr, handle_cmd, handle_event_by_index, parse_arg, parse_line_arg,
 };
 
@@ -195,6 +195,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
 
                                         for (name, val) in field.iter() {
                                             print!("{} = ", name);
+                                            flush_output();
 
                                             if let Some(val) = val {
                                                 println!("{}", val);
@@ -217,6 +218,7 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
 
                                         for (name, val) in field.iter() {
                                             print!("{} = ", name);
+                                            flush_output();
 
                                             if let Some(val) = val {
                                                 println!("{}", val);
