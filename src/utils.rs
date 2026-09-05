@@ -25,3 +25,7 @@ pub fn display_source_code(f: &mut std::fmt::Formatter<'_>, code: &str) -> std::
     }
     Ok(())
 }
+
+pub fn display_help() {
+    println!(r#"Hello World"#);
+}

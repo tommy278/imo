@@ -7,8 +7,12 @@ use crate::dwarf::debug_info::ParamType;
 use crate::session::DebugSession;
 use owo_colors::OwoColorize;
 use utils::{
-    display_error, handle_breakpoint_clearing, handle_breakpoint_setting, handle_cmd,
-    handle_event_by_index, parse_arg, parse_line_arg,
+    display_backtrace_help, display_break_help, display_clear_help, display_continue_help,
+    display_delete_help, display_disable_help, display_enable_help, display_error,
+    display_finish_help, display_help, display_info_help, display_list_help, display_next_help,
+    display_print_help, display_quit_help, display_single_step_help, display_step_help,
+    handle_breakpoint_clearing, handle_breakpoint_setting, handle_cmd, handle_event_by_index,
+    parse_arg, parse_line_arg,
 };
 
 /// Display an interactive menu at breakpoints
@@ -298,8 +302,33 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
                         }
                         return Ok(());
                     }
+                    "h" | "help" => {
+                        if let Some(arg) = parts.next() {
+                            match arg {
+                                "b" | "break" => display_break_help(),
+                                "clear" => display_clear_help(),
+                                "e" | "enable" => display_enable_help(),
+                                "dis" | "disable" => display_disable_help(),
+                                "d" | "delete" => display_delete_help(),
+                                "c" | "cont" | "continue" => display_continue_help(),
+                                "n" | "next" => display_next_help(),
+                                "si" | "stepi" => display_single_step_help(),
+                                "s" | "step" => display_step_help(),
+                                "f" | "fin" | "finish" => display_finish_help(),
+                                "p" | "print" => display_print_help(),
+                                "i" | "info" => display_info_help(),
+                                "bt" | "backtrace" => display_backtrace_help(),
+                                "l" | "ls" | "list" => display_list_help(),
+                                "q" | "quit" => display_quit_help(),
+                                _ => eprintln!("No help entry exists for {} cmd", arg.red()),
+                            }
+                            continue;
+                        }
+
+                        display_help()
+                    }
                     _ => {
-                        display_error!("Unsupported command");
+                        display_error!("Unsupported command. Use 'help' for valid commands");
                     }
                 }
             }
