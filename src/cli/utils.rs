@@ -230,44 +230,41 @@ pub fn display_help() {
     i / info            - Display informating about the running process
     bt / backtrace      - Display the current stack trace
     l / ls / list       - Display the surrounding source code around current location
-    q / quit            - Exit the debugger
-        "#
+    q / quit            - Exit the debugger"#
     );
 }
 
 #[inline]
 pub fn display_break_help() {
     println!(
-        r#" Command: break
-    Usage: break <line> | <file:line> | <function> | *<addr>
-    Aliases: b
+        r#"Command: break
+Usage: break <line> | <file:line> | <function> | *<addr>
+Aliases: b
 
-    Create a breakpoint at specified location.
+Create a breakpoint at specified location.
 
-    Options: 
-        <line>              Break at the line within the current running program
-        <file:line>         Break at the the line within the specified file
-        <function>          Break at the beginning of the specified function
-        *<addr>             Break at the exact address 
-    "#
+Options: 
+    <line>              Break at the line within the current running program
+    <file:line>         Break at the the line within the specified file
+    <function>          Break at the beginning of the specified function
+    *<addr>             Break at the exact address "#
     );
 }
 
 #[inline]
 pub fn display_clear_help() {
     println!(
-        r#" Command: clear 
-    Usage: clear <line> | <file:line> | <function> | *<addr>
-    Aliases: [NONE] 
+        r#"Command: clear 
+Usage: clear <line> | <file:line> | <function> | *<addr>
+Aliases: [NONE] 
 
-    Clear breakpoint at specific location. 
+Clear breakpoint at specific location. 
 
-    Options: 
-        <line>              Clear breakpoint(s) that match the line number 
-        <file:line>         Clear breakpoint(s) that match line number within specified file 
-        <function>          Clear breakpoint(s) at the beginning of specified function
-        *<addr>             Clear breakpoint at the exact address
-    "#
+Options: 
+    <line>              Clear breakpoint(s) that match the line number 
+    <file:line>         Clear breakpoint(s) that match line number within specified file 
+    <function>          Clear breakpoint(s) at the beginning of specified function
+    *<addr>             Clear breakpoint at the exact address"#
     );
 }
 
@@ -275,15 +272,14 @@ pub fn display_clear_help() {
 pub fn display_enable_help() {
     println!(
         r#"Command: enable
-    Usage: enable <idx> 
-    Aliases: e
+Usage: enable <idx> 
+Aliases: e
 
-    Enable breakpoint at specific index. 
-    [NOTE]: Index refers to the number assigned to the breakpoint starting from 1 and incrementing by 1 
+Enable breakpoint at specific index. 
+[NOTE]: Index refers to the number assigned to the breakpoint starting from 1 and incrementing by 1 
 
-    Options:
-        <idx>               Enable breakpoint that matches the index 
-    "#
+Options:
+    <idx>               Enable breakpoint that matches the index "#
     );
 }
 
@@ -291,15 +287,14 @@ pub fn display_enable_help() {
 pub fn display_disable_help() {
     println!(
         r#"Command: disable 
-    Usage: disable <idx> 
-    Aliases: dis
+Usage: disable <idx> 
+Aliases: dis
 
-    Disable breakpoint at specific index. 
-    [NOTE]: Index refers to the number assigned to the breakpoint starting from 1 and incrementing by 1 
+Disable breakpoint at specific index. 
+[NOTE]: Index refers to the number assigned to the breakpoint starting from 1 and incrementing by 1 
 
-    Options:
-        <idx>               Disable breakpoint that matches the index 
-    "#
+Options:
+    <idx>               Disable breakpoint that matches the index "#
     );
 }
 
@@ -307,15 +302,14 @@ pub fn display_disable_help() {
 pub fn display_delete_help() {
     println!(
         r#"Command: delete 
-    Usage: delete <idx> 
-    Aliases: d 
+Usage: delete <idx> 
+Aliases: d 
 
-    Delete breakpoint at specific index. 
-    [NOTE]: Index refers to the number assigned to the breakpoint starting from 1 and incrementing by 1 
+Delete breakpoint at specific index. 
+[NOTE]: Index refers to the number assigned to the breakpoint starting from 1 and incrementing by 1 
 
-    Options:
-        <idx>               Delete breakpoint that matches the index 
-    "#
+Options:
+    <idx>               Delete breakpoint that matches the index "#
     );
 }
 
@@ -323,13 +317,12 @@ pub fn display_delete_help() {
 pub fn display_continue_help() {
     println!(
         r#"Command: continue
-    Usage: continue
-    Aliases: c, cont
+Usage: continue
+Aliases: c, cont
 
-    Resume program at full speed till the end or until another breakpoint is encountered.
+Resume program at full speed till the end or until another breakpoint is encountered.
 
-    Options: [NONE]
-    "#
+Options: [NONE]"#
     );
 }
 
@@ -337,13 +330,12 @@ pub fn display_continue_help() {
 pub fn display_next_help() {
     println!(
         r#"Command: next
-    Usage: next
-    Aliases: n
+Usage: next
+Aliases: n
 
-    Step over the next line of code
+Step over the next line of code
 
-    Options: [NONE]
-    "#
+Options: [NONE]"#
     );
 }
 
@@ -351,13 +343,12 @@ pub fn display_next_help() {
 pub fn display_single_step_help() {
     println!(
         r#"Command: stepi 
-    Usage: stepi 
-    Aliases: si 
+Usage: stepi 
+Aliases: si 
 
-    Exectute the current instruction and immediately break
+Exectute the current instruction and immediately break
 
-    Options: [NONE]
-    "#
+Options: [NONE]"#
     );
 }
 
@@ -365,13 +356,12 @@ pub fn display_single_step_help() {
 pub fn display_step_help() {
     println!(
         r#"Command: step 
-    Usage: step 
-    Aliases: s 
+Usage: step 
+Aliases: s 
 
-    Step into the next line of code if possible. If stepping into the line is not possible it simply finished the line and step onto the next.
+Step into the next line of code if possible. If stepping into the line is not possible it simply finished the line and step onto the next.
 
-    Options: [NONE]
-    "#
+Options: [NONE]"#
     );
 }
 
@@ -379,13 +369,12 @@ pub fn display_step_help() {
 pub fn display_finish_help() {
     println!(
         r#"Command: finish 
-    Usage: finish 
-    Aliases: f, fin 
+Usage: finish 
+Aliases: f, fin 
 
-    Step out of the current function.
+Step out of the current function.
 
-    Options: [NONE]
-    "#
+Options: [NONE]"#
     );
 }
 
@@ -393,14 +382,14 @@ pub fn display_finish_help() {
 pub fn display_print_help() {
     println!(
         r#"Command: print
-    Usage: print <var>
-    Aliases: p
+Usage: print <var>
+Aliases: p
 
-    Print the specified variable if it exists within the current function scope
-    [NOTE]: Shadows variable by default
+Print the specified variable if it exists within the current function scope
+[NOTE]: Shadows variable by default
 
-    Options:
-        <var>               Print the variable by the name specified"#
+Options:
+    <var>               Print the variable by the name specified"#
     );
 }
 
@@ -408,21 +397,20 @@ pub fn display_print_help() {
 pub fn display_info_help() {
     println!(
         r#"Command: info 
-    Usage: info <breakpoint> | <registers> | <locals> | <arguments>
-    Aliases: i
+Usage: info <breakpoint> | <registers> | <locals> | <arguments>
+Aliases: i
 
-    Get the information for the current running process. 
+Get the information for the current running process. 
 
-    Options: 
-        <breakpoint>        Print all enabled and disabled breakpoints
-            Aliases: b, break, breakpoint, breakpoints"
-        <registers>         Print all register values
-            Aliases: r, reg, regs, register, registers
-        <locals>            Print all variables and their values within the current scope
-            Aliases: l, lo, local, locals
-        <arguments>:        Print all arguments and their values within the current scope
-            Aliases: a, arg, args, argument, arguments
-        "#
+Options: 
+    <breakpoint>        Print all enabled and disabled breakpoints
+        Aliases: b, break, breakpoint, breakpoints
+    <registers>         Print all register values
+        Aliases: r, reg, regs, register, registers
+    <locals>            Print all variables and their values within the current scope
+        Aliases: l, lo, local, locals
+    <arguments>:        Print all arguments and their values within the current scope
+        Aliases: a, arg, args, argument, arguments"#
     );
 }
 
@@ -430,13 +418,12 @@ pub fn display_info_help() {
 pub fn display_backtrace_help() {
     println!(
         r#"Command: backtrace
-    Usage: backtrace
-    Aliases: bt
+Usage: backtrace
+Aliases: bt
 
-    Display the current stack trace.
+Display the current stack trace.
 
-    Options: [NONE]
-    "#
+Options: [NONE]"#
     );
 }
 
@@ -444,13 +431,12 @@ pub fn display_backtrace_help() {
 pub fn display_list_help() {
     println!(
         r#"Command: list 
-    Usage: list 
-    Aliases: l, ls 
+Usage: list 
+Aliases: l, ls 
 
-    Display surrounding source code around current location.
+Display surrounding source code around current location.
 
-    Options: [NONE]
-    "#
+Options: [NONE]"#
     );
 }
 
@@ -458,12 +444,12 @@ pub fn display_list_help() {
 pub fn display_quit_help() {
     println!(
         r#"Command: quit
-    Usage: quit
-    Aliases: q
+Usage: quit
+Aliases: q
 
-    Quit the current debugging session
+Quit the current debugging session
 
-    Options: [NONE]"#
+Options: [NONE]"#
     );
 }
 
