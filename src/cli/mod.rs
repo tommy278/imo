@@ -338,7 +338,13 @@ pub fn handle_user_debugger_menu(session: &mut DebugSession, rl: &mut DefaultEdi
             Err(ReadlineError::Interrupted) => {
                 println!("Use 'q' to quit current session")
             }
-            Err(e) => display_error!("{}", e),
+            Err(ReadlineError::Eof) => {
+                continue;
+            }
+            Err(e) => {
+                eprintln!("Failed due to {}", e.red());
+                break Ok(());
+            }
         }
     }
 }

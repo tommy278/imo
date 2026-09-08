@@ -16,6 +16,7 @@ pub fn update_process_addresses(
     pid: ProcessId,
 ) -> Result<(), CacheSetupError> {
     let maps_path = format!("/proc/{}/maps", pid);
+
     if let Ok(content) = read_to_string(maps_path) {
         let mut content_iter = content.lines();
 

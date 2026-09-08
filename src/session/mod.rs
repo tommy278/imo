@@ -103,6 +103,7 @@ impl DebugSession {
         let mmap = unsafe { memmap2::Mmap::map(&file)? };
         let object = object::File::parse(&*mmap)?;
 
+        // For some reason this breaks during testing
         session.update_process_addresses()?;
 
         session.metadata = DebuggerMetadataCache::new(&object)?;
