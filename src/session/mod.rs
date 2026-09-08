@@ -502,14 +502,14 @@ impl DebugSession {
 
         let max_number = self.source_file.get_entry_line_count(path)? as u32;
 
-        let start_line_number = start_location.line.saturating_sub(1);
+        let start_line_number = start_location.line;
 
-        let low_range = start_line_number.saturating_sub(5);
+        let low_range = start_line_number.saturating_sub(5).max(1);
         let high_range = max_number.min(start_line_number + 5);
 
         let mut current_line = low_range;
 
-        while high_range >= current_line {
+        while current_line <= high_range {
             let line_val = self.get_source_file(path, current_line);
             list.push(line_val);
             current_line += 1;
