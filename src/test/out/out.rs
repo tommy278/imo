@@ -3,5 +3,5 @@ fn main() {
     let p: i8 = -2;
     let d: u64 = 12;
     let e: usize = 13;
-    let i: isize = -100;
+    let _ = todo!();
 }

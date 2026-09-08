@@ -107,6 +107,12 @@ fn write_and_read(child: &mut std::process::Child, cmd: &str) -> String {
     response
 }
 
+#[cfg(test)]
+fn get_val(dbg_val: &str) -> &str {
+    let (_, val) = dbg_val.split_once('=').unwrap();
+    let val = &val[1..]
+}
+
 #[test]
 fn integer() {
     write_to_output!(
@@ -115,10 +121,17 @@ fn integer() {
             [[ let p: i8 = -2; ]]
             [[ let d: u64 = 12; ]]
             [[ let e: usize = 13; ]]
-            [[ let i: isize = -100; ]]
+            [[ let _ = todo!(); ]] // Placeholder for a breakpoint to be placed
          }}
     );
     let mut child = create_process();
-    let result = write_and_read(&mut child, "b 5");
-    println!("THE RESULT IS: {}", result);
+    let _ = write_and_read(&mut child, "b 6");
+
+    let _ = write_and_read(&mut child, "run");
+
+    let x = write_and_read(&mut child, "p x");
+    let x_val = get_val(&x);
+    assert_eq!(x_val, "-15", "Values are not equal");
+
+    child.kill().unwrap();
 }
