@@ -92,7 +92,6 @@ fn write_and_read(child: &mut std::process::Child, cmd: &str) -> String {
     let stdout = child.stdout.take().expect("Failed to open stdout");
     let mut reader = std::io::BufReader::new(stdout);
 
-    println!("Will begin writing");
     writeln!(stdin, "{cmd}").expect("Failed to write to stdin");
     stdin.flush().unwrap();
 
@@ -110,7 +109,15 @@ fn write_and_read(child: &mut std::process::Child, cmd: &str) -> String {
 #[cfg(test)]
 fn get_val(dbg_val: &str) -> &str {
     let (_, val) = dbg_val.split_once('=').unwrap();
-    let val = &val[1..]
+    &val[1..]
+}
+
+#[cfg(test)]
+macro_rules! cmp {
+    ($first:expr, $second:expr) => {
+        let dbg_val = get_val($first);
+        assert!(dbg_val.contains($second));
+    };
 }
 
 #[test]
@@ -121,7 +128,7 @@ fn integer() {
             [[ let p: i8 = -2; ]]
             [[ let d: u64 = 12; ]]
             [[ let e: usize = 13; ]]
-            [[ let _ = todo!(); ]] // Placeholder for a breakpoint to be placed
+            [[ let _n = 500; ]] // Placeholder for a breakpoint to be placed
          }}
     );
     let mut child = create_process();
@@ -130,8 +137,16 @@ fn integer() {
     let _ = write_and_read(&mut child, "run");
 
     let x = write_and_read(&mut child, "p x");
-    let x_val = get_val(&x);
-    assert_eq!(x_val, "-15", "Values are not equal");
+    cmp!(&x, "-15");
+
+    let p = write_and_read(&mut child, "p p");
+    cmp!(&p, "-2");
+
+    let d = write_and_read(&mut child, "p d");
+    cmp!(&d, "12");
+
+    let e = write_and_read(&mut child, "p e");
+    cmp!(&e, "13");
 
     child.kill().unwrap();
 }
