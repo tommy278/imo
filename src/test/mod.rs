@@ -8,6 +8,11 @@ macro_rules! write_to_output {
         let internal_path = "/src/test/out/out.rs";
         current_path.push_str(internal_path);
 
+        {
+           std::fs::create_dir_all(current_path.strip_suffix("/out.rs").unwrap());
+           std::fs::File::create(current_path.strip_suffix(".rs").unwrap());
+        }
+
         let mut file = File::create(&current_path).unwrap();
 
         let mut full_str = String::new();
@@ -26,6 +31,11 @@ macro_rules! write_to_output {
         let mut current_path= std::env::current_dir().unwrap().display().to_string();
         let internal_path = "/src/test/out/out.rs";
         current_path.push_str(internal_path);
+
+        {
+           std::fs::create_dir_all(current_path.strip_suffix("/out.rs"));
+           std::fs::File::create(current_path.strip_suffix(".rs"));
+        }
 
         let mut file = File::create(&current_path).unwrap();
 
@@ -69,7 +79,6 @@ fn create_process() -> std::process::Child {
     let mut binary = std::env::current_dir().unwrap().display().to_string();
     let internal_path = "/src/test/out/out";
     binary.push_str(internal_path);
-
     {
         let mut source_path = binary.clone();
         source_path.push_str(".rs");
