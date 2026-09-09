@@ -141,6 +141,38 @@ macro_rules! cmp {
 }
 
 #[test]
+fn boolean() {
+    write_to_output!(
+        {{
+            [[ let a = true; ]]
+            [[ let b = false; ]]
+            [[ let c = true; ]]
+            [[ let d = false; ]]
+            [[ let _p = false; ]]
+        }}
+    );
+
+    let mut child = create_process();
+    let _ = write_and_read(&mut child, "b 6");
+
+    let _ = write_and_read(&mut child, "run");
+
+    let a = write_and_read(&mut child, "p a");
+    cmp!(&a, "true");
+
+    let b = write_and_read(&mut child, "p b");
+    cmp!(&b, "false");
+
+    let c = write_and_read(&mut child, "p c");
+    cmp!(&c, "true");
+
+    let d = write_and_read(&mut child, "p d");
+    cmp!(&d, "false");
+
+    child.kill().unwrap();
+}
+
+#[test]
 fn integer() {
     write_to_output!(
         {{
