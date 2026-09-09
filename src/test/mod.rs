@@ -1,6 +1,16 @@
 use std::fs::File;
 use std::io::{BufRead, Write};
 
+// SAFETY: Run this test on a single thread for now with the
+// 'cargo test -- --test-threads=1' command
+// This is because all tests write to the same file so it has to be synchronous
+//
+// SAFETY: If a test fails please manually kill the spawned process
+// This can be done a host of ways but 'pkill imo' should suffice
+// This is because on panics in the parent no
+// signal is sent to the child to stopped so it will be
+// orphaned
+
 #[cfg(test)]
 macro_rules! write_to_output {
     ({{ $([[ $($inner_code:tt)* ]])* }}) => {
@@ -9,8 +19,8 @@ macro_rules! write_to_output {
         current_path.push_str(internal_path);
 
         {
-           std::fs::create_dir_all(current_path.strip_suffix("/out.rs").unwrap());
-           std::fs::File::create(current_path.strip_suffix(".rs").unwrap());
+            std::fs::create_dir_all(current_path.strip_suffix("/out.rs").unwrap()).unwrap();
+            let _ =  std::fs::File::create(current_path.strip_suffix(".rs").unwrap());
         }
 
         let mut file = File::create(&current_path).unwrap();
@@ -33,8 +43,8 @@ macro_rules! write_to_output {
         current_path.push_str(internal_path);
 
         {
-           std::fs::create_dir_all(current_path.strip_suffix("/out.rs"));
-           std::fs::File::create(current_path.strip_suffix(".rs"));
+           std::fs::create_dir_all(current_path.strip_suffix("/out.rs").unwrap()).unwrap();
+           let _ = std::fs::File::create(current_path.strip_suffix(".rs").unwrap());
         }
 
         let mut file = File::create(&current_path).unwrap();
@@ -118,14 +128,15 @@ fn write_and_read(child: &mut std::process::Child, cmd: &str) -> String {
 #[cfg(test)]
 fn get_val(dbg_val: &str) -> &str {
     let (_, val) = dbg_val.split_once('=').unwrap();
-    &val[1..]
+    val.trim()
 }
 
 #[cfg(test)]
 macro_rules! cmp {
     ($first:expr, $second:expr) => {
         let dbg_val = get_val($first);
-        assert!(dbg_val.contains($second));
+        let raw_str = strip_ansi_escapes::strip_str(dbg_val);
+        assert_eq!(raw_str, $second, "Values not equal");
     };
 }
 
@@ -156,6 +167,37 @@ fn integer() {
 
     let e = write_and_read(&mut child, "p e");
     cmp!(&e, "13");
+
+    child.kill().unwrap();
+}
+
+#[test]
+fn char() {
+    write_to_output!(
+        {{
+            [[ let c = 'c'; ]]
+            [[ let y = 'y'; ]]
+            [[ let d = 'd'; ]]
+            [[ let n = '2'; ]]
+            [[ let _p = 'p'; ]]
+        }}
+    );
+    let mut child = create_process();
+    let _ = write_and_read(&mut child, "b 6");
+
+    let _ = write_and_read(&mut child, "run");
+
+    let c = write_and_read(&mut child, "p c");
+    cmp!(&c, "'c'");
+
+    let y = write_and_read(&mut child, "p y");
+    cmp!(&y, "'y'");
+
+    let d = write_and_read(&mut child, "p d");
+    cmp!(&d, "'d'");
+
+    let n = write_and_read(&mut child, "p n");
+    cmp!(&n, "'2'");
 
     child.kill().unwrap();
 }
