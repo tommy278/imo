@@ -284,3 +284,32 @@ fn path() {
 
     child.kill().unwrap();
 }
+
+#[test]
+fn path_buf() {
+    write_to_output!(
+        {{ [[ use std::path::PathBuf; ]] }},
+        {{
+            [[  let foo = PathBuf::from("foo"); ]]
+            [[  let bar = PathBuf::from("bar"); ]]
+            [[  let baz = PathBuf::from("baz"); ]]
+            [[  let _p = PathBuf::from("Placeholder"); ]]
+         }}
+    );
+
+    let mut child = create_process();
+    let _ = write_and_read(&mut child, "b 6");
+
+    let _ = write_and_read(&mut child, "run");
+
+    let foo = write_and_read(&mut child, "p foo");
+    cmp!(&foo, "PathBuf(\"foo\")");
+
+    let bar = write_and_read(&mut child, "p bar");
+    cmp!(&bar, "PathBuf(\"bar\")");
+
+    let baz = write_and_read(&mut child, "p baz");
+    cmp!(&baz, "PathBuf(\"baz\")");
+
+    child.kill().unwrap();
+}
