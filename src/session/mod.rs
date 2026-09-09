@@ -126,6 +126,8 @@ impl DebugSession {
         self.line_row.sort_by_key(|l| l.start_address);
     }
 
+    /// Generate the info for a line based on the ranges generated from the
+    /// debug_line section
     pub fn find_line_range(&self, current_pc: u64) -> Option<&LineRow> {
         match self.line_row.binary_search_by(|p| {
             if current_pc < p.start_address {
@@ -152,6 +154,7 @@ impl DebugSession {
         Ok(RegisterViewer { regs })
     }
 
+    /// Remove the cached register value
     pub fn invalidate_register(&mut self) {
         self.registers = None;
     }
@@ -178,11 +181,13 @@ impl DebugSession {
         Ok(())
     }
 
+    /// Generate an unwind table from the raw debug frame
     pub fn get_unwind_table(&self) -> gimli::EhFrame<gimli::EndianSlice<'_, gimli::RunTimeEndian>> {
         self.raw_debug_frame
             .get_unwind_table_with_endian(self.metadata.endian)
     }
 
+    /// Get the register value based on each architecture
     pub fn get_register_value(
         &self,
         register: gimli::Register,
@@ -205,6 +210,7 @@ impl DebugSession {
         }
     }
 
+    /// Accumulate the stack info for each frame entered
     pub fn backtrace(&self) -> Result<Vec<StackInfo<'_>>, SystemError> {
         let mut stack_frames = Vec::new();
         let mut virtual_registers = self.virtual_registers()?;
@@ -290,11 +296,14 @@ impl DebugSession {
         Ok(stack_frames)
     }
 
+    /// Convert the generated Gimli file index to &str
     pub fn file_idx_to_str(&self, file_idx: &crate::types::UniqueFileId) -> Option<&str> {
         let id = self.file_indices.get(file_idx)?;
         self.interner.get_str(*id)
     }
 
+    /// Get return address based on the provided register values
+    /// Also updates the regsiter values so it does not go out of state
     pub fn get_return_address(&self, regs: &mut VirtualRegisters) -> Option<u64> {
         let eh_frame = self.get_unwind_table();
         let base_addresses = &self.metadata.base_addresses;
@@ -353,6 +362,7 @@ impl DebugSession {
         None
     }
 
+    /// Convert register_viewer to a lighter virtual_register
     pub fn virtual_registers(&self) -> Result<VirtualRegisters, SystemError> {
         let full_regs = self.get_regs()?;
         Ok(full_regs.into())
@@ -376,6 +386,7 @@ impl DebugSession {
         syscalls::continue_session(self.pid)
     }
 
+    /// Send a trap signal to the child process
     pub fn send_trap_signal(&self) -> Result<(), SystemError> {
         syscalls::send_trap_signal(self.pid)
     }
@@ -403,6 +414,8 @@ impl DebugSession {
 
     pub fn begin_step_into(&mut self) -> Result<(), SystemError> {
         self.invalidate_register();
+        // Find a valid location to start from
+        // This makes it possible to compare with the destination
         let Some(current_location) = self.current_location() else {
             self.current_cmd = CurrentStopCmd::SearchingForValidLocation;
             self.single_step()?;
@@ -419,6 +432,9 @@ impl DebugSession {
     pub fn begin_step_over(&mut self) -> Result<(), SystemError> {
         self.invalidate_register();
         let Some(current_location) = self.current_location() else {
+            // Find a valid location to start from
+            // This makes it possible to compare with the destination
+
             self.current_cmd = CurrentStopCmd::SearchingForValidLocation;
             self.single_step()?;
             return Ok(());
@@ -492,6 +508,8 @@ impl DebugSession {
         self.get_source_file(path, line_number)
     }
 
+    /// Get the surrounding entries around the current line
+    /// It can go up to 5 in both direction
     pub fn get_current_list_entry(&mut self) -> Option<Vec<SourceCodeDisplay>> {
         let mut list = Vec::with_capacity(11);
 
@@ -530,7 +548,7 @@ impl DebugSession {
 
     /// Get and update the process base address
     pub fn update_process_addresses(&mut self) -> Result<(), CacheSetupError> {
-        syscalls::update_process_addresses(self)
+        syscalls::update_process_addresses(self, self.pid)
     }
 
     // =================================================================
