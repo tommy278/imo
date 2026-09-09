@@ -201,3 +201,30 @@ fn char() {
 
     child.kill().unwrap();
 }
+
+#[test]
+fn static_str() {
+    write_to_output!(
+        {{
+            [[  let foo = "foo"; ]]
+            [[  let bar = "bar"; ]]
+            [[  let baz = "baz"; ]]
+            [[  let _p = "Placeholder"; ]]
+        }}
+    );
+    let mut child = create_process();
+    let _ = write_and_read(&mut child, "b 5");
+
+    let _ = write_and_read(&mut child, "run");
+
+    let foo = write_and_read(&mut child, "p foo");
+    cmp!(&foo, "\"foo\"");
+
+    let bar = write_and_read(&mut child, "p bar");
+    cmp!(&bar, "\"bar\"");
+
+    let baz = write_and_read(&mut child, "p baz");
+    cmp!(&baz, "\"baz\"");
+
+    child.kill().unwrap();
+}
