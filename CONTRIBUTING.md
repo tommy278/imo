@@ -2,8 +2,6 @@
 
 First off, thank you for taking your time to contribute! 
 
-This document outlines the codebase architecture, development workflows, and guidelines to help you get started safely and quickly.
-
 ## Development Workflow
 
 ### 1. Multi-Platform Compilation Rules

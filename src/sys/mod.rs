@@ -9,10 +9,9 @@ pub mod linux;
 #[cfg(target_os = "linux")]
 pub use linux as os;
 
-
 #[derive(Debug, Default)]
 pub struct ProcessMemoryMap {
-    ranges: Vec<MemoryRegion>
+    ranges: Vec<MemoryRegion>,
 }
 
 impl ProcessMemoryMap {
@@ -20,10 +19,14 @@ impl ProcessMemoryMap {
         Self { ranges }
     }
     pub fn is_ip_valid(&self, ip: u64) -> bool {
-        self.ranges.iter().any(|r| r.within_range(ip) && r.is_executable)
+        self.ranges
+            .iter()
+            .any(|r| r.within_range(ip) && r.is_executable)
     }
     pub fn is_address_readable(&self, address: u64) -> bool {
-        self.ranges.iter().any(|r| r.within_range(address) && r.is_readable)
+        self.ranges
+            .iter()
+            .any(|r| r.within_range(address) && r.is_readable)
     }
 }
 
@@ -33,15 +36,14 @@ pub struct MemoryRegion {
     pub end_address: u64,
     pub is_readable: bool,
     pub is_executable: bool,
-    pub is_writable: bool
+    pub is_writable: bool,
 }
 
 impl MemoryRegion {
     pub fn within_range(&self, address: u64) -> bool {
-       self.start_address <= address && address < self.end_address 
+        self.start_address <= address && address < self.end_address
     }
 }
-
 
 #[cfg(target_os = "linux")]
 pub type SystemError = linux::error::LinuxError;
@@ -55,7 +57,6 @@ pub enum DefaultError {
 
 #[cfg(not(target_os = "linux"))]
 pub type SystemError = DefaultError;
-
 
 #[cfg(not(target_os = "linux"))]
 // If not supported yet, add dummy values for compilation
@@ -86,12 +87,14 @@ pub mod os {
         pub(super) type PlatformRegStruct = ();
         use crate::sys::SystemError;
 
-        use crate::helpers::dwarf::error::CacheSetupError;
+        use crate::dwarf::error::CacheSetupError;
         pub fn send_trap_signal(_pid: ProcessId) -> Result<(), SystemError> {
             unimplemented!("imo debugger only runs on Linux")
         }
 
-        pub fn get_process_base_address(_pid: ProcessId) -> Result<u64, CacheSetupError> {
+        pub fn update_process_addresses(
+            _: &mut crate::session::DebugSession,
+        ) -> Result<(), CacheSetupError> {
             unimplemented!("imo debugger only runs on Linux")
         }
 

@@ -13,9 +13,8 @@ use crate::sys::{MemoryRegion, ProcessMemoryMap};
 /// Get process base address
 pub fn update_process_addresses(
     session: &mut crate::session::DebugSession,
-    pid: ProcessId,
 ) -> Result<(), CacheSetupError> {
-    let maps_path = format!("/proc/{}/maps", pid);
+    let maps_path = format!("/proc/{}/maps", session.pid);
 
     if let Ok(content) = read_to_string(maps_path) {
         let mut content_iter = content.lines();

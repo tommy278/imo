@@ -33,6 +33,26 @@ To start a debugging session, provide the target binary path as the primary argu
 cargo run /path/to/target_binary
 ```
 
+## Supported Commands
+    run                 - Begin the debugging process
+    b / break           - Pause program execution at a specific point
+    clear               - Clear an existing breakpoint
+    e / enable          - Enable an existing breakpoint
+    dis / disable       - Disable an existing breakpoint
+    d / delete          - Delete an existing breakpoint
+    c / cont / continue - Resume program execution
+    n / next            - Step over the next line of code
+    si / stepi          - Execute the current instructtion
+    s / step            - Step into the next line of code
+    f / fin / finish    - Step out of the current function
+    p / print           - Print the specified variable within the current scope
+    i / info            - Display informating about the running process
+    bt / backtrace      - Display the current stack trace
+    l / ls / list       - Display the surrounding source code around current location
+    q / quit            - Exit the debugger
+
+- Refer to help for more informating on each entry
+
 ## Contributing
 See `CONTRIBUTING` for more information.
 
