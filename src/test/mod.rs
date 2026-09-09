@@ -228,3 +228,59 @@ fn static_str() {
 
     child.kill().unwrap();
 }
+
+#[test]
+fn string() {
+    write_to_output!(
+        {{
+            [[  let foo = String::from("foo"); ]]
+            [[  let bar = String::from("bar"); ]]
+            [[  let baz = String::from("baz"); ]]
+            [[  let _p = String::from("Placeholder"); ]]
+        }}
+    );
+    let mut child = create_process();
+    let _ = write_and_read(&mut child, "b 5");
+
+    let _ = write_and_read(&mut child, "run");
+
+    let foo = write_and_read(&mut child, "p foo");
+    cmp!(&foo, "\"foo\"");
+
+    let bar = write_and_read(&mut child, "p bar");
+    cmp!(&bar, "\"bar\"");
+
+    let baz = write_and_read(&mut child, "p baz");
+    cmp!(&baz, "\"baz\"");
+
+    child.kill().unwrap();
+}
+
+#[test]
+fn path() {
+    write_to_output!(
+        {{ [[ use std::path::Path; ]] }},
+        {{
+            [[  let foo = Path::new("foo"); ]]
+            [[  let bar = Path::new("bar"); ]]
+            [[  let baz = Path::new("baz"); ]]
+            [[  let _p = Path::new("Placeholder"); ]]
+         }}
+    );
+
+    let mut child = create_process();
+    let _ = write_and_read(&mut child, "b 6");
+
+    let _ = write_and_read(&mut child, "run");
+
+    let foo = write_and_read(&mut child, "p foo");
+    cmp!(&foo, "Path(\"foo\")");
+
+    let bar = write_and_read(&mut child, "p bar");
+    cmp!(&bar, "Path(\"bar\")");
+
+    let baz = write_and_read(&mut child, "p baz");
+    cmp!(&baz, "Path(\"baz\")");
+
+    child.kill().unwrap();
+}
