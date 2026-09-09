@@ -52,6 +52,7 @@ cargo run /path/to/target_binary
     q / quit            - Exit the debugger
 
 - Refer to help for more informating on each entry
+  Eg. help b or help break will give more detailed information on the command
 
 ## Contributing
 See `CONTRIBUTING` for more information.
