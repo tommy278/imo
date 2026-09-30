@@ -16,3 +16,7 @@ strip-ansi-escapes = "0.2.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 nix = { version = "0.31.3", features = ["process", "ptrace", "signal", "personality", "uio"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+mach2 = "0.7.0"
+

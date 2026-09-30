@@ -43,9 +43,13 @@ fn main() {
         }
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
     {
-        eprintln!("Error: imo currently only supports Linux operating systems.");
-        exit(1);
+        if let Err(e) = imo::mac_os::debug(&mut rl, arg) {
+            eprintln!("Failed to start debugger: {e}");
+        }
     }
+
+    eprintln!("Error: imo currently only supports Linux operating systems.");
+    exit(1);
 }
