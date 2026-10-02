@@ -1,13 +1,13 @@
 use nix::sys::ptrace;
 use nix::sys::ptrace::AddressType;
 use nix::sys::signal;
-use nix::sys::uio::{RemoteIoVec, process_vm_readv};
+use nix::sys::uio::{process_vm_readv, RemoteIoVec};
 use std::fs::read_to_string;
 use std::io::IoSliceMut;
 
 use crate::dwarf::error::CacheSetupError;
 use crate::sys::linux::error::LinuxError;
-use crate::sys::linux::{PlatformRegStruct, ProcessId};
+use crate::sys::linux::{PlatformRegStruct, ProcessHandle};
 use crate::sys::{MemoryRegion, ProcessMemoryMap};
 
 /// Get process base address
@@ -74,41 +74,41 @@ pub fn update_process_addresses(
 }
 
 /// Continue debug session
-pub fn continue_session(pid: ProcessId) -> Result<(), LinuxError> {
+pub fn continue_session(pid: ProcessHandle) -> Result<(), LinuxError> {
     ptrace::cont(pid, None)?;
     Ok(())
 }
 
 /// Kill debug session
-pub fn kill_session(pid: ProcessId) -> Result<(), LinuxError> {
+pub fn kill_session(pid: ProcessHandle) -> Result<(), LinuxError> {
     ptrace::kill(pid)?;
     Ok(())
 }
 
-pub fn send_trap_signal(pid: ProcessId) -> Result<(), LinuxError> {
+pub fn send_trap_signal(pid: ProcessHandle) -> Result<(), LinuxError> {
     signal::kill(pid, signal::Signal::SIGTRAP)?;
     Ok(())
 }
 
 /// Proceed forward when the process is stopped
-pub fn step(pid: ProcessId) -> Result<(), LinuxError> {
+pub fn step(pid: ProcessHandle) -> Result<(), LinuxError> {
     ptrace::step(pid, None)?;
     Ok(())
 }
 
 /// Get all register data
-pub fn get_regs(pid: ProcessId) -> Result<PlatformRegStruct, LinuxError> {
+pub fn get_regs(pid: ProcessHandle) -> Result<PlatformRegStruct, LinuxError> {
     let regs = ptrace::getregs(pid)?;
     Ok(regs)
 }
 
-pub fn peek_data(pid: ProcessId, address: u64) -> Result<i64, LinuxError> {
+pub fn peek_data(pid: ProcessHandle, address: u64) -> Result<i64, LinuxError> {
     let data = ptrace::read(pid, address as AddressType)?;
     Ok(data)
 }
 
 pub fn read_bytes(
-    pid: ProcessId,
+    pid: ProcessHandle,
     remote_address: usize,
     len: usize,
 ) -> Result<Vec<u8>, LinuxError> {

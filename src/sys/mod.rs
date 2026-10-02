@@ -6,8 +6,14 @@ use thiserror::Error;
 #[cfg(target_os = "linux")]
 pub mod linux;
 
+#[cfg(target_os = "macos")]
+pub mod macos;
+
 #[cfg(target_os = "linux")]
 pub use linux as os;
+
+#[cfg(target_os = "macos")]
+pub use macos as os;
 
 #[derive(Debug, Default)]
 pub struct ProcessMemoryMap {
@@ -48,21 +54,24 @@ impl MemoryRegion {
 #[cfg(target_os = "linux")]
 pub type SystemError = linux::error::LinuxError;
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "macos")]
+pub type SystemError = macos::error::MacOSError;
+
+#[cfg(all(not(target_os = "linux"), not(target_os = "macos")))]
 #[derive(Debug, Error)]
 pub enum DefaultError {
     #[error("Not handled yet")]
     Error,
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(all(not(target_os = "linux"), not(target_os = "macos")))]
 pub type SystemError = DefaultError;
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(all(not(target_os = "linux"), not(target_os = "macos")))]
 // If not supported yet, add dummy values for compilation
 pub mod os {
     // Dummy types to satisfy the type aliases
-    pub type ProcessId = i32;
+    pub type ProcessHandle = i32;
     pub type PlatformRegStruct = ();
 
     use crate::sys::SystemError;
@@ -74,21 +83,21 @@ pub mod os {
         pub fn new(_absolute_address: u64) -> Self {
             unimplemented!("imo debugger only runs on linux")
         }
-        pub fn enable(&self, _pid: ProcessId) -> Result<(), SystemError> {
+        pub fn enable(&self, _pid: ProcessHandle) -> Result<(), SystemError> {
             unimplemented!("imo debugger only runs on linux")
         }
-        pub fn disable(&self, _pid: ProcessId) -> Result<(), SystemError> {
+        pub fn disable(&self, _pid: ProcessHandle) -> Result<(), SystemError> {
             unimplemented!("imo debugger only runs on linux")
         }
     }
 
     pub mod syscalls {
-        pub(super) type ProcessId = i32;
+        pub(super) type ProcessHandle = i32;
         pub(super) type PlatformRegStruct = ();
         use crate::sys::SystemError;
 
         use crate::dwarf::error::CacheSetupError;
-        pub fn send_trap_signal(_pid: ProcessId) -> Result<(), SystemError> {
+        pub fn send_trap_signal(_pid: ProcessHandle) -> Result<(), SystemError> {
             unimplemented!("imo debugger only runs on Linux")
         }
 
@@ -99,30 +108,30 @@ pub mod os {
         }
 
         pub fn read_bytes(
-            _pid: ProcessId,
+            _pid: ProcessHandle,
             _ptr: usize,
             _len: usize,
         ) -> Result<Vec<u8>, SystemError> {
             unimplemented!("imo debugger only runs on Linux")
         }
 
-        pub fn step(_pid: ProcessId) -> Result<(), SystemError> {
+        pub fn step(_pid: ProcessHandle) -> Result<(), SystemError> {
             unimplemented!("imo debugger only runs on Linux")
         }
 
-        pub fn continue_session(_pid: ProcessId) -> Result<(), SystemError> {
+        pub fn continue_session(_pid: ProcessHandle) -> Result<(), SystemError> {
             unimplemented!("imo debugger only runs on Linux")
         }
 
-        pub fn kill_session(_pid: ProcessId) -> Result<(), SystemError> {
+        pub fn kill_session(_pid: ProcessHandle) -> Result<(), SystemError> {
             unimplemented!("imo debugger only runs on Linux")
         }
 
-        pub fn peek_data(_pid: ProcessId, _address: u64) -> Result<i64, SystemError> {
+        pub fn peek_data(_pid: ProcessHandle, _address: u64) -> Result<i64, SystemError> {
             unimplemented!("imo debugger only runs on Linux")
         }
 
-        pub fn get_regs(_pid: ProcessId) -> Result<PlatformRegStruct, SystemError> {
+        pub fn get_regs(_pid: ProcessHandle) -> Result<PlatformRegStruct, SystemError> {
             unimplemented!("imo debugger only runs on Linux")
         }
     }

@@ -153,14 +153,14 @@ macro_rules! get_size {
 }
 
 macro_rules! get_value {
-    ($fields:expr, $type_index:expr, $target_field:expr, $address: expr, $pid: expr, $process_range: expr) => {{
+    ($fields:expr, $type_index:expr, $target_field:expr, $address: expr, $process_handle: expr, $process_range: expr) => {{
         let field = get_field!($fields, $target_field);
         let ty = get_type!($type_index, &field.type_offset);
 
         let value = ty.dwarf_type.to_debug_value(
             $type_index,
             $address + field.location,
-            $pid,
+            $process_handle,
             $process_range,
         )?;
 
@@ -264,7 +264,7 @@ impl DwarfType {
         &self,
         type_index: &FxHashMap<usize, TypeCacheNode>,
         address: u64,
-        pid: os::ProcessId,
+        process_handle: os::ProcessHandle,
         process_range: &ProcessMemoryMap,
     ) -> Result<Option<DebugValue>, SystemError> {
         match self {
@@ -273,7 +273,7 @@ impl DwarfType {
                 encoding,
                 byte_size,
             } => {
-                let raw_data = syscalls::peek_data(pid, address)?;
+                let raw_data = syscalls::peek_data(process_handle, address)?;
 
                 if name == "usize" {
                     return Ok(Some(DebugValue::Usize(raw_data as u64)));
@@ -337,13 +337,13 @@ impl DwarfType {
                 name,
                 target_type_offset,
             } => {
-                let raw_data = syscalls::peek_data(pid, address)?;
+                let raw_data = syscalls::peek_data(process_handle, address)?;
                 if let Some(name) = name {
                     let ty = get_type!(type_index, target_type_offset);
                     let Some(val) = ty.dwarf_type.to_debug_value(
                         type_index,
                         raw_data as u64,
-                        pid,
+                        process_handle,
                         process_range,
                     )?
                     else {
@@ -391,7 +391,7 @@ impl DwarfType {
                     let Some(var) = ty.dwarf_type.to_debug_value(
                         type_index,
                         address + offset_num * i,
-                        pid,
+                        process_handle,
                         process_range,
                     )?
                     else {
@@ -407,7 +407,7 @@ impl DwarfType {
                 byte_size,
                 fields,
             } => {
-                let data = syscalls::peek_data(pid, address)?;
+                let data = syscalls::peek_data(process_handle, address)?;
 
                 let const_value = match byte_size {
                     1 => data as u8 as u64,
@@ -436,7 +436,7 @@ impl DwarfType {
                 ..
             } => {
                 let tag_byte = if let Some(discr_member_offset) = discr_member_offset {
-                    let tag = syscalls::peek_data(pid, address + discr_member_offset)? as u8;
+                    let tag = syscalls::peek_data(process_handle, address + discr_member_offset)? as u8;
 
                     Some(tag)
                 } else {
@@ -463,7 +463,7 @@ impl DwarfType {
                         let Some(mut inner_value) = ty.dwarf_type.to_debug_value(
                             type_index,
                             address + field_def.location,
-                            pid,
+                            process_handle,
                             process_range,
                         )?
                         else {
@@ -527,7 +527,7 @@ impl DwarfType {
             } => {
                 // Handle base case for known rust types
                 if name == "String" {
-                    let buffer = get_value!(fields, type_index, "vec", address, pid, process_range);
+                    let buffer = get_value!(fields, type_index, "vec", address, process_handle, process_range);
 
                     if let Some(DebugValue::Vec(buf)) = buffer {
                         let raw_values = to_buffer(&buf);
@@ -539,7 +539,7 @@ impl DwarfType {
 
                 if name == "PathBuf" {
                     let inner =
-                        get_value!(fields, type_index, "inner", address, pid, process_range);
+                        get_value!(fields, type_index, "inner", address, process_handle, process_range);
 
                     if let Some(DebugValue::Vec(buf)) = inner {
                         let raw_values = to_buffer(&buf);
@@ -550,8 +550,8 @@ impl DwarfType {
                 }
 
                 if name.starts_with("Vec<") {
-                    let len = get_value!(fields, type_index, "len", address, pid, process_range);
-                    let buf = get_value!(fields, type_index, "buf", address, pid, process_range);
+                    let len = get_value!(fields, type_index, "len", address, process_handle, process_range);
+                    let buf = get_value!(fields, type_index, "buf", address, process_handle, process_range);
 
                     let value = get_field!(generics, "T");
                     let ty = get_type!(type_index, &value.type_offset);
@@ -577,7 +577,7 @@ impl DwarfType {
                             let Some(data) = ty.dwarf_type.to_debug_value(
                                 type_index,
                                 heap_pointer_value as u64 + i * size,
-                                pid,
+                                process_handle,
                                 process_range,
                             )?
                             else {
@@ -590,9 +590,9 @@ impl DwarfType {
                 }
 
                 if name.starts_with("VecDeque<") {
-                    let len = get_value!(fields, type_index, "len", address, pid, process_range);
-                    let buf = get_value!(fields, type_index, "buf", address, pid, process_range);
-                    let head = get_value!(fields, type_index, "head", address, pid, process_range);
+                    let len = get_value!(fields, type_index, "len", address, process_handle, process_range);
+                    let buf = get_value!(fields, type_index, "buf", address, process_handle, process_range);
+                    let head = get_value!(fields, type_index, "head", address, process_handle, process_range);
 
                     let value = get_field!(generics, "T");
                     let ty = get_type!(type_index, &value.type_offset);
@@ -629,7 +629,7 @@ impl DwarfType {
                                 let Some(data) = ty.dwarf_type.to_debug_value(
                                     type_index,
                                     current_address,
-                                    pid,
+                                    process_handle,
                                     process_range,
                                 )?
                                 else {
@@ -645,7 +645,7 @@ impl DwarfType {
                                 let Some(data) = ty.dwarf_type.to_debug_value(
                                     type_index,
                                     current_address,
-                                    pid,
+                                    process_handle,
                                     process_range,
                                 )?
                                 else {
@@ -659,7 +659,7 @@ impl DwarfType {
                 }
 
                 if name.starts_with("HashSet<") && fields.iter().any(|s| s.name == "map") {
-                    let map = get_value!(fields, type_index, "map", address, pid, process_range);
+                    let map = get_value!(fields, type_index, "map", address, process_handle, process_range);
 
                     if let Some(DebugValue::HashMap { entries }) = map {
                         let elements: Vec<DebugValue> =
@@ -673,7 +673,7 @@ impl DwarfType {
                 // Only select the one with the table field and have the other ones resolve naturally
                 if name.starts_with("HashMap<") && fields.iter().any(|s| s.name == "table") {
                     let table =
-                        get_value!(fields, type_index, "table", address, pid, process_range);
+                        get_value!(fields, type_index, "table", address, process_handle, process_range);
 
                     if let Some(DebugValue::RawTableInner {
                         bucket_mask,
@@ -741,7 +741,7 @@ impl DwarfType {
 
                         for i in 0..total_buckets {
                             let ctrl_byte_address = ctrl + i as usize;
-                            let ctrl_byte = os::syscalls::peek_data(pid, ctrl_byte_address as u64)?;
+                            let ctrl_byte = os::syscalls::peek_data(process_handle, ctrl_byte_address as u64)?;
 
                             // If ctrl byte is a tombstone then ignore it
                             if ctrl_byte & 0x80 != 0 {
@@ -759,7 +759,7 @@ impl DwarfType {
                             let Some(current_key) = key_type.dwarf_type.to_debug_value(
                                 type_index,
                                 key_address,
-                                pid,
+                                process_handle,
                                 process_range,
                             )?
                             else {
@@ -769,7 +769,7 @@ impl DwarfType {
                             let Some(current_value) = value_type.dwarf_type.to_debug_value(
                                 type_index,
                                 value_address,
-                                pid,
+                                process_handle,
                                 process_range,
                             )?
                             else {
@@ -785,9 +785,9 @@ impl DwarfType {
 
                 if name == "RawVecInner<alloc::alloc::Global>" {
                     let heap_pointer =
-                        get_value!(fields, type_index, "ptr", address, pid, process_range);
+                        get_value!(fields, type_index, "ptr", address, process_handle, process_range);
                     let capacity =
-                        get_value!(fields, type_index, "cap", address, pid, process_range);
+                        get_value!(fields, type_index, "cap", address, process_handle, process_range);
 
                     if let (Some(DebugValue::Pointer(ptr)), Some(DebugValue::Usize(cap))) =
                         (heap_pointer, capacity)
@@ -805,20 +805,20 @@ impl DwarfType {
                         type_index,
                         "bucket_mask",
                         address,
-                        pid,
+                        process_handle,
                         process_range
                     );
-                    let ctrl = get_value!(fields, type_index, "ctrl", address, pid, process_range);
+                    let ctrl = get_value!(fields, type_index, "ctrl", address, process_handle, process_range);
                     let growth_left = get_value!(
                         fields,
                         type_index,
                         "growth_left",
                         address,
-                        pid,
+                        process_handle,
                         process_range
                     );
                     let items =
-                        get_value!(fields, type_index, "items", address, pid, process_range);
+                        get_value!(fields, type_index, "items", address, process_handle, process_range);
 
                     if let (
                         Some(DebugValue::Usize(bucket_mask)),
@@ -859,7 +859,7 @@ impl DwarfType {
                         return ty.dwarf_type.to_debug_value(
                             type_index,
                             address + single_field.location,
-                            pid,
+                            process_handle,
                             process_range,
                         );
                     }
@@ -873,7 +873,7 @@ impl DwarfType {
                     let Some(value) = ty.dwarf_type.to_debug_value(
                         type_index,
                         address + field.location,
-                        pid,
+                        process_handle,
                         process_range,
                     )?
                     else {
@@ -896,7 +896,7 @@ impl DwarfType {
                             return Ok(Some(DebugValue::InvalidAddress));
                         }
 
-                        let res = syscalls::read_bytes(pid, *ptr as usize, *len as usize)?;
+                        let res = syscalls::read_bytes(process_handle, *ptr as usize, *len as usize)?;
                         let string = String::from_utf8_lossy(&res).into_owned();
 
                         if name == "&str" {
@@ -1000,7 +1000,7 @@ impl DebugVariable {
         abi: &Abi,
         bytes: &[u8],
         type_index: &FxHashMap<usize, TypeCacheNode>,
-        pid: os::ProcessId,
+        process_handle: os::ProcessHandle,
         process_range: &ProcessMemoryMap,
     ) -> Result<Option<u64>, VariableParseError> {
         let expression = Expression(EndianSlice::new(&self.location, endian));
@@ -1030,7 +1030,7 @@ impl DebugVariable {
 
                     // If offset if 0 then it is a generic and gimli can handle that case
                     if offset == 0 {
-                        let raw_data = syscalls::peek_data(pid, address)? as u64;
+                        let raw_data = syscalls::peek_data(process_handle, address)? as u64;
                         let value = gimli::Value::U64(raw_data);
                         result = evaluation.resume_with_memory(value)?;
                     } else {
@@ -1041,7 +1041,7 @@ impl DebugVariable {
                         let Some(raw_value) = ty.dwarf_type.to_debug_value(
                             type_index,
                             address,
-                            pid,
+                            process_handle,
                             process_range,
                         )?
                         else {

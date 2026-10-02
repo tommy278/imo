@@ -63,12 +63,12 @@ pub struct DebugSession {
 
     // Different for each os
     pub active_breakpoints: FxHashMap<u64, ManagedBreakpoint>,
-    pub pid: os::ProcessId,
+    pub process_handle: os::ProcessHandle,
 }
 
 impl DebugSession {
     /// Instantiate the struct with default values
-    fn from_pid(pid: os::ProcessId) -> Self {
+    fn from_process_handle(process_handle: os::ProcessHandle) -> Self {
         Self {
             process_map: ProcessMemoryMap::default(),
             base_address: 0,
@@ -83,7 +83,7 @@ impl DebugSession {
             line_row: Vec::new(),
             file_indices: FileIndices::default(),
             registers: None,
-            pid,
+            process_handle,
         }
     }
 
@@ -93,10 +93,10 @@ impl DebugSession {
 
     /// Create a complete instance of the session cache
     pub fn new(
-        pid: os::ProcessId,
+        process_handle: os::ProcessHandle,
         binary_path: &str,
     ) -> Result<Self, dwarf::error::CacheSetupError> {
-        let mut session = Self::from_pid(pid);
+        let mut session = Self::from_process_handle(process_handle);
 
         let file = std::fs::File::open(binary_path)?;
 
@@ -150,7 +150,7 @@ impl DebugSession {
         }
 
         // Backup in case the register was not instantiated for some reason
-        let regs = syscalls::get_regs(self.pid)?;
+        let regs = syscalls::get_regs(self.process_handle)?;
         Ok(RegisterViewer { regs })
     }
 
@@ -173,7 +173,7 @@ impl DebugSession {
         // First time seeing the address
         // Create the breakpoint
         let mut breakpoint = os::PlatformBreakpoint::new(absolute_address);
-        breakpoint.enable(self.pid)?;
+        breakpoint.enable(self.process_handle)?;
 
         self.active_breakpoints
             .insert(absolute_address, ManagedBreakpoint::new(breakpoint));
@@ -340,7 +340,7 @@ impl DebugSession {
                                 let ra_storage_address = (cfa_address as i64 + offset) as u64;
 
                                 let return_address =
-                                    syscalls::peek_data(self.pid, ra_storage_address).ok()? as u64;
+                                    syscalls::peek_data(self.process_handle, ra_storage_address).ok()? as u64;
                                 Some(return_address)
                             }
                             gimli::RegisterRule::Register(saved_reg) => {
@@ -383,12 +383,12 @@ impl DebugSession {
 
     /// Continue session from last interrupt
     pub fn continue_session(&self) -> Result<(), SystemError> {
-        syscalls::continue_session(self.pid)
+        syscalls::continue_session(self.process_handle)
     }
 
     /// Send a trap signal to the child process
     pub fn send_trap_signal(&self) -> Result<(), SystemError> {
-        syscalls::send_trap_signal(self.pid)
+        syscalls::send_trap_signal(self.process_handle)
     }
 
     // ========================================
@@ -538,12 +538,12 @@ impl DebugSession {
 
     /// Move forward from the specified stop
     pub fn single_step(&self) -> Result<(), SystemError> {
-        syscalls::step(self.pid)
+        syscalls::step(self.process_handle)
     }
 
     /// Kill the current session
     pub fn kill_session(&self) -> Result<(), SystemError> {
-        syscalls::kill_session(self.pid)
+        syscalls::kill_session(self.process_handle)
     }
 
     /// Get and update the process base address
@@ -614,7 +614,7 @@ impl DebugSession {
                 abi,
                 frame_base,
                 &self.metadata.type_index,
-                self.pid,
+                self.process_handle,
                 &self.process_map,
             )
             .ok()??;
@@ -625,7 +625,7 @@ impl DebugSession {
                 .to_debug_value(
                     &self.metadata.type_index,
                     address,
-                    self.pid,
+                    self.process_handle,
                     &self.process_map,
                 )
                 .ok()?;
@@ -669,19 +669,19 @@ impl DebugSession {
                 abi,
                 frame_base,
                 &self.metadata.type_index,
-                self.pid,
+                self.process_handle,
                 &self.process_map,
             )?
             else {
                 return Err(error::VariableParseError::Address);
             };
 
-            // Resolve the variable's live value with address and current pid
+            // Resolve the variable's live value with address and current process_handle
             if let Some(ty) = self.metadata.type_index.get(&param.target_type_offset) {
                 let result = ty.dwarf_type.to_debug_value(
                     &self.metadata.type_index,
                     address,
-                    self.pid,
+                    self.process_handle,
                     &self.process_map,
                 )?;
 
@@ -867,7 +867,7 @@ impl DebugSession {
                 // Other breakpoints exist, dont remove it, simply decrement
                 managed_breakpoint.ref_count -= 1;
             } else {
-                managed_breakpoint.breakpoint.disable(self.pid)?;
+                managed_breakpoint.breakpoint.disable(self.process_handle)?;
                 should_remove = true;
             }
         }
