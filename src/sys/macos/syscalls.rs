@@ -6,18 +6,22 @@ use std::mem;
 
 use mach2::{thread_act, vm};
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-use mach2::structs::x86_thread_state64_t;
+#[cfg(target_arch = "x86_64")]
+use mach2::thread_status::x86_THREAD_STATE64 as THREAD_STATE64;
+#[cfg(target_arch = "aarch64")]
+use mach2::thread_status::ARM_THREAD_STATE64 as THREAD_STATE64;
 
+#[cfg(target_arch = "aarch64")]
+use mach2::structs::arm_thread_state64_t as thread_state64_t;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-use mach2::thread_status::x86_THREAD_STATE64 as THREAD_STATE_64;
+use mach2::structs::x86_thread_state64_t as thread_state64_t;
 
 pub fn send_trap_signal(_port: ProcessHandle) -> Result<(), MacOSError> {
     unimplemented!("imo debugger only runs on Linux")
 }
 
 pub fn update_process_addresses(
-    _: &mut crate::session::DebugSession,
+    session: &mut crate::session::DebugSession,
 ) -> Result<(), CacheSetupError> {
     Ok(())
 }
@@ -65,17 +69,20 @@ pub fn peek_data(port: ProcessHandle, address: u64) -> Result<i64, MacOSError> {
 }
 
 pub fn get_regs(port: ProcessHandle) -> Result<PlatformRegStruct, MacOSError> {
-    let mut regs_state = x86_thread_state64_t::new();
-    let mut state_count = x86_thread_state64_t::count();
+    let state = thread_state64_t::new();
+    let state_count = thread_state64_t::count();
 
-    unsafe {
+    let kernel_return = unsafe {
         thread_act::thread_get_state(
             port,
-            THREAD_STATE_64,
-            mem::transmute(&regs_state),
+            THREAD_STATE64,
+            mem::transmute(&state),
             mem::transmute(&state_count),
-        );
-    }
+        )
+    };
 
-    Ok(regs_state)
+    println!("{}", kernel_return);
+    println!("{:?}", state);
+
+    Ok(state)
 }
