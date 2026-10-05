@@ -19,4 +19,4 @@ nix = { version = "0.31.3", features = ["process", "ptrace", "signal", "personal
 
 [target.'cfg(target_os = "macos")'.dependencies]
 mach2 = "0.7.0"
-
+libc = "0.2.189"

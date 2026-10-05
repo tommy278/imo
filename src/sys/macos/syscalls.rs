@@ -19,7 +19,7 @@ pub fn send_trap_signal(_port: ProcessHandle) -> Result<(), MacOSError> {
 pub fn update_process_addresses(
     _: &mut crate::session::DebugSession,
 ) -> Result<(), CacheSetupError> {
-    unimplemented!("imo debugger only runs on Linux")
+    Ok(())
 }
 
 pub fn read_bytes(port: ProcessHandle, ptr: usize, len: usize) -> Result<Vec<u8>, MacOSError> {
