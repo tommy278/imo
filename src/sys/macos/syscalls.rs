@@ -47,8 +47,12 @@ pub fn step(_port: ProcessHandle) -> Result<(), MacOSError> {
     unimplemented!("imo debugger only runs on Linux")
 }
 
-pub fn continue_session(_port: ProcessHandle) -> Result<(), MacOSError> {
-    unimplemented!("imo debugger only runs on Linux")
+pub fn continue_session(port: ProcessHandle) -> Result<(), MacOSError> {
+    unsafe {
+        let kern_return = mach2::task::task_resume(port);
+        println!("Task ran with: {}", kern_return);
+    }
+    Ok(())
 }
 
 pub fn kill_session(_port: ProcessHandle) -> Result<(), MacOSError> {
@@ -70,19 +74,19 @@ pub fn peek_data(port: ProcessHandle, address: u64) -> Result<i64, MacOSError> {
 
 pub fn get_regs(port: ProcessHandle) -> Result<PlatformRegStruct, MacOSError> {
     let state = thread_state64_t::new();
-    let state_count = thread_state64_t::count();
-
-    let kernel_return = unsafe {
-        thread_act::thread_get_state(
-            port,
-            THREAD_STATE64,
-            mem::transmute(&state),
-            mem::transmute(&state_count),
-        )
-    };
-
-    println!("{}", kernel_return);
-    println!("{:?}", state);
+    // let state_count = thread_state64_t::count();
+    //
+    // let kernel_return = unsafe {
+    //     thread_act::thread_get_state(
+    //         port,
+    //         THREAD_STATE64,
+    //         mem::transmute(&state),
+    //         mem::transmute(&state_count),
+    //     )
+    // };
+    //
+    // println!("{}", kernel_return);
+    // println!("{:?}", state);
 
     Ok(state)
 }

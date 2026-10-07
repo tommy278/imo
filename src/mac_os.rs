@@ -15,7 +15,7 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
     let mut pid: i32 = 0;
     let path = std::ffi::CString::new(binary_path).map_err(|e| MacOSError::CString(e))?;
 
-    let mut spawn_attr: libc::posix_spawnattr_t = unsafe { std::ptr::null_mut() };
+    let mut spawn_attr: libc::posix_spawnattr_t = std::ptr::null_mut();
     let return_value = unsafe { libc::posix_spawnattr_init(&mut spawn_attr) };
 
     if return_value != 0 {
@@ -47,16 +47,43 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
         return Ok(());
     }
 
-    let mut task_port: mach2::port::mach_port_name_t = 0;
+    let mut child_task_port: mach2::port::mach_port_name_t = 0;
 
-    let kern_return = unsafe { traps::task_for_pid(traps::mach_task_self(), pid, &mut task_port) };
+    let kern_return =
+        unsafe { traps::task_for_pid(traps::mach_task_self(), pid, &mut child_task_port) };
 
-    println!("Port: {} and Kern return: {}", task_port, kern_return);
+    println!("Port: {} and Kern return: {}", child_task_port, kern_return);
 
     if kern_return == kern_return::KERN_SUCCESS {
-        let mut session = session::DebugSession::new(task_port, binary_path)?;
+        let mut session = session::DebugSession::new(child_task_port, binary_path)?;
         let mut exception_port: mach2::port::mach_port_name_t = 0;
         unsafe {
+            let mut child_name: mach2::port::mach_port_name_t = 0;
+
+            // Acquire child name
+            let kern_return = mach2::mach_port::mach_port_allocate(
+                child_task_port,
+                mach2::port::MACH_PORT_RIGHT_RECEIVE,
+                &mut child_name,
+            );
+
+            if kern_return != kern_return::KERN_SUCCESS {
+                eprintln!("Failed to create child name");
+            }
+
+            // Destroy temporary placeholder
+            let kern_return = mach2::mach_port::mach_port_mod_refs(
+                child_task_port,
+                child_name,
+                mach2::port::MACH_PORT_RIGHT_RECEIVE,
+                -1,
+            );
+
+            if kern_return != kern_return::KERN_SUCCESS {
+                eprintln!("Failed to delete child");
+            }
+
+            // Allocate the exception port
             let kern_retun = mach2::mach_port::mach_port_allocate(
                 traps::mach_task_self(),
                 mach2::port::MACH_PORT_RIGHT_RECEIVE,
@@ -68,8 +95,8 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
             }
 
             let kern_return = mach2::mach_port::mach_port_insert_right(
-                traps::mach_task_self(),
-                exception_port,
+                child_task_port,
+                child_name,
                 exception_port,
                 mach2::message::MACH_MSG_TYPE_MAKE_SEND,
             );
@@ -78,10 +105,11 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                 eprintln!("Failed to insert exception port")
             }
 
+            // Set specific exceptions to be tracked
             let kern_return = mach2::task::task_set_exception_ports(
-                traps::mach_task_self(),
+                child_task_port,
                 mach2::exception_types::EXC_BREAKPOINT,
-                exception_port,
+                child_name,
                 mach2::exception_types::EXCEPTION_DEFAULT as i32,
                 THREAD_STATE64,
             );
@@ -90,16 +118,32 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                 println!("KERN RETURN: {}", kern_return);
                 eprintln!("Failed to set exception port")
             }
-
-            let kern_return = mach2::task::task_resume(task_port);
-
-            if kern_return != kern_return::KERN_SUCCESS {
-                eprintln!("Failed to resume process");
-            }
-
-            println!("{}", exception_port);
         }
-        handle_user_debugger_menu(&mut session, rl);
+
+        handle_user_debugger_menu(&mut session, rl)?;
+
+        let mut msg_header = mach2::message::mach_msg_header_t::default();
+        let option = mach2::message::MACH_RCV_MSG;
+        let size = 0;
+        let recieve = 100;
+        let timeout = mach2::message::MACH_MSG_TIMEOUT_NONE;
+        let notify = mach2::port::MACH_PORT_NULL;
+
+        loop {
+            let message = unsafe {
+                mach2::message::mach_msg(
+                    &mut msg_header,
+                    option,
+                    size,
+                    recieve,
+                    exception_port,
+                    timeout,
+                    notify,
+                )
+            };
+
+            println!("This is the message: {:?}", message);
+        }
     }
     Ok(())
 }
