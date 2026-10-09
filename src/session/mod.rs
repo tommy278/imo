@@ -8,6 +8,9 @@ use gimli::UnwindSection;
 use rustc_hash::FxHashMap;
 use std::path::Path;
 
+#[cfg(target_os = "macos")]
+use object::Object;
+
 use crate::dwarf::debug_info::{DebugVariable, ParamType};
 use crate::session::types::StackInfo;
 use crate::sys::os::{self, syscalls};
@@ -101,8 +104,26 @@ impl DebugSession {
         let file = std::fs::File::open(binary_path)?;
 
         let mmap = unsafe { memmap2::Mmap::map(&file)? };
-        let object = object::File::parse(&*mmap)?;
 
+        #[cfg(not(target_os = "macos"))]
+        let object = object::File::parse(&*mmap)?;
+       
+        #[cfg(target_os = "macos")]
+        let mut object = object::File::parse(&*mmap)?; 
+
+        #[cfg(target_os = "macos")]
+        {
+            if let Ok(Some(uuid)) = object.mach_uuid() {
+                let uuid_string = format!(
+                    "{:02X}{:02X}{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
+                    uuid[0], uuid[1], uuid[2], uuid[3], uuid[4], uuid[5], uuid[6], uuid[7], uuid[8], uuid[9], uuid[10], uuid[11], uuid[12], uuid[13],
+                    uuid[14], uuid[15]
+                );
+
+                println!("{}", uuid_string);
+            }
+        } 
+        
         // For some reason this breaks during testing
         session.update_process_addresses()?;
 

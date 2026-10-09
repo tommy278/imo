@@ -23,6 +23,43 @@ pub fn send_trap_signal(_port: ProcessHandle) -> Result<(), MacOSError> {
 pub fn update_process_addresses(
     session: &mut crate::session::DebugSession,
 ) -> Result<(), CacheSetupError> {
+    let mut kern_return = mach2::kern_return::KERN_SUCCESS;
+    let mut address = 0;
+    let mut size = 0;
+    let mut depth = 1;
+
+    loop {
+        let mut info = mach2::vm_region::vm_region_submap_info_64::default();
+        let mut count = mach2::vm_region::VM_REGION_SUBMAP_INFO_COUNT;
+
+        unsafe {
+            kern_return = mach2::vm::mach_vm_region_recurse(
+                session.process_handle,
+                &mut address,
+                &mut size,
+                &mut depth,
+                std::mem::transmute(&info),
+                &mut count,
+            );
+        }
+
+        if kern_return == mach2::kern_return::KERN_INVALID_ADDRESS {
+            break;
+        }
+
+        if info.is_submap == 1 {
+            depth += 1;
+        } else {
+            if session.base_address == 0 {
+                session.base_address = address;
+            }
+            println!("Address: {} to {}", address, address + size);
+            address += size;
+        }
+    }
+
+    // println!("{}", session.base_address);
+    println!("{:?}", session);
     Ok(())
 }
 

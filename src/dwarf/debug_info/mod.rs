@@ -2,13 +2,6 @@ pub mod cache_setup;
 pub mod error;
 pub mod utils;
 
-/*
- * Based on the 'simple.rs' example from the gimli project.
- * Source: https://github.com/gimli-rs/gimli/blob/main/crates/examples/src/bin/simple.rs
- * * The implementation below was adapted to support specific address lookup
- * and integrated into the project's native debugger architecture.
- */
-
 use gimli::{Encoding, EndianSlice, Expression, RunTimeEndian};
 use object::BinaryFormat;
 use rustc_hash::FxHashMap;
