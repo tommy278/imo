@@ -17,7 +17,7 @@ pub use macos as os;
 
 #[derive(Debug, Default)]
 pub struct ProcessMemoryMap {
-    ranges: Vec<MemoryRegion>,
+    pub ranges: Vec<MemoryRegion>,
 }
 
 impl ProcessMemoryMap {
