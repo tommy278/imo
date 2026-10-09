@@ -58,8 +58,6 @@ pub fn update_process_addresses(
         }
     }
 
-    // println!("{}", session.base_address);
-    println!("{:?}", session);
     Ok(())
 }
 

@@ -46,7 +46,6 @@ pub fn setup_cache(
     };
 
     let text_address = read_section(".text")?;
-
     let got_address = read_section(".got")?;
     let eh_frame_address = read_section(".eh_frame")?;
 

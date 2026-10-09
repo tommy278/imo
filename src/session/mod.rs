@@ -101,29 +101,17 @@ impl DebugSession {
     ) -> Result<Self, dwarf::error::CacheSetupError> {
         let mut session = Self::from_process_handle(process_handle);
 
-        let file = std::fs::File::open(binary_path)?;
+        let file = if cfg!(target_os = "macos") {
+            let dsym_path = session.find_dsym_path(binary_path);
+            std::fs::File::open(&dsym_path)?
+        } else { 
+            std::fs::File::open(binary_path)? 
+        };
 
         let mmap = unsafe { memmap2::Mmap::map(&file)? };
 
-        #[cfg(not(target_os = "macos"))]
         let object = object::File::parse(&*mmap)?;
-       
-        #[cfg(target_os = "macos")]
-        let mut object = object::File::parse(&*mmap)?; 
 
-        #[cfg(target_os = "macos")]
-        {
-            if let Ok(Some(uuid)) = object.mach_uuid() {
-                let uuid_string = format!(
-                    "{:02X}{:02X}{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
-                    uuid[0], uuid[1], uuid[2], uuid[3], uuid[4], uuid[5], uuid[6], uuid[7], uuid[8], uuid[9], uuid[10], uuid[11], uuid[12], uuid[13],
-                    uuid[14], uuid[15]
-                );
-
-                println!("{}", uuid_string);
-            }
-        } 
-        
         // For some reason this breaks during testing
         session.update_process_addresses()?;
 
@@ -137,6 +125,27 @@ impl DebugSession {
         session.set_up_line_row();
 
         Ok(session)
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn find_dsym_path(&self, binary_path: &str) -> std::path::PathBuf {
+        // Check if dSYM is in same directory as binary
+        let mut dsym_path = std::path::PathBuf::from(binary_path);
+        let file_name: String = dsym_path.file_name().unwrap().to_string_lossy().into();
+
+        let dsym_dir = format!("{}.dSYM", &file_name);
+        dsym_path.set_file_name(dsym_dir);
+        
+        dsym_path.push("Contents");
+        dsym_path.push("Resources");
+        dsym_path.push("DWARF");
+        dsym_path.push(&file_name);
+
+        if dsym_path.exists() {
+            return dsym_path
+        }
+
+        todo!()
     }
 
     /// Remove unnecessary ranges and sort the address for binary search lookup

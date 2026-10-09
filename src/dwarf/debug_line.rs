@@ -9,13 +9,6 @@ use std::{
 
 use thiserror;
 
-/*
- * Based on the 'simple_line' example from the gimli project.
- * Source: https://github.com/gimli-rs/gimli/blob/main/crates/examples/src/bin/simple_line.rs
- * * The implementation below was adapted to support specific address lookup
- * and integrated into the project's native debugger architecture.
- */
-
 #[derive(Debug, thiserror::Error)]
 pub enum DebugLineError {
     #[error("Failed to load debug line section")]
