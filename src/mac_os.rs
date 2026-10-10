@@ -60,29 +60,14 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
         unsafe {
             let mut child_name: mach2::port::mach_port_name_t = 0;
 
-            // Acquire child name
-            let kern_return = mach2::mach_port::mach_port_allocate(
-                child_task_port,
-                mach2::port::MACH_PORT_RIGHT_RECEIVE,
-                &mut child_name,
-            );
+            let kern_return =
+                mach2::traps::task_name_for_pid(child_task_port, pid, &mut child_name);
 
             if kern_return != kern_return::KERN_SUCCESS {
-                eprintln!("Failed to create child name");
+                eprintln!("Failed to get child name");
             }
 
-            // Destroy temporary placeholder
-            let kern_return = mach2::mach_port::mach_port_mod_refs(
-                child_task_port,
-                child_name,
-                mach2::port::MACH_PORT_RIGHT_RECEIVE,
-                -1,
-            );
-
-            if kern_return != kern_return::KERN_SUCCESS {
-                eprintln!("Failed to delete child");
-            }
-
+            println!("Child name: {}", child_name);
             // Allocate the exception port
             let kern_retun = mach2::mach_port::mach_port_allocate(
                 traps::mach_task_self(),
@@ -117,6 +102,23 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
             if kern_return != kern_return::KERN_SUCCESS {
                 println!("KERN RETURN: {}", kern_return);
                 eprintln!("Failed to set exception port")
+            }
+
+            let mut prev = 0;
+            // Include tracking for when the task finishes
+            let kern_return = mach2::mach_port::mach_port_request_notification(
+                child_task_port,
+                child_name,
+                mach2::notify::MACH_NOTIFY_PORT_DESTROYED,
+                0,
+                exception_port,
+                mach2::message::MACH_MSG_TYPE_MAKE_SEND_ONCE,
+                &mut prev,
+            );
+
+            if kern_return != kern_return::KERN_SUCCESS {
+                println!("KERN RETURN: {}", kern_return);
+                eprintln!("Failed to create destroyed exception");
             }
         }
 
