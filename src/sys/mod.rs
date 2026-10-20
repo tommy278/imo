@@ -97,10 +97,6 @@ pub mod os {
         use crate::sys::SystemError;
 
         use crate::dwarf::error::CacheSetupError;
-        pub fn send_trap_signal(_pid: ProcessHandle) -> Result<(), SystemError> {
-            unimplemented!("imo debugger only runs on Linux")
-        }
-
         pub fn update_process_addresses(
             _: &mut crate::session::DebugSession,
         ) -> Result<(), CacheSetupError> {

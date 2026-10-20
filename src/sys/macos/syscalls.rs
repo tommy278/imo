@@ -23,10 +23,6 @@ use mach2::thread_status::ARM_DEBUG_STATE64 as DEBUG_STATE64;
 
 pub const TRAP_FLAG: u64 = 1u64 << 8;
 
-pub fn send_trap_signal(_port: ProcessHandle) -> Result<(), MacOSError> {
-    unimplemented!("imo debugger only runs on Linux")
-}
-
 pub fn update_process_addresses(
     session: &mut crate::session::DebugSession,
 ) -> Result<(), CacheSetupError> {
@@ -122,8 +118,6 @@ pub fn step(
     if kern_return != mach2::kern_return::KERN_SUCCESS {
         println!("Failed to update registers");
     }
-
-    // TODO: Send success message before resuming
 
     kern_return = unsafe {
         mach2::message::mach_msg(

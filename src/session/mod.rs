@@ -434,11 +434,6 @@ impl DebugSession {
         syscalls::continue_session(self.process_handle)
     }
 
-    /// Send a trap signal to the child process
-    pub fn send_trap_signal(&self) -> Result<(), SystemError> {
-        syscalls::send_trap_signal(self.process_handle)
-    }
-
     // ========================================
     // CLI Commands
     // ========================================

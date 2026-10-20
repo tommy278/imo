@@ -168,9 +168,6 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                 let base_ptr = buffer.as_ptr();
                 let header = unsafe { *(base_ptr as *const mach2::message::mach_msg_header_t) };
 
-                println!("{:?}", session.current_cmd);
-                println!("{:?}", header);
-
                 match header.msgh_id {
                     72 => {
                         println!("Child finished");

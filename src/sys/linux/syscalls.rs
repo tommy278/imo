@@ -90,11 +90,6 @@ pub fn kill_session(pid: ProcessHandle) -> Result<(), LinuxError> {
     Ok(())
 }
 
-pub fn send_trap_signal(pid: ProcessHandle) -> Result<(), LinuxError> {
-    signal::kill(pid, signal::Signal::SIGTRAP)?;
-    Ok(())
-}
-
 /// Proceed forward when the process is stopped
 pub fn step(pid: ProcessHandle) -> Result<(), LinuxError> {
     ptrace::step(pid, None)?;
