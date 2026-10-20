@@ -168,6 +168,9 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                 let base_ptr = buffer.as_ptr();
                 let header = unsafe { *(base_ptr as *const mach2::message::mach_msg_header_t) };
 
+                println!("{:?}", session.current_cmd);
+                println!("{:?}", header);
+
                 match header.msgh_id {
                     72 => {
                         println!("Child finished");
@@ -201,6 +204,275 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                                 };
 
                                 match session.current_cmd {
+                                    CurrentStopCmd::SingleStep => {
+                                        session.current_cmd = CurrentStopCmd::Completed;
+                                    }
+                                    CurrentStopCmd::StepInto {
+                                        start_file,
+                                        start_line,
+                                    } => {
+                                        // Location is not valid so step until a valid one is found
+                                        let Some(current_location) = session.current_location()
+                                        else {
+                                            session.single_step()?;
+                                            continue;
+                                        };
+
+                                        // If the location changed then stop
+                                        if current_location.file != start_file
+                                            || current_location.line != start_line
+                                        {
+                                            session.current_cmd = CurrentStopCmd::Completed;
+                                        } else {
+                                            // Still on the same location keep going
+                                            session.single_step()?;
+                                        }
+                                    }
+                                    CurrentStopCmd::StepOver {
+                                        start_stack_pointer,
+                                        start_file,
+                                        start_line,
+                                        started_from_inline,
+                                    } => {
+                                        let current_rsp = regs.__rsp;
+
+                                        // If current rsp is greater than the start rsp then we stepped out of a function and should stop there
+                                        if current_rsp > start_stack_pointer {
+                                            session.current_cmd = CurrentStopCmd::Completed;
+                                        }
+                                        // If rsp are the same then we are in the same function or it was inlined
+                                        else if current_rsp == start_stack_pointer {
+                                            // We need location so keep stepping until we find a valid one
+                                            let Some(line_row) = session
+                                                .find_line_range(regs.__rip - session.base_address)
+                                            else {
+                                                session.single_step()?;
+                                                continue;
+                                            };
+
+                                            if !line_row.is_stmt {
+                                                session.single_step()?;
+                                                continue;
+                                            }
+
+                                            let current_location = &line_row.location;
+
+                                            // If its not an inline function just step till we areaddress_range. back in same file but not same line
+                                            if !started_from_inline {
+                                                if start_file == current_location.file
+                                                    && start_line != current_location.line
+                                                {
+                                                    session.current_cmd = CurrentStopCmd::Completed;
+                                                } else {
+                                                    session.single_step()?;
+                                                }
+                                                continue;
+                                            } else {
+                                                // If we are in an inline function, behave exactly like a
+                                                // normal stepover with the inclusion
+                                                // that it can now step out to a function that is not inlined
+                                                let pc = regs.__rip - session.base_address;
+                                                if (start_file == current_location.file
+                                                    && start_line != current_location.line)
+                                                    || !session.metadata.is_in_inline(pc)
+                                                {
+                                                    session.current_cmd = CurrentStopCmd::Completed;
+                                                } else {
+                                                    session.single_step()?;
+                                                }
+                                                continue;
+                                            }
+                                        } else {
+                                            // If current rsp is lower then we stepped into a child
+                                            // In that case get the return address and continue there
+                                            let Some(return_address) = session.get_return_address(
+                                                &mut session.virtual_registers()?,
+                                            ) else {
+                                                session.single_step()?;
+                                                continue;
+                                            };
+
+                                            let relative_address =
+                                                session.get_relative_address(return_address);
+                                            session.create_specific_breakpoint(relative_address)?;
+                                            session.current_cmd = CurrentStopCmd::StepOut {
+                                                original_stack_pointer: start_stack_pointer,
+                                                original_file: start_file,
+                                                original_line: start_line,
+                                                return_address,
+                                                started_from_inline,
+                                            };
+                                            session.continue_session()?;
+                                        }
+                                    }
+                                    CurrentStopCmd::StepOut {
+                                        original_stack_pointer,
+                                        original_file,
+                                        original_line,
+                                        return_address,
+                                        started_from_inline,
+                                    } => {
+                                        // A handshake from the step over
+                                        // Simply clear breakpoint and send data back to finish stepover to handle completion
+                                        let breakpoint_addr = regs.__rip - 1;
+
+                                        let relative_address =
+                                            session.get_relative_address(breakpoint_addr);
+                                        session.clear_specific_breakpoint(relative_address)?;
+
+                                        regs.__rip = breakpoint_addr;
+                                        kern_return = unsafe {
+                                            mach2::thread_act::thread_set_state(
+                                                crashed_thread,
+                                                THREAD_STATE64,
+                                                std::mem::transmute(&regs),
+                                                regs_count,
+                                            )
+                                        };
+
+                                        if kern_return != kern_return::KERN_SUCCESS {
+                                            println!("Failed to update regs: {}", kern_return);
+                                        }
+                                        session.registers = Some(RegisterViewer { regs });
+
+                                        if return_address == breakpoint_addr {
+                                            // If we are at the specific breakpoint to step out from then continue step over like normal
+                                            session.current_cmd = CurrentStopCmd::FinishStepOver {
+                                                original_stack_pointer,
+                                                original_file,
+                                                original_line,
+                                                started_from_inline,
+                                            };
+                                            session.single_step()?;
+                                        } else {
+                                            // If we are at a different breakpoint continue till we reach the target
+                                            session.continue_session()?;
+                                        }
+                                    }
+                                    CurrentStopCmd::FinishStepOver {
+                                        original_stack_pointer,
+                                        original_file,
+                                        original_line,
+                                        started_from_inline,
+                                    } => {
+                                        // If we stepped out of original function or back to
+                                        // original function then complete else go back to stepping over
+                                        if original_stack_pointer >= regs.__rsp {
+                                            session.current_cmd = CurrentStopCmd::StepOver {
+                                                start_stack_pointer: original_stack_pointer,
+                                                start_file: original_file,
+                                                start_line: original_line,
+                                                started_from_inline,
+                                            };
+                                            session.single_step()?;
+                                        } else {
+                                            session.current_cmd = CurrentStopCmd::Completed;
+                                        }
+                                    }
+                                    CurrentStopCmd::Finish {
+                                        start_stack_pointer,
+                                        started_from_inline,
+                                    } => {
+                                        let current_rsp = regs.__rsp;
+
+                                        if current_rsp > start_stack_pointer {
+                                            session.current_cmd = CurrentStopCmd::Completed;
+                                        } else if started_from_inline
+                                            && start_stack_pointer == current_rsp
+                                        {
+                                            let pc = regs.__rip - session.base_address;
+                                            if !session.metadata.is_in_inline(pc) {
+                                                session.current_cmd = CurrentStopCmd::Completed;
+                                            } else {
+                                                session.single_step()?;
+                                            }
+                                            continue;
+                                        } else {
+                                            let Some(return_address) = session.get_return_address(
+                                                &mut session.virtual_registers()?,
+                                            ) else {
+                                                session.single_step()?;
+                                                continue;
+                                            };
+
+                                            let relative_address =
+                                                session.get_relative_address(return_address);
+                                            session.create_specific_breakpoint(relative_address)?;
+                                            session.current_cmd = CurrentStopCmd::StepOutFinish {
+                                                return_address,
+                                                original_stack_pointer: start_stack_pointer,
+                                                started_from_inline,
+                                            };
+                                            session.continue_session()?;
+                                        }
+                                    }
+
+                                    CurrentStopCmd::StepOutFinish {
+                                        return_address,
+                                        original_stack_pointer,
+                                        started_from_inline,
+                                    } => {
+                                        // A handshake from the step over
+                                        // Simply clear breakpoint and send data back to finish stepover to handle completion
+                                        let breakpoint_addr = regs.__rip - 1;
+
+                                        let relative_address =
+                                            session.get_relative_address(breakpoint_addr);
+                                        session.clear_specific_breakpoint(relative_address)?;
+
+                                        regs.__rip = breakpoint_addr;
+                                        kern_return = unsafe {
+                                            mach2::thread_act::thread_set_state(
+                                                crashed_thread,
+                                                THREAD_STATE64,
+                                                std::mem::transmute(&regs),
+                                                regs_count,
+                                            )
+                                        };
+
+                                        if kern_return != kern_return::KERN_SUCCESS {
+                                            println!("Failed to update regs: {}", kern_return);
+                                        }
+
+                                        session.registers = Some(RegisterViewer { regs });
+                                        if return_address == breakpoint_addr {
+                                            // If we are at the specific breakpoint to step out from then continue step over like normal
+                                            session.current_cmd = CurrentStopCmd::CompleteFinish {
+                                                start_stack_pointer: original_stack_pointer,
+                                                started_from_inline: started_from_inline,
+                                            };
+                                            session.single_step()?;
+                                        } else {
+                                            // If we are at a different breakpoint continue till we reach the target
+                                            session.continue_session()?;
+                                        }
+                                    }
+
+                                    CurrentStopCmd::CompleteFinish {
+                                        start_stack_pointer,
+                                        started_from_inline,
+                                    } => {
+                                        // If we stepped out of original function or back to
+                                        // original function then complete else go back to stepping over
+                                        if start_stack_pointer >= regs.__rsp {
+                                            session.current_cmd = CurrentStopCmd::Finish {
+                                                start_stack_pointer,
+                                                started_from_inline,
+                                            };
+                                            session.single_step()?;
+                                        } else {
+                                            session.current_cmd = CurrentStopCmd::Completed;
+                                        }
+                                    }
+                                    CurrentStopCmd::SearchingForValidLocation => {
+                                        // If the location is valid then complete the search
+                                        if session.current_location().is_some() {
+                                            session.current_cmd = CurrentStopCmd::Completed;
+                                        } else {
+                                            // Location is not valid continue searching
+                                            session.single_step()?;
+                                        }
+                                    }
                                     CurrentStopCmd::Running | CurrentStopCmd::Continuing => {
                                         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
                                         let breakpoint_addr = regs.__rip - 1;

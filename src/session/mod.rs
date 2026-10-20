@@ -580,7 +580,13 @@ impl DebugSession {
 
     /// Move forward from the specified stop
     pub fn single_step(&self) -> Result<(), SystemError> {
-        syscalls::step(self.process_handle)
+        #[cfg(not(target_os = "macos"))]
+        syscalls::step(self.process_handle)?;
+
+        #[cfg(target_os = "macos")]
+        syscalls::step(self.process_handle, self.crashed_thread)?;
+
+        Ok(())
     }
 
     /// Kill the current session

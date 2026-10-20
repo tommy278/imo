@@ -16,6 +16,13 @@ use mach2::structs::arm_thread_state64_t as thread_state64_t;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 use mach2::structs::x86_thread_state64_t as thread_state64_t;
 
+#[cfg(target_arch = "x86_64")]
+use mach2::thread_status::x86_DEBUG_STATE64 as DEBUG_STATE64;
+#[cfg(target_arch = "aarch64")]
+use mach2::thread_status::ARM_DEBUG_STATE64 as DEBUG_STATE64;
+
+pub const TRAP_FLAG: u64 = 1u64 << 8;
+
 pub fn send_trap_signal(_port: ProcessHandle) -> Result<(), MacOSError> {
     unimplemented!("imo debugger only runs on Linux")
 }
@@ -95,8 +102,29 @@ pub fn read_bytes(port: ProcessHandle, ptr: usize, len: usize) -> Result<Vec<u8>
     Ok(buffer)
 }
 
-pub fn step(thread: u32) -> Result<(), MacOSError> {
-    unimplemented!("imo debugger only runs on Linux")
+pub fn step(port: ProcessHandle, thread: u32) -> Result<(), MacOSError> {
+    let mut regs = get_regs(thread)?;
+    regs.__rflags |= TRAP_FLAG;
+
+    let mut kern_return = unsafe {
+        mach2::thread_act::thread_set_state(
+            thread,
+            THREAD_STATE64,
+            &mut regs as *mut thread_state64_t as *mut u32,
+            thread_state64_t::count(),
+        )
+    };
+
+    if kern_return != mach2::kern_return::KERN_SUCCESS {
+        println!("Failed to update registers");
+    }
+
+    let kern_return = unsafe { mach2::task::task_resume(port) };
+
+    if kern_return != mach2::kern_return::KERN_SUCCESS {
+        println!("Failed to resume task: {}", kern_return);
+    }
+    Ok(())
 }
 
 pub fn continue_session(port: ProcessHandle) -> Result<(), MacOSError> {
