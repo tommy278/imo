@@ -95,7 +95,7 @@ pub fn read_bytes(port: ProcessHandle, ptr: usize, len: usize) -> Result<Vec<u8>
     Ok(buffer)
 }
 
-pub fn step(_port: ProcessHandle) -> Result<(), MacOSError> {
+pub fn step(thread: u32) -> Result<(), MacOSError> {
     unimplemented!("imo debugger only runs on Linux")
 }
 
@@ -166,40 +166,55 @@ pub fn write_data(port: ProcessHandle, address: u64, data: &[u8]) -> Result<(), 
     Ok(())
 }
 
-pub fn get_regs(port: ProcessHandle) -> Result<PlatformRegStruct, MacOSError> {
-    let mut raw_thread_list: mach2::mach_types::thread_act_port_array_t = std::ptr::null_mut();
-    let mut count = 0;
+pub fn get_regs(thread: u32) -> Result<PlatformRegStruct, MacOSError> {
+    let mut state = thread_state64_t::new();
+    let mut state_count = thread_state64_t::count();
 
-    let mut kern_return =
-        unsafe { mach2::task::task_threads(port, &mut raw_thread_list, &mut count) };
+    let kern_return = unsafe {
+        thread_act::thread_get_state(
+            thread,
+            THREAD_STATE64,
+            std::mem::transmute(&state),
+            &mut state_count,
+        )
+    };
 
     if kern_return != mach2::kern_return::KERN_SUCCESS {
-        eprintln!("Error fetching the thread list");
+        // TODO: Handle this case: process probaably did not start yet
+        println!("Failed to get the reg state: {}", kern_return);
     }
 
-    let thread_list = unsafe { std::slice::from_raw_parts(raw_thread_list, count as usize) };
-
-    for thread in thread_list {
-        let state = thread_state64_t::new();
-        let state_count = thread_state64_t::count();
-
-        kern_return = unsafe {
-            thread_act::thread_get_state(
-                *thread,
-                THREAD_STATE64,
-                mem::transmute(&state),
-                mem::transmute(&state_count),
-            )
-        };
-
-        println!("{:?}", state);
-
-        // Return the first instance of a state if there is only one thread
-        // The case that there are more than 1 thread is not handled yet
-        if count == 1 {
-            return Ok(state);
-        }
-    }
-
-    todo!()
+    Ok(state)
 }
+
+// pub fn get_regs_for_all_threads(port: ProcessHandle) -> Result<PlatformRegStruct, MacOSError> {
+//     let mut raw_thread_list: mach2::mach_types::thread_act_port_array_t = std::ptr::null_mut();
+//     let mut count = 0;
+//
+//     let mut kern_return =
+//         unsafe { mach2::task::task_threads(port, &mut raw_thread_list, &mut count) };
+//
+//     if kern_return != mach2::kern_return::KERN_SUCCESS {
+//         eprintln!("Error fetching the thread list");
+//     }
+//
+//     let thread_list = unsafe { std::slice::from_raw_parts(raw_thread_list, count as usize) };
+//
+//     for thread in thread_list {
+//         let state = thread_state64_t::new();
+//         let state_count = thread_state64_t::count();
+//
+//         kern_return = unsafe {
+//             thread_act::thread_get_state(
+//                 *thread,
+//                 THREAD_STATE64,
+//                 mem::transmute(&state),
+//                 mem::transmute(&state_count),
+//             )
+//         };
+//
+//         println!("{:?}", state);
+//     }
+//
+//     todo!()
+// }

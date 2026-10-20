@@ -141,6 +141,9 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
         let notify = mach2::port::MACH_PORT_NULL;
 
         loop {
+            // TODO: Handle this more elegantly
+            session.registers = None;
+
             if session.current_cmd.is_completed() {
                 let source_display = session.get_current_source_file();
                 println!("{}", source_display);
@@ -182,6 +185,8 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
 
                                 let crashed_thread =
                                     unsafe { *(base_ptr.wrapping_add(28) as *const u32) };
+
+                                session.crashed_thread = crashed_thread;
 
                                 let mut regs = PlatformRegStruct::new();
                                 let mut regs_count = PlatformRegStruct::count();

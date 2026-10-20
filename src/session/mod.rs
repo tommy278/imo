@@ -67,6 +67,9 @@ pub struct DebugSession {
     // Different for each os
     pub active_breakpoints: FxHashMap<u64, ManagedBreakpoint>,
     pub process_handle: os::ProcessHandle,
+
+    #[cfg(target_os = "macos")]
+    pub crashed_thread: u32
 }
 
 impl DebugSession {
@@ -87,6 +90,9 @@ impl DebugSession {
             file_indices: FileIndices::default(),
             registers: None,
             process_handle,
+
+            #[cfg(target_os = "macos")]
+            crashed_thread: 0
         }
     }
 
@@ -180,7 +186,12 @@ impl DebugSession {
         }
 
         // Backup in case the register was not instantiated for some reason
+        #[cfg(not(target_os = "macos"))]
         let regs = syscalls::get_regs(self.process_handle)?;
+
+        #[cfg(target_os = "macos")]
+        let regs = syscalls::get_regs(self.crashed_thread)?;
+
         Ok(RegisterViewer { regs })
     }
 

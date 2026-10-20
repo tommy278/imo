@@ -144,8 +144,15 @@ impl fmt::Display for RegisterViewer {
     }
 }
 
+#[cfg(target_os = "macos")]
+impl fmt::Display for RegisterViewer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "TODO: Implement register")
+    }
+}
+
 // Dummy for mac and windows interface
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 impl fmt::Display for RegisterViewer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // This block doesn't access self.regs fields, so the compiler doesn't care that it's empty!
