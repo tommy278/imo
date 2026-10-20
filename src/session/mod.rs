@@ -13,7 +13,7 @@ use object::Object;
 
 use crate::dwarf::debug_info::{DebugVariable, ParamType};
 use crate::session::types::StackInfo;
-use crate::sys::os::{self, syscalls};
+use crate::sys::os::{self, syscalls, MessageReply};
 use crate::sys::registers::RegisterViewer;
 use crate::sys::{ProcessMemoryMap, SystemError};
 use crate::types::{
@@ -69,7 +69,10 @@ pub struct DebugSession {
     pub process_handle: os::ProcessHandle,
 
     #[cfg(target_os = "macos")]
-    pub crashed_thread: u32
+    pub crashed_thread: u32,
+
+    #[cfg(target_os = "macos")]
+    pub message: Option<MessageReply>
 }
 
 impl DebugSession {
@@ -92,7 +95,10 @@ impl DebugSession {
             process_handle,
 
             #[cfg(target_os = "macos")]
-            crashed_thread: 0
+            crashed_thread: 0,
+
+            #[cfg(target_os = "macos")]
+            message: None
         }
     }
 
@@ -584,7 +590,7 @@ impl DebugSession {
         syscalls::step(self.process_handle)?;
 
         #[cfg(target_os = "macos")]
-        syscalls::step(self.process_handle, self.crashed_thread)?;
+        syscalls::step(self.process_handle, self.crashed_thread, self.message.unwrap())?;
 
         Ok(())
     }

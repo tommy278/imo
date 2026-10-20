@@ -203,6 +203,19 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                                     )
                                 };
 
+                                session.message = Some(MessageReply {
+                                    header: mach2::message::mach_msg_header_t {
+                                        msgh_bits: mach2::message::MACH_MSG_TYPE_MOVE_SEND_ONCE,
+                                        msgh_size: std::mem::size_of::<MessageReply>() as u32,
+                                        msgh_remote_port: header.msgh_remote_port,
+                                        msgh_local_port: mach2::port::MACH_PORT_NULL,
+                                        msgh_voucher_port: mach2::port::MACH_PORT_NULL,
+                                        msgh_id: header.msgh_id + 100,
+                                    },
+                                    NDR: unsafe { mach2::ndr::NDR_record },
+                                    kern_return: kern_return::KERN_SUCCESS,
+                                });
+
                                 match session.current_cmd {
                                     CurrentStopCmd::SingleStep => {
                                         session.current_cmd = CurrentStopCmd::Completed;

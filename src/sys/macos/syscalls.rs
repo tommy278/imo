@@ -102,7 +102,11 @@ pub fn read_bytes(port: ProcessHandle, ptr: usize, len: usize) -> Result<Vec<u8>
     Ok(buffer)
 }
 
-pub fn step(port: ProcessHandle, thread: u32) -> Result<(), MacOSError> {
+pub fn step(
+    port: ProcessHandle,
+    thread: u32,
+    mut message: crate::sys::os::MessageReply,
+) -> Result<(), MacOSError> {
     let mut regs = get_regs(thread)?;
     regs.__rflags |= TRAP_FLAG;
 
@@ -119,11 +123,30 @@ pub fn step(port: ProcessHandle, thread: u32) -> Result<(), MacOSError> {
         println!("Failed to update registers");
     }
 
-    let kern_return = unsafe { mach2::task::task_resume(port) };
+    // TODO: Send success message before resuming
+
+    kern_return = unsafe {
+        mach2::message::mach_msg(
+            &mut message as *mut MessageReply as *mut mach2::message::mach_msg_header_t,
+            mach2::message::MACH_SEND_MSG,
+            std::mem::size_of::<MessageReply>() as u32,
+            0,
+            mach2::port::MACH_PORT_NULL,
+            mach2::message::MACH_MSG_TIMEOUT_NONE,
+            mach2::port::MACH_PORT_NULL,
+        )
+    };
+
+    if kern_return != mach2::kern_return::KERN_SUCCESS {
+        println!("Could not revive thread: {}", kern_return);
+    }
+
+    kern_return = unsafe { mach2::task::task_resume(port) };
 
     if kern_return != mach2::kern_return::KERN_SUCCESS {
         println!("Failed to resume task: {}", kern_return);
     }
+
     Ok(())
 }
 
