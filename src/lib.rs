@@ -9,4 +9,5 @@ pub mod sys;
 pub mod test;
 pub mod types;
 pub mod utils;
+#[cfg(target_os = "macos")]
 pub mod mac_os;

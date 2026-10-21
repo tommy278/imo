@@ -1,6 +1,5 @@
 use nix::sys::ptrace;
 use nix::sys::ptrace::AddressType;
-use nix::sys::signal;
 use nix::sys::uio::{process_vm_readv, RemoteIoVec};
 use std::fs::read_to_string;
 use std::io::IoSliceMut;
@@ -14,7 +13,7 @@ use crate::sys::{MemoryRegion, ProcessMemoryMap};
 pub fn update_process_addresses(
     session: &mut crate::session::DebugSession,
 ) -> Result<(), CacheSetupError> {
-    let maps_path = format!("/proc/{}/maps", session.pid);
+    let maps_path = format!("/proc/{}/maps", session.process_handle);
 
     if let Ok(content) = read_to_string(maps_path) {
         let mut content_iter = content.lines();
@@ -70,11 +69,6 @@ pub fn update_process_addresses(
         session.process_map = ProcessMemoryMap::from(regions);
     }
 
-    Ok(())
-}
-
-pub fn run_session(pid: ProcessHanlde) -> Result<(), LinuxError> {
-    ptrace::cont(pid, None)?;
     Ok(())
 }
 

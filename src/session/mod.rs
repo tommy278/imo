@@ -11,9 +11,12 @@ use std::path::Path;
 #[cfg(target_os = "macos")]
 use object::Object;
 
+#[cfg(target_os = "macos")]
+use crate::sys::os::MessageReply;
+
 use crate::dwarf::debug_info::{DebugVariable, ParamType};
 use crate::session::types::StackInfo;
-use crate::sys::os::{self, syscalls, MessageReply};
+use crate::sys::os::{self, syscalls};
 use crate::sys::registers::RegisterViewer;
 use crate::sys::{ProcessMemoryMap, SystemError};
 use crate::types::{
@@ -113,26 +116,34 @@ impl DebugSession {
     ) -> Result<Self, dwarf::error::CacheSetupError> {
         let mut session = Self::from_process_handle(process_handle);
 
-        let file = if cfg!(target_os = "macos") {
+        #[cfg(target_os = "macos")]
+        {
             let dsym_path = session.find_dsym_path(binary_path);
-            std::fs::File::open(&dsym_path)?
-        } else { 
-            std::fs::File::open(binary_path)? 
-        };
+            let file = std::fs::File::open(&dsym_path)?;
+            let mmap = unsafe { memmap2::Mmap::map(&file)? };
+            let object = object::File::parse(&*mmap)?;
+            session.metadata = DebuggerMetadataCache::new(&object)?;
 
-        let mmap = unsafe { memmap2::Mmap::map(&file)? };
+            // Update line index and address to location
+            dwarf::debug_line::setup_session_cache(&object, &mut session)?;
 
-        let object = object::File::parse(&*mmap)?;
+            session.raw_debug_frame = setup_session_debug_frame(&object)?;
+        }
 
-        // For some reason this breaks during testing
+        #[cfg(not(target_os = "macos"))]
+        {
+            let file = std::fs::File::open(&binary_path)?;
+            let mmap = unsafe { memmap2::Mmap::map(&file)? };
+            let object = object::File::parse(&*mmap)?;
+            session.metadata = DebuggerMetadataCache::new(&object)?;
+
+            // Update line index and address to location
+            dwarf::debug_line::setup_session_cache(&object, &mut session)?;
+
+            session.raw_debug_frame = setup_session_debug_frame(&object)?;
+        }
+        
         session.update_process_addresses()?;
-
-        session.metadata = DebuggerMetadataCache::new(&object)?;
-
-        // Update line index and address to location
-        dwarf::debug_line::setup_session_cache(&object, &mut session)?;
-
-        session.raw_debug_frame = setup_session_debug_frame(&object)?;
 
         session.set_up_line_row();
 
