@@ -169,6 +169,23 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                 let header = unsafe { *(base_ptr as *const mach2::message::mach_msg_header_t) };
 
                 match header.msgh_id {
+                    65 => {
+                        println!("Successfully quit program");
+
+                        // Cleanup exception port
+                        kern_return = unsafe {
+                            mach2::mach_port::mach_port_destroy(
+                                mach2::traps::mach_task_self(),
+                                exception_port,
+                            )
+                        };
+
+                        if kern_return != mach2::kern_return::KERN_SUCCESS {
+                            println!("Failed to clean up exception port");
+                        }
+
+                        return Ok(());
+                    }
                     72 => {
                         println!("Child finished");
                         return Ok(());

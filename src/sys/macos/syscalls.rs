@@ -155,8 +155,15 @@ pub fn continue_session(port: ProcessHandle) -> Result<(), MacOSError> {
     Ok(())
 }
 
-pub fn kill_session(_port: ProcessHandle) -> Result<(), MacOSError> {
-    unimplemented!("imo debugger only runs on Linux")
+pub fn kill_session(port: ProcessHandle) -> Result<(), MacOSError> {
+    let kern_return =
+        unsafe { mach2::mach_port::mach_port_destroy(mach2::traps::mach_task_self(), port) };
+
+    if kern_return != mach2::kern_return::KERN_SUCCESS {
+        println!("Failed to kill session {}", kern_return);
+    }
+
+    Ok(())
 }
 
 pub fn peek_data(port: ProcessHandle, address: u64) -> Result<i64, MacOSError> {
@@ -231,35 +238,3 @@ pub fn get_regs(thread: u32) -> Result<PlatformRegStruct, MacOSError> {
 
     Ok(state)
 }
-
-// pub fn get_regs_for_all_threads(port: ProcessHandle) -> Result<PlatformRegStruct, MacOSError> {
-//     let mut raw_thread_list: mach2::mach_types::thread_act_port_array_t = std::ptr::null_mut();
-//     let mut count = 0;
-//
-//     let mut kern_return =
-//         unsafe { mach2::task::task_threads(port, &mut raw_thread_list, &mut count) };
-//
-//     if kern_return != mach2::kern_return::KERN_SUCCESS {
-//         eprintln!("Error fetching the thread list");
-//     }
-//
-//     let thread_list = unsafe { std::slice::from_raw_parts(raw_thread_list, count as usize) };
-//
-//     for thread in thread_list {
-//         let state = thread_state64_t::new();
-//         let state_count = thread_state64_t::count();
-//
-//         kern_return = unsafe {
-//             thread_act::thread_get_state(
-//                 *thread,
-//                 THREAD_STATE64,
-//                 mem::transmute(&state),
-//                 mem::transmute(&state_count),
-//             )
-//         };
-//
-//         println!("{:?}", state);
-//     }
-//
-//     todo!()
-// }
