@@ -15,6 +15,14 @@ use mach2::thread_status::x86_THREAD_STATE64 as THREAD_STATE64;
 #[cfg(target_arch = "aarch64")]
 use mach2::thread_status::ARM_THREAD_STATE64 as THREAD_STATE64;
 
+#[cfg(target_arch = "x86_64")]
+macro_rules! get_pc {
+    ($regs: expr, $base_address: expr) => {{
+        let offset = $regs.__rip - $base_address;
+        0x1_0000_0000 + offset
+    }};
+}
+
 pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerError> {
     let mut pid: i32 = 0;
     let path = std::ffi::CString::new(binary_path).map_err(|e| MacOSError::CString(e))?;
@@ -194,6 +202,7 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                         let exception_offset = if header.msgh_id == 2401 { 60 } else { 64 };
                         let exception =
                             unsafe { *(base_ptr.wrapping_add(exception_offset) as *const u32) };
+                        println!("{:?}", session.current_cmd);
 
                         match exception {
                             // Software Breakpoint
@@ -270,9 +279,8 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                                         // If rsp are the same then we are in the same function or it was inlined
                                         else if current_rsp == start_stack_pointer {
                                             // We need location so keep stepping until we find a valid one
-                                            let Some(line_row) = session
-                                                .find_line_range(regs.__rip - session.base_address)
-                                            else {
+                                            let pc = get_pc!(regs, session.base_address);
+                                            let Some(line_row) = session.find_line_range(pc) else {
                                                 session.single_step()?;
                                                 continue;
                                             };
@@ -298,7 +306,7 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                                                 // If we are in an inline function, behave exactly like a
                                                 // normal stepover with the inclusion
                                                 // that it can now step out to a function that is not inlined
-                                                let pc = regs.__rip - session.base_address;
+                                                let pc = get_pc!(regs, session.base_address);
                                                 if (start_file == current_location.file
                                                     && start_line != current_location.line)
                                                     || !session.metadata.is_in_inline(pc)

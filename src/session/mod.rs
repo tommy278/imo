@@ -220,7 +220,6 @@ impl DebugSession {
     /// Create a specific breakpoint at a given address
     pub fn create_specific_breakpoint(&mut self, relative_address: u64) -> Result<(), SystemError> {
         let absolute_address = self.get_absolute_address(relative_address);
-        println!("{:#x}", absolute_address);
 
         // If breakpoint already exists dont write simply increment the reference counter
         if let Some(managed_breakpoint) = self.active_breakpoints.get_mut(&absolute_address) {
@@ -424,8 +423,17 @@ impl DebugSession {
     }
 
     pub fn current_pc(&self) -> Result<u64, SystemError> {
-        let pc = self.current_instruction_pointer()? - self.base_address;
-        Ok(pc)
+        #[cfg(not(target_os = "macos"))]
+        {
+            let pc = self.current_instruction_pointer()? - self.base_address;
+            return Ok(pc);
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            let offset = self.current_instruction_pointer()? - self.base_address;
+            return Ok(0x1_0000_0000 + offset);
+        }
     }
 
     /// Continue session from last interrupt
