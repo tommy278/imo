@@ -27,7 +27,7 @@ use crate::{
     dwarf::{
         self,
         debug_frame::{RawDebugFrame, setup_session_debug_frame},
-        debug_info::{ActiveParamsContext, DebuggerMetadataCache},
+        debug_info::{Abi, ActiveParamsContext, DebuggerMetadataCache},
         error::CacheSetupError,
     },
     sys::registers::VirtualRegisters,
@@ -252,20 +252,16 @@ impl DebugSession {
         register: gimli::Register,
         virtual_registers: &VirtualRegisters,
     ) -> Option<u64> {
-        #[cfg(target_os = "linux")]
-        {
-            match register.0 {
+        match self.metadata.abi {
+            Abi::SystemV => {
+                match register.0 {
                 6 => Some(virtual_registers.base_pointer),
                 7 => Some(virtual_registers.stack_pointer),
                 16 => Some(virtual_registers.instruction_pointer),
                 _ => todo!("Not implemented yet {}", register.0),
             }
-        }
-
-        #[cfg(not(target_os = "linux"))]
-        {
-            std::hint::black_box((virtual_registers, register));
-            Some(0)
+            }
+            _ => Some(0),
         }
     }
 
@@ -276,27 +272,15 @@ impl DebugSession {
         let mut should_break = false;
 
         loop {
-            if !self
-                .process_map
-                .is_ip_valid(virtual_registers.instruction_pointer)
-            {
-                break;
-            }
-
-            let current_pc = virtual_registers.instruction_pointer - self.base_address;
-
-            let trace = self.metadata.get_function_trace(current_pc);
-
-            if trace.is_empty() {
-                let _ = self.get_return_address(&mut virtual_registers);
-                should_break = true;
-                continue;
-            }
-
-            // Dont break immediately, just in case it is a temporary dead zone
-            if should_break {
-                break;
-            }
+            let instruction_pointer = virtual_registers.instruction_pointer;
+            // if !self
+            //     .process_map
+            //     .is_ip_valid(instruction_pointer)
+            // {
+            //     break;
+            // }
+            
+            let trace = self.metadata.get_function_trace(virtual_registers.current_pc(self.base_address));
 
             for scope in trace {
                 match &scope.scope {
@@ -348,8 +332,11 @@ impl DebugSession {
                 }
             }
 
-            let _ = self.get_return_address(&mut virtual_registers);
-            should_break = false;
+            let return_address = self.get_return_address(&mut virtual_registers);
+
+            if return_address.is_none() || return_address.is_some_and(|ra| ra == instruction_pointer){
+                break;
+            }
         }
 
         Ok(stack_frames)
@@ -367,7 +354,7 @@ impl DebugSession {
         let eh_frame = self.get_unwind_table();
         let base_addresses = &self.metadata.base_addresses;
 
-        let current_pc = regs.instruction_pointer - self.base_address;
+        let current_pc = regs.current_pc(self.base_address);
 
         if let Ok(fde) =
             eh_frame.fde_for_address(base_addresses, current_pc, |sections, bases, offset| {
@@ -418,6 +405,7 @@ impl DebugSession {
                 }
             }
         }
+
         None
     }
 

@@ -25,9 +25,10 @@ impl ProcessMemoryMap {
         Self { ranges }
     }
     pub fn is_ip_valid(&self, ip: u64) -> bool {
-        self.ranges
-            .iter()
-            .any(|r| r.within_range(ip) && r.is_executable)
+        ip > 0x1_0000_0000
+        // self.ranges
+        //     .iter()
+        //     .any(|r| r.within_range(ip) && r.is_executable)
     }
     pub fn is_address_readable(&self, address: u64) -> bool {
         self.ranges

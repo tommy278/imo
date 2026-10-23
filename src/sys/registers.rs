@@ -29,6 +29,24 @@ impl Into<VirtualRegisters> for RegisterViewer {
     }
 }
 
+impl VirtualRegisters {
+    pub fn current_pc(&self, base_address: u64) -> u64 {
+        #[cfg(not(target_os = "macos"))]
+        {
+            return self.instruction_pointer - base_address;
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            // Reverse the process of getting the address in memory
+            // This time we add the the preset address of 0x1_0000_0000 to get the address used in
+            // the debug symbols
+            let offset = self.instruction_pointer - base_address;
+            return 0x1_0000_0000 + offset;
+        }
+    }
+}
+
 #[cfg(target_os = "linux")]
 impl RegisterViewer {
     pub fn stack_pointer(&self) -> u64 {
