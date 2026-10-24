@@ -241,6 +241,25 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                                     kern_return: kern_return::KERN_SUCCESS,
                                 };
 
+                                // Send message to signify that the thread exception will be handled
+
+                                kern_return = unsafe {
+                                    mach2::message::mach_msg(
+                                        &mut message as *mut MessageReply
+                                            as *mut mach2::message::mach_msg_header_t,
+                                        mach2::message::MACH_SEND_MSG,
+                                        std::mem::size_of::<MessageReply>() as u32,
+                                        0,
+                                        mach2::port::MACH_PORT_NULL,
+                                        mach2::message::MACH_MSG_TIMEOUT_NONE,
+                                        mach2::port::MACH_PORT_NULL,
+                                    )
+                                };
+
+                                if kern_return != mach2::kern_return::KERN_SUCCESS {
+                                    println!("Could not revive thread: {}", kern_return);
+                                }
+
                                 session.message = Some(message);
 
                                 match session.current_cmd {
@@ -258,23 +277,6 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
 
                                         if kern_return != mach2::kern_return::KERN_SUCCESS {
                                             println!("Failed to clean regs: {}", kern_return);
-                                        }
-
-                                        kern_return = unsafe {
-                                            mach2::message::mach_msg(
-                                                &mut message as *mut MessageReply
-                                                    as *mut mach2::message::mach_msg_header_t,
-                                                mach2::message::MACH_SEND_MSG,
-                                                std::mem::size_of::<MessageReply>() as u32,
-                                                0,
-                                                mach2::port::MACH_PORT_NULL,
-                                                mach2::message::MACH_MSG_TIMEOUT_NONE,
-                                                mach2::port::MACH_PORT_NULL,
-                                            )
-                                        };
-
-                                        if kern_return != mach2::kern_return::KERN_SUCCESS {
-                                            println!("Could not revive thread: {}", kern_return);
                                         }
 
                                         session.current_cmd = CurrentStopCmd::Completed;
@@ -451,7 +453,7 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                                         } else if started_from_inline
                                             && start_stack_pointer == current_rsp
                                         {
-                                            let pc = regs.__rip - session.base_address;
+                                            let pc = get_pc!(regs, session.base_address);
                                             if !session.metadata.is_in_inline(pc) {
                                                 session.current_cmd = CurrentStopCmd::Completed;
                                             } else {
@@ -572,34 +574,6 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                                             session.registers = Some(RegisterViewer { regs });
                                             bp.breakpoint.disable(child_task_port);
                                             session.current_cmd = CurrentStopCmd::Completed;
-
-                                            let mut message = MessageReply {
-                                                header: mach2::message::mach_msg_header_t {
-                                                    msgh_bits:
-                                                        mach2::message::MACH_MSG_TYPE_MOVE_SEND_ONCE,
-                                                    msgh_size: std::mem::size_of::<MessageReply>()
-                                                        as u32,
-                                                    msgh_remote_port: header.msgh_remote_port,
-                                                    msgh_local_port: mach2::port::MACH_PORT_NULL,
-                                                    msgh_voucher_port: mach2::port::MACH_PORT_NULL,
-                                                    msgh_id: header.msgh_id + 100,
-                                                },
-                                                NDR: unsafe { mach2::ndr::NDR_record },
-                                                kern_return: kern_return::KERN_SUCCESS,
-                                            };
-
-                                            kern_return = unsafe {
-                                                mach2::message::mach_msg(
-                                                    &mut message as *mut MessageReply
-                                                        as *mut mach2::message::mach_msg_header_t,
-                                                    mach2::message::MACH_SEND_MSG,
-                                                    std::mem::size_of::<MessageReply>() as u32,
-                                                    0,
-                                                    mach2::port::MACH_PORT_NULL,
-                                                    mach2::message::MACH_MSG_TIMEOUT_NONE,
-                                                    mach2::port::MACH_PORT_NULL,
-                                                )
-                                            };
 
                                             if kern_return != mach2::kern_return::KERN_SUCCESS {
                                                 println!(

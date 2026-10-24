@@ -119,22 +119,6 @@ pub fn step(
         println!("Failed to update registers");
     }
 
-    kern_return = unsafe {
-        mach2::message::mach_msg(
-            &mut message as *mut MessageReply as *mut mach2::message::mach_msg_header_t,
-            mach2::message::MACH_SEND_MSG,
-            std::mem::size_of::<MessageReply>() as u32,
-            0,
-            mach2::port::MACH_PORT_NULL,
-            mach2::message::MACH_MSG_TIMEOUT_NONE,
-            mach2::port::MACH_PORT_NULL,
-        )
-    };
-
-    if kern_return != mach2::kern_return::KERN_SUCCESS {
-        println!("Could not revive thread: {}", kern_return);
-    }
-
     kern_return = unsafe { mach2::task::task_resume(port) };
 
     if kern_return != mach2::kern_return::KERN_SUCCESS {
