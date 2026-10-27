@@ -1,12 +1,12 @@
 use nix::sys::ptrace;
-use nix::sys::signal::{Signal, raise};
-use nix::sys::wait::{WaitStatus, waitpid};
-use nix::unistd::{ForkResult, fork};
+use nix::sys::signal::{raise, Signal};
+use nix::sys::wait::{waitpid, WaitStatus};
+use nix::unistd::{fork, ForkResult};
 use rustyline::DefaultEditor;
 
 use crate::cli::handle_user_debugger_menu;
 use crate::error::DebuggerError;
-use crate::session::{DebugSession, execution::CurrentStopCmd};
+use crate::session::{execution::CurrentStopCmd, DebugSession};
 use crate::sys::linux::error::LinuxError;
 use crate::sys::registers::RegisterViewer;
 
@@ -59,6 +59,7 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
 
             // Enter the event execution loop
             loop {
+                println!("{:?}", session.current_cmd);
                 if session.current_cmd.is_completed() {
                     let source_display = session.get_current_source_file();
                     println!("{}", source_display);

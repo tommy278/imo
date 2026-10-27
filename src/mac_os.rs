@@ -149,9 +149,7 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
         let notify = mach2::port::MACH_PORT_NULL;
 
         loop {
-            // TODO: Handle this more elegantly
-            session.registers = None;
-
+            println!("{:?}", session.current_cmd);
             if session.current_cmd.is_completed() {
                 let source_display = session.get_current_source_file();
                 println!("{}", source_display);
@@ -203,9 +201,6 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                         let exception =
                             unsafe { *(base_ptr.wrapping_add(exception_offset) as *const u32) };
 
-                        println!("{:?}", session.current_cmd);
-                        println!("{:?}", session.current_cmd);
-
                         match exception {
                             // Software Breakpoint
                             6 => {
@@ -242,7 +237,6 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                                 };
 
                                 // Send message to signify that the thread exception will be handled
-
                                 kern_return = unsafe {
                                     mach2::message::mach_msg(
                                         &mut message as *mut MessageReply
@@ -262,23 +256,26 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
 
                                 session.message = Some(message);
 
+                                // Ensure trap flag is cleared after each iteration
+                                if regs.__rflags & (1u64 << 8) > 0 {
+                                    regs.__rflags &= !(1u64 << 8);
+                                    // Update register with the cleared Trap Flag
+                                    kern_return = unsafe {
+                                        mach2::thread_act::thread_set_state(
+                                            crashed_thread,
+                                            THREAD_STATE64,
+                                            std::mem::transmute(&regs),
+                                            regs_count,
+                                        )
+                                    };
+
+                                    if kern_return != mach2::kern_return::KERN_SUCCESS {
+                                        println!("Failed to clean regs: {}", kern_return);
+                                    }
+                                }
+
                                 match session.current_cmd {
                                     CurrentStopCmd::SingleStep => {
-                                        regs.__rflags ^= (1u64 << 8);
-
-                                        kern_return = unsafe {
-                                            mach2::thread_act::thread_set_state(
-                                                crashed_thread,
-                                                THREAD_STATE64,
-                                                std::mem::transmute(&regs),
-                                                regs_count,
-                                            )
-                                        };
-
-                                        if kern_return != mach2::kern_return::KERN_SUCCESS {
-                                            println!("Failed to clean regs: {}", kern_return);
-                                        }
-
                                         session.current_cmd = CurrentStopCmd::Completed;
                                     }
                                     CurrentStopCmd::StepInto {
@@ -358,9 +355,11 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                                         } else {
                                             // If current rsp is lower then we stepped into a child
                                             // In that case get the return address and continue there
+                                            println!("{:?}", session.virtual_registers()?);
                                             let Some(return_address) = session.get_return_address(
                                                 &mut session.virtual_registers()?,
                                             ) else {
+                                                println!("HERE");
                                                 session.single_step()?;
                                                 continue;
                                             };
@@ -385,7 +384,6 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                                         return_address,
                                         started_from_inline,
                                     } => {
-                                        // A handshake from the step over
                                         // Simply clear breakpoint and send data back to finish stepover to handle completion
                                         let breakpoint_addr = regs.__rip - 1;
 
