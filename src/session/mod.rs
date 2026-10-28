@@ -37,7 +37,6 @@ use execution::CurrentStopCmd;
 use variable::DebugValue;
 
 /// Cache for entire debug session
-#[derive(Debug)]
 pub struct DebugSession {
     // Breakpoint data
     pub line_index: FxHashMap<u32, Vec<BreakpointTarget>>,
@@ -75,7 +74,10 @@ pub struct DebugSession {
     pub crashed_thread: u32,
 
     #[cfg(target_os = "macos")]
-    pub message: Option<MessageReply>
+    pub message: Option<MessageReply>,
+
+    #[cfg(target_os = "macos")]
+    pub unwind_info: Option<macho_unwind_info::UnwindInfo<'static>>
 }
 
 impl DebugSession {
@@ -101,7 +103,10 @@ impl DebugSession {
             crashed_thread: 0,
 
             #[cfg(target_os = "macos")]
-            message: None
+            message: None,
+
+            #[cfg(target_os = "macos")]
+            unwind_info: None
         }
     }
 
@@ -118,13 +123,24 @@ impl DebugSession {
 
         #[cfg(target_os = "macos")]
         {
+            use object::ObjectSection;
+
+            // Update line index and address to location
+            let file = std::fs::File::open(&binary_path)?;
+            let mmap = unsafe { memmap2::Mmap::map(&file)? };
+            let object = object::File::parse(&*mmap)?;
+            
+            let unwind_info = object.section_by_name_bytes(b"__unwind_info").unwrap();
+            let data = unwind_info.data().unwrap().to_vec();
+            let slice: &'static [u8] = Box::leak(data.into_boxed_slice());
+            session.unwind_info = Some(macho_unwind_info::UnwindInfo::parse(slice).unwrap());
+
             let dsym_path = session.find_dsym_path(binary_path);
             let file = std::fs::File::open(&dsym_path)?;
             let mmap = unsafe { memmap2::Mmap::map(&file)? };
             let object = object::File::parse(&*mmap)?;
             session.metadata = DebuggerMetadataCache::new(&object)?;
 
-            // Update line index and address to location
             dwarf::debug_line::setup_session_cache(&object, &mut session)?;
 
             session.raw_debug_frame = setup_session_debug_frame(&object)?;
@@ -135,11 +151,10 @@ impl DebugSession {
             let file = std::fs::File::open(&binary_path)?;
             let mmap = unsafe { memmap2::Mmap::map(&file)? };
             let object = object::File::parse(&*mmap)?;
+            
             session.metadata = DebuggerMetadataCache::new(&object)?;
-
             // Update line index and address to location
             dwarf::debug_line::setup_session_cache(&object, &mut session)?;
-
             session.raw_debug_frame = setup_session_debug_frame(&object)?;
         }
         
@@ -351,11 +366,47 @@ impl DebugSession {
     /// Get return address based on the provided register values
     /// Also updates the regsiter values so it does not go out of state
     pub fn get_return_address(&self, regs: &mut VirtualRegisters) -> Option<u64> {
-        let eh_frame = self.get_unwind_table();
-        let base_addresses = &self.metadata.base_addresses;
-
         let current_pc = regs.current_pc(self.base_address);
 
+        #[cfg(target_os = "macos")]
+        {
+            #[cfg(target_arch = "x86_64")] 
+            {
+                use macho_unwind_info::opcodes::OpcodeX86_64;
+
+                match &self.unwind_info {
+                    Some(info) => {
+                        if let Ok(Some(func)) = info.lookup(current_pc as u32) {
+                            // TODO: Support other OS
+                            match OpcodeX86_64::parse(func.opcode) {
+                                OpcodeX86_64::FrameBased { stack_offset_in_bytes, saved_regs } => {
+                                    // The old stack pointer points to the target return address
+                                    let address = regs.stack_pointer;
+                                    regs.instruction_pointer = syscalls::peek_data(self.process_handle, address)
+                                        .map(|ip| ip as u64).ok()?;
+
+                                    let address = regs.base_pointer - stack_offset_in_bytes as u64;
+                                    regs.stack_pointer = syscalls::peek_data(self.process_handle, address)
+                                        .map(|sp| sp as u64).ok()?;
+
+                                    return Some(regs.instruction_pointer);
+                                }
+                                _ => todo!()
+                            }
+                        }
+                    },
+                    None => unreachable!()
+                }
+            }
+
+        #[cfg(not(target_arch = "x86_64"))] 
+        todo!()
+
+        }
+
+        let eh_frame = self.get_unwind_table();
+        let base_addresses = &self.metadata.base_addresses;
+        
         if let Ok(fde) =
             eh_frame.fde_for_address(base_addresses, current_pc, |sections, bases, offset| {
                 sections.cie_from_offset(bases, offset)
@@ -405,8 +456,6 @@ impl DebugSession {
                 }
             }
         }
-
-        panic!("Could not find FDE");
 
         None
     }
