@@ -287,12 +287,12 @@ impl DebugSession {
 
         loop {
             let instruction_pointer = virtual_registers.instruction_pointer;
-            // if !self
-            //     .process_map
-            //     .is_ip_valid(instruction_pointer)
-            // {
-            //     break;
-            // }
+            if !self
+                .process_map
+                .is_ip_valid(instruction_pointer)
+            {
+                break;
+            }
             
             let trace = self.metadata.get_function_trace(virtual_registers.current_pc(self.base_address));
 
@@ -348,7 +348,7 @@ impl DebugSession {
 
             let return_address = self.get_return_address(&mut virtual_registers);
 
-            if return_address.is_none() || return_address.is_some_and(|ra| ra == instruction_pointer){
+            if return_address.is_none() {
                 break;
             }
         }
@@ -388,6 +388,10 @@ impl DebugSession {
                                     // return address is actually located below the old stack
                                     // pointer
                                     if possible_return_address == regs.base_pointer {
+                                        let cfa_address = regs.base_pointer + 16;
+                                        regs.stack_pointer = syscalls::peek_data(self.process_handle, cfa_address)
+                                            .map(|cfa| cfa as u64).ok()?;
+
                                         let ra_address = regs.stack_pointer + 8;
                                         regs.instruction_pointer = syscalls::peek_data(self.process_handle, ra_address)
                                             .map(|ip| ip as u64).ok()?;
@@ -402,6 +406,8 @@ impl DebugSession {
 
                                     return Some(regs.instruction_pointer);
                                 }
+                                // DWARF falls back to the cached __eh_frame section
+                                OpcodeX86_64::Dwarf { .. } => {}
                                 _ => todo!()
                             }
                         }

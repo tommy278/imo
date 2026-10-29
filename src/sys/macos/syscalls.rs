@@ -59,9 +59,9 @@ pub fn update_process_addresses(
             }
 
             // Extract permissions and populate the whole process memory region
-            let is_readable = info.protection & mach2::vm_prot::VM_PROT_READ == 0;
-            let is_writable = info.protection & mach2::vm_prot::VM_PROT_WRITE == 0;
-            let is_executable = info.protection & mach2::vm_prot::VM_PROT_EXECUTE == 0;
+            let is_readable = info.protection & mach2::vm_prot::VM_PROT_READ != 0;
+            let is_writable = info.protection & mach2::vm_prot::VM_PROT_WRITE != 0;
+            let is_executable = info.protection & mach2::vm_prot::VM_PROT_EXECUTE != 0;
 
             session.process_map.ranges.push(crate::sys::MemoryRegion {
                 start_address: address,
