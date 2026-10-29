@@ -150,6 +150,7 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
 
         loop {
             println!("{:?}", session.current_cmd);
+
             if session.current_cmd.is_completed() {
                 let source_display = session.get_current_source_file();
                 println!("{}", source_display);

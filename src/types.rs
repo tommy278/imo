@@ -25,6 +25,7 @@ impl SourceCodeInfo {
     }
 }
 
+#[derive(Debug)]
 pub enum SourceCodeDisplay {
     FullyResolved {
         source_code: Box<str>,

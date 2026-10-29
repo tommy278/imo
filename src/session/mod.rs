@@ -235,7 +235,6 @@ impl DebugSession {
     /// Create a specific breakpoint at a given address
     pub fn create_specific_breakpoint(&mut self, relative_address: u64) -> Result<(), SystemError> {
         let absolute_address = self.get_absolute_address(relative_address);
-        println!("Created: {:#x}", absolute_address);
 
         // If breakpoint already exists dont write simply increment the reference counter
         if let Some(managed_breakpoint) = self.active_breakpoints.get_mut(&absolute_address) {
@@ -380,14 +379,26 @@ impl DebugSession {
                             // TODO: Support other OS
                             match OpcodeX86_64::parse(func.opcode) {
                                 OpcodeX86_64::FrameBased { stack_offset_in_bytes, saved_regs } => {
-                                    // The old stack pointer points to the target return address
-                                    let address = regs.stack_pointer;
-                                    regs.instruction_pointer = syscalls::peek_data(self.process_handle, address)
+                                    // Could possibly contain the return address or the base pointer
+                                    // based on the current location within the function
+                                    let possible_return_address = syscalls::peek_data(self.process_handle, regs.stack_pointer)
                                         .map(|ip| ip as u64).ok()?;
 
-                                    let address = regs.base_pointer - stack_offset_in_bytes as u64;
-                                    regs.stack_pointer = syscalls::peek_data(self.process_handle, address)
-                                        .map(|sp| sp as u64).ok()?;
+                                    // If the base pointer was copied to the stack pointer then the
+                                    // return address is actually located below the old stack
+                                    // pointer
+                                    if possible_return_address == regs.base_pointer {
+                                        let ra_address = regs.stack_pointer + 8;
+                                        regs.instruction_pointer = syscalls::peek_data(self.process_handle, ra_address)
+                                            .map(|ip| ip as u64).ok()?;
+                                    }  else {
+                                        // The return address is untouched
+                                        regs.instruction_pointer = possible_return_address;
+
+                                        // THe stack pointer just initiated call
+                                        // Simply look below it to find the return address 
+                                        regs.stack_pointer += 8;
+                                    }
 
                                     return Some(regs.instruction_pointer);
                                 }
