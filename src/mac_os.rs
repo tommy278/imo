@@ -149,8 +149,6 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
         let notify = mach2::port::MACH_PORT_NULL;
 
         loop {
-            println!("{:?}", session.current_cmd);
-
             if session.current_cmd.is_completed() {
                 let source_display = session.get_current_source_file();
                 println!("{}", source_display);
@@ -274,6 +272,8 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                                         println!("Failed to clean regs: {}", kern_return);
                                     }
                                 }
+
+                                session.registers = Some(RegisterViewer { regs });
 
                                 match session.current_cmd {
                                     CurrentStopCmd::SingleStep => {

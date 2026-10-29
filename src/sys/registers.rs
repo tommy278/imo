@@ -165,7 +165,9 @@ impl fmt::Display for RegisterViewer {
 #[cfg(target_os = "macos")]
 impl fmt::Display for RegisterViewer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "TODO: Implement register")
+        writeln!(f, "{:?}", self.regs)?;
+        writeln!(f, "TODO: Implement register")?;
+        Ok(())
     }
 }
 
