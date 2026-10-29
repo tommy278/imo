@@ -698,8 +698,7 @@ impl DebugSession {
         &self,
         param_type: ParamType,
     ) -> Result<ActiveParamsContext<'_>, SystemError> {
-        let current_pc = self.current_instruction_pointer()? - self.base_address;
-        let context = self.metadata.find_scope_by_pc(current_pc, param_type);
+        let context = self.metadata.find_scope_by_pc(self.current_pc()?, param_type);
         Ok(context)
     }
 
