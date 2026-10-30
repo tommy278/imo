@@ -291,6 +291,7 @@ impl DebugSession {
                 .process_map
                 .is_ip_valid(instruction_pointer)
             {
+                println!("BROKE HERE: {}", instruction_pointer);
                 break;
             }
             
@@ -379,30 +380,17 @@ impl DebugSession {
                             // TODO: Support other OS
                             match OpcodeX86_64::parse(func.opcode) {
                                 OpcodeX86_64::FrameBased { stack_offset_in_bytes, saved_regs } => {
-                                    // Could possibly contain the return address or the base pointer
-                                    // based on the current location within the function
-                                    let possible_return_address = syscalls::peek_data(self.process_handle, regs.stack_pointer)
-                                        .map(|ip| ip as u64).ok()?;
+                                    let read_address = |process_handle: u32, addr: u64| {
+                                        syscalls::peek_data(process_handle, addr).map(|val| val as u64).unwrap()
+                                    };
 
-                                    // If the base pointer was copied to the stack pointer then the
-                                    // return address is actually located below the old stack
-                                    // pointer
-                                    if possible_return_address == regs.base_pointer {
-                                        let cfa_address = regs.base_pointer + 16;
-                                        regs.stack_pointer = syscalls::peek_data(self.process_handle, cfa_address)
-                                            .map(|cfa| cfa as u64).ok()?;
+                                    let cfa = regs.base_pointer + 16;  
+                                    let return_address = regs.base_pointer + 8;
+                                    let base_pointer = regs.base_pointer;
 
-                                        let ra_address = regs.stack_pointer + 8;
-                                        regs.instruction_pointer = syscalls::peek_data(self.process_handle, ra_address)
-                                            .map(|ip| ip as u64).ok()?;
-                                    }  else {
-                                        // The return address is untouched
-                                        regs.instruction_pointer = possible_return_address;
-
-                                        // THe stack pointer just initiated call
-                                        // Simply look below it to find the return address 
-                                        regs.stack_pointer += 8;
-                                    }
+                                    regs.stack_pointer = cfa; 
+                                    regs.instruction_pointer = read_address(self.process_handle, return_address);
+                                    regs.base_pointer = read_address(self.process_handle, base_pointer);
 
                                     return Some(regs.instruction_pointer);
                                 }
@@ -445,8 +433,12 @@ impl DebugSession {
                 if row.contains(current_pc) {
                     regs.stack_pointer = cfa_address;
 
-                    // TODO: get base pointer dynamically
-                    // regs.base_pointer = cfa_address - 16;
+                    #[cfg(target_os = "macos")]
+                    {
+                        let base_pointer = cfa_address - 16;
+                        regs.base_pointer = syscalls::peek_data(self.process_handle, base_pointer)
+                            .map(|bp| bp as u64).ok()?;
+                    }
 
                     if let Some(ra_rule) = row.register(ra_register) {
                         let return_address = match ra_rule {

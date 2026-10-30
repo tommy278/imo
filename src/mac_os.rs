@@ -275,6 +275,7 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
 
                                 session.registers = Some(RegisterViewer { regs });
 
+                                println!("{:?}", session.current_cmd);
                                 match session.current_cmd {
                                     CurrentStopCmd::SingleStep => {
                                         session.current_cmd = CurrentStopCmd::Completed;
@@ -307,6 +308,11 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                                         started_from_inline,
                                     } => {
                                         let current_rsp = regs.__rsp;
+
+                                        println!(
+                                            "CURRENT: {} and START: {}",
+                                            current_rsp, start_stack_pointer
+                                        );
 
                                         // If current rsp is greater than the start rsp then we stepped out of a function and should stop there
                                         if current_rsp > start_stack_pointer {
