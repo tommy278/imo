@@ -2,7 +2,7 @@ use crate::cli::handle_user_debugger_menu;
 use crate::error::DebuggerError;
 use crate::session::{self, execution::CurrentStopCmd};
 use crate::sys::{
-    macos::error::MacOSError,
+    macos::{error::MacOSError, THREAD_STATE64, TRAP_FLAG},
     os::{syscalls, MessageReply, PlatformRegStruct},
     registers::RegisterViewer,
 };
@@ -10,15 +10,14 @@ use crate::sys::{
 use mach2::{kern_return, mach_types, traps};
 use rustyline::DefaultEditor;
 
-#[cfg(target_arch = "x86_64")]
-use mach2::thread_status::x86_THREAD_STATE64 as THREAD_STATE64;
-#[cfg(target_arch = "aarch64")]
-use mach2::thread_status::ARM_THREAD_STATE64 as THREAD_STATE64;
-
-#[cfg(target_arch = "x86_64")]
 macro_rules! get_pc {
     ($regs: expr, $base_address: expr) => {{
+        #[cfg(target_arch = "x86_64")]
         let offset = $regs.__rip - $base_address;
+
+        #[cfg(target_arch = "aarch64")]
+        let offset = $regs.__pc - $base_address;
+
         0x1_0000_0000 + offset
     }};
 }
@@ -253,11 +252,9 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                                     println!("Could not revive thread: {}", kern_return);
                                 }
 
-                                session.message = Some(message);
-
                                 // Ensure trap flag is cleared after each iteration
-                                if regs.__rflags & (1u64 << 8) > 0 {
-                                    regs.__rflags &= !(1u64 << 8);
+                                if regs.__rflags & TRAP_FLAG > 0 {
+                                    regs.__rflags &= !TRAP_FLAG;
                                     // Update register with the cleared Trap Flag
                                     kern_return = unsafe {
                                         mach2::thread_act::thread_set_state(
@@ -275,7 +272,6 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
 
                                 session.registers = Some(RegisterViewer { regs });
 
-                                println!("{:?}", session.current_cmd);
                                 match session.current_cmd {
                                     CurrentStopCmd::SingleStep => {
                                         session.current_cmd = CurrentStopCmd::Completed;

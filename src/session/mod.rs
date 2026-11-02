@@ -11,9 +11,6 @@ use std::path::Path;
 #[cfg(target_os = "macos")]
 use object::Object;
 
-#[cfg(target_os = "macos")]
-use crate::sys::os::MessageReply;
-
 use crate::dwarf::debug_info::{DebugVariable, ParamType};
 use crate::session::types::StackInfo;
 use crate::sys::os::{self, syscalls};
@@ -74,9 +71,6 @@ pub struct DebugSession {
     pub crashed_thread: u32,
 
     #[cfg(target_os = "macos")]
-    pub message: Option<MessageReply>,
-
-    #[cfg(target_os = "macos")]
     pub unwind_info: Option<macho_unwind_info::UnwindInfo<'static>>
 }
 
@@ -101,9 +95,6 @@ impl DebugSession {
 
             #[cfg(target_os = "macos")]
             crashed_thread: 0,
-
-            #[cfg(target_os = "macos")]
-            message: None,
 
             #[cfg(target_os = "macos")]
             unwind_info: None
@@ -681,7 +672,7 @@ impl DebugSession {
         syscalls::step(self.process_handle)?;
 
         #[cfg(target_os = "macos")]
-        syscalls::step(self.process_handle, self.crashed_thread, self.message.unwrap())?;
+        syscalls::step(self.process_handle, self.crashed_thread)?;
 
         Ok(())
     }

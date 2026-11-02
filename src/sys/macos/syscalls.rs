@@ -1,27 +1,8 @@
 use crate::dwarf::error::CacheSetupError;
 use crate::sys::macos::error::MacOSError;
-use crate::sys::macos::{MessageReply, PlatformRegStruct, ProcessHandle};
-
-use std::mem;
-
+use crate::sys::macos::*;
 use mach2::{thread_act, vm};
-
-#[cfg(target_arch = "x86_64")]
-use mach2::thread_status::x86_THREAD_STATE64 as THREAD_STATE64;
-#[cfg(target_arch = "aarch64")]
-use mach2::thread_status::ARM_THREAD_STATE64 as THREAD_STATE64;
-
-#[cfg(target_arch = "aarch64")]
-use mach2::structs::arm_thread_state64_t as thread_state64_t;
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-use mach2::structs::x86_thread_state64_t as thread_state64_t;
-
-#[cfg(target_arch = "x86_64")]
-use mach2::thread_status::x86_DEBUG_STATE64 as DEBUG_STATE64;
-#[cfg(target_arch = "aarch64")]
-use mach2::thread_status::ARM_DEBUG_STATE64 as DEBUG_STATE64;
-
-pub const TRAP_FLAG: u64 = 1u64 << 8;
+use std::mem;
 
 pub fn update_process_addresses(
     session: &mut crate::session::DebugSession,
@@ -98,11 +79,7 @@ pub fn read_bytes(port: ProcessHandle, ptr: usize, len: usize) -> Result<Vec<u8>
     Ok(buffer)
 }
 
-pub fn step(
-    port: ProcessHandle,
-    thread: u32,
-    mut message: crate::sys::os::MessageReply,
-) -> Result<(), MacOSError> {
+pub fn step(port: ProcessHandle, thread: u32) -> Result<(), MacOSError> {
     let mut regs = get_regs(thread)?;
     regs.__rflags |= TRAP_FLAG;
 
