@@ -392,8 +392,8 @@ impl DebugSession {
                                     // Inspect to see if the program is currently within a function
                                     // prologue
                                     match (bytes[0], bytes[1], bytes[2], bytes[3]) {
-                                        // No prologue has been run yet. The return address is at
-                                        // the stack pointer address
+                                        // The pushq instruction has not run yet. The stack pointer
+                                        // points to the return address
                                         (0x00, 0x55, 0x48, 0x89) | (0x90, 0x55, 0x48, 0x89 )=> {
                                             regs.instruction_pointer =  read_address(self.process_handle, regs.stack_pointer);
                                         }
@@ -401,6 +401,10 @@ impl DebugSession {
                                         // pointer has not been set up
                                         // Read the stack pointer from the address it was allocated
                                         // to
+                                        //
+                                        // Corresponds to 
+                                        //      push rbp
+                                        //      mov rbp, rsp
                                         (0x55, 0x48, 0x89, 0xE5) => {
                                             regs.instruction_pointer =  read_address(self.process_handle, regs.stack_pointer + 8);
                                         }
