@@ -291,7 +291,6 @@ impl DebugSession {
                 .process_map
                 .is_ip_valid(instruction_pointer)
             {
-                println!("BROKE HERE: {}", instruction_pointer);
                 break;
             }
             
@@ -384,14 +383,39 @@ impl DebugSession {
                                         syscalls::peek_data(process_handle, addr).map(|val| val as u64).unwrap()
                                     };
 
-                                    let cfa = regs.base_pointer + 16;  
-                                    let return_address = regs.base_pointer + 8;
-                                    let base_pointer = regs.base_pointer;
+                                    // Read the current instruction the being executed 
+                                    // RIP points to the next instuction so rip - 1 is needed to get
+                                    // current instuction
+                                    let instruction = read_address(self.process_handle, regs.instruction_pointer - 1);
+                                    let bytes: [u8; 8] = instruction.to_le_bytes();
 
-                                    regs.stack_pointer = cfa; 
-                                    regs.instruction_pointer = read_address(self.process_handle, return_address);
-                                    regs.base_pointer = read_address(self.process_handle, base_pointer);
+                                    // Inspect to see if the program is currently within a function
+                                    // prologue
+                                    match (bytes[0], bytes[1], bytes[2], bytes[3]) {
+                                        // No prologue has been run yet. The return address is at
+                                        // the stack pointer address
+                                        (0x00, 0x55, 0x48, 0x89) | (0x90, 0x55, 0x48, 0x89 )=> {
+                                            regs.instruction_pointer =  read_address(self.process_handle, regs.stack_pointer);
+                                        }
+                                        // The return address has been allocated but the base
+                                        // pointer has not been set up
+                                        // Read the stack pointer from the address it was allocated
+                                        // to
+                                        (0x55, 0x48, 0x89, 0xE5) => {
+                                            regs.instruction_pointer =  read_address(self.process_handle, regs.stack_pointer + 8);
+                                        }
+                                        // Not within the prologue. Normal execution
+                                        _ => {
+                                            let cfa = regs.base_pointer + 16;  
+                                            let return_address = regs.base_pointer + 8;
+                                            let base_pointer = regs.base_pointer;
 
+                                            regs.stack_pointer = cfa; 
+                                            regs.instruction_pointer = read_address(self.process_handle, return_address);
+                                            regs.base_pointer = read_address(self.process_handle, base_pointer);
+                                        }
+                                    }
+                                    
                                     return Some(regs.instruction_pointer);
                                 }
                                 // DWARF falls back to the cached __eh_frame section

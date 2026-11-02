@@ -309,11 +309,6 @@ pub fn debug(rl: &mut DefaultEditor, binary_path: &str) -> Result<(), DebuggerEr
                                     } => {
                                         let current_rsp = regs.__rsp;
 
-                                        println!(
-                                            "CURRENT: {} and START: {}",
-                                            current_rsp, start_stack_pointer
-                                        );
-
                                         // If current rsp is greater than the start rsp then we stepped out of a function and should stop there
                                         if current_rsp > start_stack_pointer {
                                             session.current_cmd = CurrentStopCmd::Completed;
